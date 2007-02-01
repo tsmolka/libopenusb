@@ -1,0 +1,11 @@
+All ioctl() calls are unavailable when the usbfs file is opened read-only
+(which is necessary for most non-root users).
+
+Some ioctl() calls are only available to root (uid 0) even when opened
+read-write (user has write privs), such as IOCTL_USB_HUB_PORTINFO
+(anything that uses IOCTL_USB_IOCTL).
+
+Different kernels will byte swap values in the cached descriptors
+differently. We need to be smarter about this. Perhaps parse it out
+of /proc/bus/usb/devices as well to detect the endianess?
+
