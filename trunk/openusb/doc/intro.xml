@@ -1,0 +1,37 @@
+  <title>Introduction</title>
+  <chapter id="intro-overview">
+    <title>Overview</title>
+    <para>This documentation will give an overview of how the v1.0 libusb external application API works and relates to &usb;. v1.0 is currently in developmental status. The code should work, but the API may change as it is refined.</para>
+    <para>This documentation assumes that you have a good understanding of &usb; and how it works.</para>
+    <para>libusb supports &usb; v1.1 and v2.0. However, some features from both specifications haven't been implemented yet.</para>
+    <para>The &usb; 1.1 specification can be found at <ulink url="http://www.usb.org/developers/docs/usbspec.zip">http://www.usb.org/developers/docs/usbspec.zip</ulink>. The &usb; 2.0 specification can be found at <ulink url="http://www.usb.org/developers/docs/usb_20.zip">http://www.usb.org/developers/docs/usb_20.zip</ulink>.</para>
+  </chapter>
+
+  <chapter id="intro-support">
+    <title>Current OS support</title>
+    <itemizedlist>
+      <listitem><para><ulink url="http://www.kernel.org/">Linux</ulink> (2.2, 2.4 and on)</para></listitem>
+      <listitem><para><ulink url="http://www.freebsd.org/">FreeBSD</ulink>, <ulink url="http://www.netbsd.org/">NetBSD</ulink> and <ulink url="http://www.openbsd.org/">OpenBSD</ulink></para></listitem>
+      <listitem><para><ulink url="http://developer.apple.com/darwin/">Darwin</ulink>/<ulink url="http://developer.apple.com/macosx/">MacOS X</ulink></para></listitem>
+    </itemizedlist>
+  </chapter>
+
+  <chapter id="intro-differences-to-0.1">
+    <title>Differences from libusb v0.1</title>
+    <para>There are many differences from libusb v0.1, all intended to make the API cleaner and support more commonly requested features. These include:</para>
+    <itemizedlist>
+      <listitem><para>Completely redesigned enumeration scheme. The enumeration scheme in v0.1 was a bit confusing and caused some backward compability issues. The new scheme is both easier and ensures backward compatbility is maintained. (Not implemented yet)</para></listitem>
+      <listitem><para>Cleaned up API. Functions like usb_control_msg would take int's for parameters like requesttype, which the USB specification defines as an 8 bit unsigned integer. The C99 types are now used where appropriate to better follow the specification.</para></listitem>
+      <listitem><para>More transfer types. libusb v0.1 only supported control and bulk, and control didn't support any endpoints other than the default control pipe. libusb v1.0 now supports all 4 types of transfers (control, bulk, interrupt and isochronous) on all endpoints (Not fully implemented yet).</para></listitem>
+      <listitem><para>Asynchronous support. In v0.1, all functions were synchronous. While this was the most common usage, there are cases where an asynchronous interface was desirable. The API now supports asynchronous versions of most functions where it makes sense (Not implemented yet).</para></listitem>
+      <listitem><para>More examples. The developers have created a variety of common example programs and documentation in this manual describing what they do and how to use them. (Not implemented yet).</para></listitem>
+      <listitem><para>Explicit support for features like short reads. There was no clear rule with v0.1, nor any way to specify if short reads should be enabled or not. Support is now explicit enabled by default and can be disabled. (Not implemented yet)</para></listitem>
+      <listitem><para>Normalization of return types. All functions return &gt;= 0 on success or &lt; 0 on error now (see <xref linkend="function.usbopen" />).</para></listitem>
+      <listitem><para>Some functions were renamed to better reflect their operation:</para>
+        <itemizedlist>
+          <listitem><para>usb_set_altinterface -> <xref linkend="function.usbsetaltsetting" /></para></listitem>
+        </itemizedlist>
+      </listitem>
+    </itemizedlist>
+  </chapter>
+

@@ -1,0 +1,9 @@
+  <title>Examples</title>
+  <chapter id="examples-other">
+    <title>Other Applications</title>
+    <para>Another source of examples can be gleaned from other applications.</para>
+    <itemizedlist>
+      <listitem><para><ulink url="http://www.gphoto.org/">gPhoto</ulink> uses libusb to communicate with digital still cameras.</para></listitem>
+      <listitem><para><ulink url="http://rio500.sourceforge.net/">rio500</ulink> utils uses libusb to communicate with SONICblue Rio 500 Digital Audio Player.</para></listitem>
+    </itemizedlist>
+  </chapter>
