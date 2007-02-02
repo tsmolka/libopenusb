@@ -23,6 +23,7 @@
 #undef LINUX_API
 #undef BSD_API
 #undef DARWIN_API
+#undef SUNOS_API
 
 #undef HAVE_OLD_DEV_USB_USB_H
 

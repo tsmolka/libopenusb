@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 #include <libusb.h>
+#include <errno.h>
+#include <string.h>
 
 void print_endpoint(struct usb_endpoint_desc *ep)
 { 
@@ -62,12 +64,15 @@ void print_device(libusb_device_id_t devid, int indent)
 {
   struct usb_device_desc dev;
   unsigned char devnum;
-  int i;
+  int i, ret;
 
   libusb_get_devnum(devid, &devnum);
   printf("%.*s+ device #%d\n", indent * 2, "                ", devnum);
 
-  libusb_get_device_desc(devid, &dev);
+  if ((ret = libusb_get_device_desc(devid, &dev)) != 0) {
+    printf("get device desc fail, ret = %d\n", ret);
+    return;
+  }
 
   printf("bcdUSB:                 %04xh\n", dev.bcdUSB);
   printf("bDeviceClass:           %d\n", dev.bDeviceClass);
@@ -85,9 +90,14 @@ void print_device(libusb_device_id_t devid, int indent)
   for (i = 0; i < dev.bNumConfigurations; i++) {
     struct usb_config_desc cfg;
 
-    libusb_get_config_desc(devid, i, &cfg);
+    if ((ret = libusb_get_config_desc(devid, i, &cfg)) != 0) {
+      printf("get config desc fail, ret = %d\n", ret);
+      return;
+    }
     print_configuration(devid, i, &cfg);
   }
+
+  printf("\n");
 }
 
 void print_device_and_walk(libusb_device_id_t devid, int indent)
@@ -120,12 +130,19 @@ int main(void)
 {
   libusb_bus_id_t busid;
 
-  libusb_init();
+  if (libusb_init() != LIBUSB_SUCCESS) {
+	printf("libusb init failed\n");
+	return -1;
+  }
 
-  libusb_get_first_bus_id(&busid);
+  if (libusb_get_first_bus_id(&busid) == LIBUSB_FAILURE) {
+	printf("no USB bus found\n");
+	return -1;
+  }
+
   do {
     print_bus_and_walk(busid);
-  } while (libusb_get_next_bus_id(&busid));
+  } while (libusb_get_next_bus_id(&busid) == LIBUSB_SUCCESS);
 
   return 0;
 }
