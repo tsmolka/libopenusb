@@ -29,6 +29,7 @@ void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
   ibus->busid = cur_bus_id++;
 
   ibus->ops = backend->ops;
+  ibus->io_pattern = backend->io_pattern;
 
   list_init(&ibus->devices);
 
@@ -121,12 +122,12 @@ int libusb_get_first_bus_id(libusb_bus_id_t *busid)
   struct list_head *tmp;
 
   if (list_empty(&usbi_busses))
-    return 0;
+    return LIBUSB_FAILURE;
 
   tmp = usbi_busses.next;
   *busid = list_entry(tmp, struct usbi_bus, list)->busid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /*
@@ -149,7 +150,7 @@ int libusb_get_next_bus_id(libusb_bus_id_t *busid)
 
   *busid = list_entry(tmp, struct usbi_bus, list)->busid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_prev_bus_id(libusb_bus_id_t *busid)
@@ -167,7 +168,7 @@ int libusb_get_prev_bus_id(libusb_bus_id_t *busid)
 
   *busid = list_entry(tmp, struct usbi_bus, list)->busid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /*
@@ -187,6 +188,16 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
   usbi_callback(idev->devid, USB_ATTACH);
 }
 
+void usbi_free_device(struct usbi_device *idev)
+{
+  if (idev->children)
+    free(idev->children);
+  usbi_destroy_configuration(idev);
+  if (idev->bus->ops->free_device)
+    idev->bus->ops->free_device(idev);
+  free(idev);
+}
+
 void usbi_remove_device(struct usbi_device *idev)
 {
   libusb_device_id_t devid = idev->devid;
@@ -194,8 +205,7 @@ void usbi_remove_device(struct usbi_device *idev)
   list_del(&idev->bus_list);
   list_del(&idev->dev_list);
 
-  usbi_destroy_configuration(idev);
-  free(idev);
+  usbi_free_device(idev);
 
   usbi_callback(devid, USB_DETACH);
 }
@@ -272,11 +282,14 @@ static int add_match_to_list(struct usbi_match *match, struct usbi_device *idev)
 }
 
 static int match_interfaces(struct usbi_device *idev,
-	int bClass, int bSubClass, int bProtocol)
+	int devclass, int subclass, int protocol)
 {
   int c;
 
-  if (bClass < 0 && bSubClass < 0 && bProtocol < 0)
+  if (idev->desc.configs == NULL)
+    return 0;
+
+  if (devclass < 0 && subclass < 0 && protocol < 0)
     return 1;
 
   /* Now check all of the configs/interfaces/altsettings */
@@ -291,9 +304,9 @@ static int match_interfaces(struct usbi_device *idev,
       for (a = 0; a < intf->num_altsettings; a++) {
         struct usb_interface_desc *as = &intf->altsettings[a].desc;
 
-        if ((bClass < 0 || bClass == as->bInterfaceClass) &&
-            (bSubClass < 0 || bSubClass == as->bInterfaceSubClass) &&
-            (bProtocol < 0 || bProtocol == as->bInterfaceProtocol))
+        if ((devclass < 0 || devclass == as->bInterfaceClass) &&
+            (subclass < 0 || subclass == as->bInterfaceSubClass) &&
+            (protocol < 0 || protocol == as->bInterfaceProtocol))
           return 1;
       }
     }
@@ -321,24 +334,29 @@ struct usbi_match *usbi_find_match(libusb_match_handle_t handle)
 }
 
 int libusb_match_devices_by_vendor(libusb_match_handle_t *handle,
-        int vendor, int product)
+	int vendor, int product)
 {
   struct usbi_match *match;
   struct usbi_device *idev;
 
   if (vendor < -1 || vendor > 0xffff || product < -1 || product > 0xffff)
-    return -EINVAL;
+    return LIBUSB_UNKNOWN_DEVICE;
 
   match = malloc(sizeof(*match));
   if (!match)
-    return -ENOMEM;
+    return LIBUSB_NO_RESOURCES;
 
   memset(match, 0, sizeof(*match));
 
   match->handle = cur_match_handle++;	/* FIXME: Locking */
 
   list_for_each_entry(idev, &usbi_devices, dev_list) {
-    struct usb_device_desc *desc = &idev->desc.device;
+    struct usb_device_desc *desc;
+
+    if (idev->desc.device_raw.len == 0)
+      continue;
+
+    desc = &idev->desc.device;
 
     if ((vendor < 0 || vendor == desc->idVendor) &&
         (product < 0 || product == desc->idProduct))
@@ -349,29 +367,29 @@ int libusb_match_devices_by_vendor(libusb_match_handle_t *handle,
 
   *handle = match->handle;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_match_devices_by_class(libusb_match_handle_t *handle,
-        int bClass, int bSubClass, int bProtocol)
+	int devclass, int subclass, int protocol)
 {
   struct usbi_match *match;
   struct usbi_device *idev;
 
-  if (bClass < -1 || bClass > 0xff || bSubClass < -1 || bSubClass > 0xff ||
-      bProtocol < -1 || bProtocol > 0xff)
-    return -EINVAL;
+  if (devclass < -1 || devclass > 0xff || subclass < -1 || subclass > 0xff ||
+      protocol < -1 || protocol > 0xff)
+    return LIBUSB_UNKNOWN_DEVICE;
 
   match = malloc(sizeof(*match));
   if (!match)
-    return -ENOMEM;
+    return LIBUSB_NO_RESOURCES;
 
   memset(match, 0, sizeof(*match));
 
   match->handle = cur_match_handle++;	/* FIXME: Locking */
 
   list_for_each_entry(idev, &usbi_devices, dev_list) {
-    if (match_interfaces(idev, bClass, bSubClass, bProtocol))
+    if (match_interfaces(idev, devclass, subclass, protocol))
       add_match_to_list(match, idev);
   }
 
@@ -379,11 +397,11 @@ int libusb_match_devices_by_class(libusb_match_handle_t *handle,
 
   *handle = match->handle;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_match_next_device(libusb_match_handle_t handle,
-	libusb_device_id_t *mdevid)
+	libusb_device_id_t *devid)
 {
   struct usbi_match *match;
 
@@ -393,17 +411,17 @@ int libusb_match_next_device(libusb_match_handle_t handle,
 
   while (match->cur_match < match->num_matches) {
     struct usbi_device *idev;
-    libusb_device_id_t devid;
+    libusb_device_id_t mdevid;
 
-    devid = match->matches[match->cur_match++];
-    idev = usbi_find_device_by_id(devid);
+    mdevid = match->matches[match->cur_match++];
+    idev = usbi_find_device_by_id(mdevid);
     if (idev) {
-      *mdevid = devid;
-      return 0;
+      *devid = mdevid;
+      return LIBUSB_SUCCESS;
     }
   }
 
-  return -ESRCH;
+  return LIBUSB_FAILURE;
 }
 
 int libusb_match_terminate(libusb_match_handle_t handle)
@@ -418,7 +436,7 @@ int libusb_match_terminate(libusb_match_handle_t handle)
   free(match->matches);
   free(match);
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /* Topology operations */
@@ -436,7 +454,7 @@ int libusb_get_first_device_id(libusb_bus_id_t busid,
 
   *devid = ibus->root->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /*
@@ -459,7 +477,7 @@ int libusb_get_next_device_id(libusb_device_id_t *devid)
 
   *devid = list_entry(tmp, struct usbi_device, dev_list)->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_prev_device_id(libusb_device_id_t *devid)
@@ -477,7 +495,7 @@ int libusb_get_prev_device_id(libusb_device_id_t *devid)
 
   *devid = list_entry(tmp, struct usbi_device, dev_list)->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_child_count(libusb_device_id_t devid, unsigned char *count)
@@ -490,7 +508,7 @@ int libusb_get_child_count(libusb_device_id_t devid, unsigned char *count)
 
   *count = idev->num_ports;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_child_device_id(libusb_device_id_t hub_devid, int port,
@@ -511,7 +529,7 @@ int libusb_get_child_device_id(libusb_device_id_t hub_devid, int port,
 
   *child_devid = idev->children[port]->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_parent_device_id(libusb_device_id_t child_devid,
@@ -528,7 +546,7 @@ int libusb_get_parent_device_id(libusb_device_id_t child_devid,
 
   *hub_devid = idev->parent->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_bus_id(libusb_device_id_t devid, libusb_bus_id_t *busid)
@@ -541,7 +559,7 @@ int libusb_get_bus_id(libusb_device_id_t devid, libusb_bus_id_t *busid)
 
   *busid = idev->bus->busid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_devnum(libusb_device_id_t devid, unsigned char *devnum)
@@ -554,7 +572,7 @@ int libusb_get_devnum(libusb_device_id_t devid, unsigned char *devnum)
 
   *devnum = idev->devnum;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /* Descriptor operations */
@@ -565,11 +583,14 @@ int libusb_get_device_desc(libusb_device_id_t devid,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  if (idev->desc.device_raw.len == 0)
+    return LIBUSB_FAILURE;
 
   memcpy(devdsc, &idev->desc.device, sizeof(*devdsc));
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_config_desc(libusb_device_id_t devid, int cfgidx,
@@ -579,14 +600,17 @@ int libusb_get_config_desc(libusb_device_id_t devid, int cfgidx,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
 
   if (cfgidx < 0 || cfgidx >= idev->desc.num_configs)
-    return -EINVAL;
+    return LIBUSB_BADARG;
+
+  if (idev->desc.configs == NULL)
+    return LIBUSB_FAILURE;
 
   memcpy(cfgdsc, &idev->desc.configs[cfgidx], sizeof(*cfgdsc));
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_interface_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
@@ -597,19 +621,19 @@ int libusb_get_interface_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
 
   if (cfgidx < 0 || cfgidx >= idev->desc.num_configs)
-    return -EINVAL;
+    return LIBUSB_BADARG;
 
   cfg = &idev->desc.configs[cfgidx];
 
   if (ifcidx < 0 || ifcidx >= cfg->num_interfaces)
-    return -EINVAL;
+    return LIBUSB_BADARG;
 
   memcpy(ifcdsc, &cfg->interfaces[ifcidx].altsettings[0].desc, sizeof(*ifcdsc));
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_endpoint_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
@@ -621,24 +645,36 @@ int libusb_get_endpoint_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  if (idev->desc.configs == NULL)
+    return LIBUSB_FAILURE;
 
   if (cfgidx < 0 || cfgidx >= idev->desc.num_configs)
-    return -EINVAL;
+    return LIBUSB_BADARG;
 
   cfg = &idev->desc.configs[cfgidx];
 
+  if (cfg->interfaces == NULL)
+    return LIBUSB_FAILURE;
+
   if (ifcidx < 0 || ifcidx >= cfg->num_interfaces)
-    return -EINVAL;
+    return LIBUSB_BADARG;
+
+  if (cfg->interfaces[ifcidx].altsettings == NULL)
+    return LIBUSB_FAILURE;
 
   as = &cfg->interfaces[ifcidx].altsettings[0];
 
   if (eptidx < 0 || eptidx >= as->num_endpoints)
-    return -EINVAL;
+    return LIBUSB_BADARG;
+
+  if (as->endpoints == NULL)
+    return LIBUSB_FAILURE;
 
   memcpy(eptdsc, &as->endpoints[eptidx].desc, sizeof(*eptdsc));
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_raw_device_desc(libusb_device_id_t devid,
@@ -648,7 +684,10 @@ int libusb_get_raw_device_desc(libusb_device_id_t devid,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  if (idev->desc.device_raw.len == 0)
+    return LIBUSB_FAILURE;
 
   if (idev->desc.device_raw.len < buflen)
     buflen = idev->desc.device_raw.len;
@@ -665,10 +704,13 @@ int libusb_get_raw_config_desc(libusb_device_id_t devid,
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENOENT;
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  if (idev->desc.configs_raw == NULL)
+    return LIBUSB_FAILURE;
 
   if (cfgidx < 0 || cfgidx >= idev->desc.num_configs)
-    return -EINVAL;
+    return LIBUSB_BADARG;
 
   if (idev->desc.configs_raw[cfgidx].len < buflen)
     buflen = idev->desc.configs_raw[cfgidx].len;
@@ -677,4 +719,3 @@ int libusb_get_raw_config_desc(libusb_device_id_t devid,
 
   return idev->desc.configs_raw[cfgidx].len;
 }
-

@@ -29,7 +29,7 @@ static int ezusb_write(libusb_dev_handle_t dev, unsigned short addr,
   struct libusb_ctrl_request ctrl = {
     .dev = dev,
     .endpoint = 0,
-    .setup.bRequestType = USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+    .setup.bRequestType = USB_REQ_TYPE_VENDOR | USB_REQ_RECIP_DEVICE,
     .setup.bRequest = RW_INTERNAL,
     .setup.wValue = addr,
     .setup.wIndex = 0,

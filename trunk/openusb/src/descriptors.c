@@ -91,7 +91,7 @@ int libusb_parse_data(char *format, unsigned char *source, size_t sourcelen,
   }
 
   *count = sp - source;
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 /*
@@ -219,6 +219,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 
       if (header.bLength < USBI_DESC_HEADER_SIZE) {
         usbi_debug(1, "invalid descriptor length of %d", header.bLength);
+        free(intf->altsettings);
         return -1;
       }
 
@@ -250,7 +251,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 
     if (as->desc.bNumEndpoints > USBI_MAXENDPOINTS) {
       usbi_debug(1, "too many endpoints, ignoring rest");
-
+      free(intf->altsettings);
       return -1;
     }
 
@@ -259,6 +260,13 @@ static int usbi_parse_interface(struct usbi_interface *intf,
     if (!as->endpoints) {
       usbi_debug(1, "couldn't allocated %d bytes for endpoints",
 	as->desc.bNumEndpoints * sizeof(struct usb_endpoint_desc));
+
+      for (i = 0; i < intf->num_altsettings; i++) {
+        as = intf->altsettings + intf->num_altsettings;
+        free(as->endpoints);
+      }
+      free(intf->altsettings);
+
       return -1;      
     }
     as->num_endpoints = as->desc.bNumEndpoints;
@@ -270,12 +278,26 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 
       if (header.bLength > buflen) {
         usbi_debug(1, "ran out of descriptors parsing");
+
+        for (i = 0; i <= intf->num_altsettings; i++) {
+          as = intf->altsettings + intf->num_altsettings;
+          free(as->endpoints);
+        }
+        free(intf->altsettings);
+
         return -1;
       }
                 
       retval = usbi_parse_endpoint(as->endpoints + i, buf, buflen);
-      if (retval < 0)
+      if (retval < 0) {
+        for (i = 0; i <= intf->num_altsettings; i++) {
+          as = intf->altsettings + intf->num_altsettings;
+          free(as->endpoints);
+        }
+        free(intf->altsettings);
+
         return retval;
+      }
 
       buf += retval;
       parsed += retval;
@@ -334,6 +356,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 
       if (header.bLength > buflen || header.bLength < USBI_DESC_HEADER_SIZE) {
         usbi_debug(1, "invalid descriptor length of %d", header.bLength);
+	free(cfg->interfaces);
         return -1;
       }
 
@@ -356,8 +379,10 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 	numskipped);
 
     retval = usbi_parse_interface(cfg->interfaces + i, buf, buflen);
-    if (retval < 0)
+    if (retval < 0) {
+      free(cfg->interfaces);
       return retval;
+    }
 
     buf += retval;
     buflen -= retval;
@@ -370,29 +395,35 @@ void usbi_destroy_configuration(struct usbi_device *dev)
 {
   int c, i, j;
         
-  for (c = 0; c < dev->desc.num_configs; c++) {
-    struct usbi_config *cfg = dev->desc.configs + c;
+  if (dev->desc.configs) {
+    for (c = 0; c < dev->desc.num_configs; c++) {
+      struct usbi_config *cfg = dev->desc.configs + c;
 
-    for (i = 0; i < cfg->num_interfaces; i++) {
-      struct usbi_interface *intf = cfg->interfaces + i;
+      if (cfg->interfaces) {
+        for (i = 0; i < cfg->num_interfaces; i++) {
+          struct usbi_interface *intf = cfg->interfaces + i;
                                 
-      for (j = 0; j < intf->num_altsettings; j++) {
-        struct usbi_altsetting *as = intf->altsettings + j;
+          for (j = 0; j < intf->num_altsettings; j++) {
+            struct usbi_altsetting *as = intf->altsettings + j;
                                         
-        free(as->endpoints);
+            free(as->endpoints);
+          }
+
+          free(intf->altsettings);
+        }
+
+        free(cfg->interfaces);
       }
 
-      free(intf->altsettings);
+      free(dev->desc.configs_raw[c].data);
     }
 
-    free(cfg->interfaces);
-    free(dev->desc.configs_raw[c].data);
+    free(dev->desc.configs_raw);
+    free(dev->desc.configs);
   }
 
-  free(dev->desc.configs_raw);
-  free(dev->desc.configs);
-
-  free(dev->desc.device_raw.data);
+  if (dev->desc.device_raw.data)
+    free(dev->desc.device_raw.data);
 }
 
 int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)

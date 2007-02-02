@@ -8,7 +8,7 @@ AM_CFLAGS = -g -Werror
 
 configincludedir = $(pkglibdir)/include
 
-EXTRA_DIST = linux.c linux.h bsd.c darwin.c
+EXTRA_DIST = linux.c linux.h bsd.c darwin.c sunos.c sunos.h
 
 lib_LTLIBRARIES = libusb.la
 
@@ -37,7 +37,14 @@ darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
 darwin_la_LDFLAGS = -avoid-version -module
 endif
 
-libusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c async.c
+if SUNOS_API
+usblib_LTLIBRARIES = sunos.la
+
+sunos_la_SOURCES = sunos.c sunos.h
+sunos_la_LDFLAGS =  -avoid-version -module -ldevinfo
+endif
+
+libusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c async.c sync.c
 libusb_la_CFLAGS = -DDRIVER_PATH=\"$(libdir)/usb\"
 
 include_HEADERS = libusb.h

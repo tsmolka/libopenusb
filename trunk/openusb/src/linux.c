@@ -520,9 +520,9 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
 	unsigned short devnum, unsigned int max_children)
 {
   struct usbi_device *idev;
-  size_t count;
   int i, ret;
   int fd;
+  size_t count;
 
   idev = malloc(sizeof(*idev));
   if (!idev)
@@ -570,9 +570,9 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
   }
 
   idev->desc.device_raw.len = USBI_DEVICE_DESC_SIZE;
-  libusb_parse_data("bbWbbbbWWWbbbb",
-       idev->desc.device_raw.data, idev->desc.device_raw.len,
-       &idev->desc.device, sizeof(idev->desc.device), &count);
+/*  usbi_parse_device_descriptor(idev, idev->desc.device_raw.data, idev->desc.device_raw.len);
+*/
+  libusb_parse_data("..wbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
 
   usbi_debug(2, "found device %03d on %s", idev->devnum, ibus->filename);
 
@@ -607,7 +607,7 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
     unsigned char buf[8];
     struct usb_config_desc cfg_desc;
     struct usbi_raw_desc *cfgr = idev->desc.configs_raw + i;
-    size_t count;
+/*    size_t count; */
 
     /* Get the first 8 bytes so we can figure out what the total length is */
     ret = read(fd, buf, 8);
@@ -620,7 +620,7 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
       goto done;
     }
 
-    libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+    libusb_parse_data("..w", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
     cfgr->len = cfg_desc.wTotalLength;
 
     cfgr->data = malloc(cfgr->len);
@@ -686,7 +686,7 @@ static int linux_refresh_devices(struct usbi_bus *ibus)
    * available to normal users.
    */
 
-printf("start /proc/bys/usb/devices\n");
+printf("start /proc/bus/usb/devices\n");
   snprintf(devfilename, sizeof(devfilename), "%s/devices", device_dir);
   f = fopen(devfilename, "r");
   if (!f) {
@@ -835,7 +835,7 @@ printf("start /proc/bys/usb/devices\n");
       break;
     }
   }
-printf("done /proc/bys/usb/devices\n");
+printf("done /proc/bus/usb/devices\n");
 
   list_for_each_entry_safe(idev, tidev, &ibus->devices, bus_list) {
     if (!idev->found) {
@@ -889,11 +889,11 @@ static int linux_init(void)
   }
 
   if (!device_dir[0]) {
-    if (check_usb_path("/dev/bus/usb")) {
-      strncpy(device_dir, "/dev/bus/usb", sizeof(device_dir) - 1);
-      device_dir[sizeof(device_dir) - 1] = 0;
-    } else if (check_usb_path("/proc/bus/usb")) {
+    if (check_usb_path("/proc/bus/usb")) {
       strncpy(device_dir, "/proc/bus/usb", sizeof(device_dir) - 1);
+      device_dir[sizeof(device_dir) - 1] = 0;
+    } else if (check_usb_path("/dev/bus/usb")) {
+      strncpy(device_dir, "/dev/bus/usb", sizeof(device_dir) - 1);
       device_dir[sizeof(device_dir) - 1] = 0;
     } else
       device_dir[0] = 0;	/* No path, no USB support */
@@ -1000,11 +1000,13 @@ static int linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 }
 
 int backend_version = 1;
+int backend_io_pattern = PATTERN_ASYNC;
 
 struct usbi_backend_ops backend_ops = {
   .init				= linux_init,
   .find_busses			= linux_find_busses,
   .refresh_devices		= linux_refresh_devices,
+  .free_device			= NULL,
   .dev = {
     .open			= linux_open,
     .close			= linux_close,

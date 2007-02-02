@@ -102,11 +102,19 @@ case $host in
     AC_MSG_RESULT(Darwin and/or MacOS 10)
     OSLIBS="-lIOKit"
     ;;
+  *-solaris*)
+   AC_DEFINE(SUNOS_API)
+   AC_SUBST(SUNOS_API)
+   os_support=sunos
+   AC_MSG_RESULT(Solaris)
+   OSLIBS=""
+   ;;
 esac
 
 AM_CONDITIONAL(LINUX_API, test "$os_support" = "linux")
 AM_CONDITIONAL(BSD_API, test "$os_support" = "bsd")
 AM_CONDITIONAL(DARWIN_API, test "$os_support" = "darwin")
+AM_CONDITIONAL(SUNOS_API, test "$os_support" = "sunos")
 
 AC_SUBST(OSLIBS)
 

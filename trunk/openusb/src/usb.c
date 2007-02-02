@@ -19,6 +19,7 @@
 
 #define USB_DEFAULT_DEBUG_LEVEL		4
 static int usb_debug = USB_DEFAULT_DEBUG_LEVEL;
+static int usb_inited = 0;
 
 static struct list_head usbi_handles = { .prev = &usbi_handles, .next = &usbi_handles };
 static libusb_dev_handle_t cur_handle = 1;
@@ -105,7 +106,7 @@ static int load_backend(const char *filepath)
 {
   struct usbi_backend *backend;
   struct usbi_backend_ops *ops;
-  int *version;
+  int *version, *io_pattern;
   void *handle;
 
   handle = dlopen(filepath, RTLD_LAZY);
@@ -131,6 +132,18 @@ static int load_backend(const char *filepath)
     goto err;
   }
 
+  io_pattern = dlsym(handle, "backend_io_pattern");
+  if (!io_pattern) {
+    fprintf(stderr, "no backend io pattern, skipping\n");
+    goto err;
+  }
+
+  if (*io_pattern > 2 || *io_pattern < 1) {
+    fprintf(stderr, "backend io pattern is %d, not a valid pattern\n",
+        *io_pattern);
+    goto err;
+  }
+
   backend = malloc(sizeof(*backend));
   if (!backend) {
     fprintf(stderr, "couldn't allocate memory for backend\n");
@@ -140,6 +153,7 @@ static int load_backend(const char *filepath)
   backend->filepath = strdup(filepath);
   backend->handle = handle;
   backend->ops = ops;
+  backend->io_pattern = *io_pattern;
 
   if (ops->init()) {
     fprintf(stderr, "couldn't initialize backend\n");
@@ -149,6 +163,7 @@ static int load_backend(const char *filepath)
 
   list_add(&backend->list, &backends);
 
+  usbi_debug(3, "load backend");
   return 0;
 
 err:
@@ -163,6 +178,7 @@ static int load_backends(const char *dirpath)
   struct dirent *entry;
   DIR *dir;
 
+  usbi_debug(3, "open dirpath %s", dirpath); 
   dir = opendir(dirpath);
   if (!dir)
     return 1;
@@ -183,6 +199,7 @@ static int load_backends(const char *dirpath)
       continue;
 
     snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, entry->d_name);
+    usbi_debug(3, "find backend path %s", filepath);
 
     list_for_each_entry(backend, &backends, list) {
       if (strcmp(filepath, backend->filepath) == 0) {
@@ -199,10 +216,16 @@ static int load_backends(const char *dirpath)
   return 0;
 }
 
-void libusb_init(void)
+int libusb_init(void)
 {
   const char *driver_path;
   int ret;
+
+  /* if libusb_init() is already called then do not reinit */
+  if (usb_inited == 1)
+    return LIBUSB_SUCCESS;
+
+  usb_inited = 1;
 
   if (getenv("USB_DEBUG") && usb_debug == USB_DEFAULT_DEBUG_LEVEL)
     libusb_set_debug(atoi(getenv("USB_DEBUG")));
@@ -213,8 +236,12 @@ void libusb_init(void)
 
   /* Start up thread for callbacks */
   ret = pthread_create(&callback_thread, NULL, process_callbacks, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     usbi_debug(1, "unable to create polling thread (ret = %d)", ret);
+    usb_inited = 0;
+
+    return LIBUSB_FAILURE;
+  }
 
   /* Load backends */
   load_backends(DRIVER_PATH);
@@ -224,18 +251,22 @@ void libusb_init(void)
     load_backends(driver_path);
 
   usbi_rescan_devices();
+
+  return LIBUSB_SUCCESS;
 }
 
-void libusb_set_event_callback(libusb_event_type_t type,
+int libusb_set_event_callback(libusb_event_type_t type,
 	libusb_event_callback_t func, void *arg)
 {
   if (type < 0 || type > 1)
-    return;
+    return LIBUSB_BADARG;
 
   pthread_mutex_lock(&callback_lock);
   usbi_event_callbacks[type].func = func;
   usbi_event_callbacks[type].arg = arg;
   pthread_mutex_unlock(&callback_lock);
+
+  return LIBUSB_SUCCESS;
 }
 
 void usbi_callback(libusb_device_id_t devid, libusb_event_type_t type)
@@ -278,11 +309,11 @@ int libusb_open(libusb_device_id_t devid, libusb_dev_handle_t *handle)
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return -ENODEV;
+    return LIBUSB_UNKNOWN_DEVICE;
 
   hdev = malloc(sizeof(*hdev));
   if (!hdev)
-    return -ENOMEM;
+    return LIBUSB_NO_RESOURCES;
 
   hdev->handle = cur_handle++;	/* FIXME: Locking */
   hdev->idev = idev;
@@ -291,6 +322,7 @@ int libusb_open(libusb_device_id_t devid, libusb_dev_handle_t *handle)
   ret = idev->ops->open(hdev);
   if (ret < 0) {
     free(hdev);
+    *handle = 0;
     return ret;
   }
 
@@ -298,7 +330,7 @@ int libusb_open(libusb_device_id_t devid, libusb_dev_handle_t *handle)
 
   *handle = hdev->handle;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_get_device_id(libusb_dev_handle_t dev, libusb_device_id_t *devid)
@@ -311,7 +343,7 @@ int libusb_get_device_id(libusb_dev_handle_t dev, libusb_device_id_t *devid)
 
   *devid = hdev->idev->devid;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_close(libusb_dev_handle_t dev)
@@ -365,7 +397,7 @@ uint32_t libusb_le32_to_cpu(uint32_t data)
 }
 
 /*
- * Some helper code for simple I/O (Control, Interrupt and Bulk)
+ * Some helper code for sync I/O (Control, Interrupt and Bulk)
  */
 struct simple_io {
   pthread_mutex_t lock;
@@ -412,16 +444,33 @@ static void ctrl_callback(struct libusb_ctrl_request *ctrl, void *arg,
 
 int libusb_ctrl(struct libusb_ctrl_request *ctrl, size_t *transferred_bytes)
 {
-  struct simple_io io;
-  int ret;
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
 
-  simple_io_setup(&io);
+  dev = usbi_find_dev_handle(ctrl->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
 
-  ret = libusb_ctrl_submit(ctrl, ctrl_callback, &io);
-  if (ret)
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    struct simple_io io;
+
+    simple_io_setup(&io);
+
+    ret = usbi_async_ctrl_submit(ctrl, ctrl_callback, &io);
+    if (ret)
+      return ret;
+
+    return simple_io_wait(&io, transferred_bytes);
+  } else if (io_pattern == PATTERN_SYNC) {
+    ret = usbi_sync_ctrl_submit(ctrl, transferred_bytes);
+
     return ret;
+  } else {
 
-  return simple_io_wait(&io, transferred_bytes);
+    return LIBUSB_FAILURE;
+  }
 }
 
 /*
@@ -435,16 +484,33 @@ static void intr_callback(struct libusb_intr_request *intr, void *arg,
 
 int libusb_intr(struct libusb_intr_request *intr, size_t *transferred_bytes)
 {
-  struct simple_io io;
-  int ret;
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
 
-  simple_io_setup(&io);
+  dev = usbi_find_dev_handle(intr->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
 
-  ret = libusb_intr_submit(intr, intr_callback, &io);
-  if (ret)
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    struct simple_io io;
+
+    simple_io_setup(&io);
+
+    ret = usbi_async_intr_submit(intr, intr_callback, &io);
+    if (ret)
+      return ret;
+
+    return simple_io_wait(&io, transferred_bytes);
+  } else if (io_pattern == PATTERN_SYNC) {
+    ret = usbi_sync_intr_submit(intr, transferred_bytes);
+
     return ret;
+  } else {
 
-  return simple_io_wait(&io, transferred_bytes);
+    return LIBUSB_FAILURE;
+  }
 }
 
 /*
@@ -458,16 +524,285 @@ static void bulk_callback(struct libusb_bulk_request *bulk, void *arg,
 
 int libusb_bulk(struct libusb_bulk_request *bulk, size_t *transferred_bytes)
 {
-  struct simple_io io;
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
+
+  dev = usbi_find_dev_handle(bulk->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    struct simple_io io;
+
+    simple_io_setup(&io);
+
+    ret = usbi_async_bulk_submit(bulk, bulk_callback, &io);
+    if (ret)
+      return ret;
+
+    return simple_io_wait(&io, transferred_bytes);
+  } else if (io_pattern == PATTERN_SYNC) {
+    ret = usbi_sync_bulk_submit(bulk, transferred_bytes);
+
+    return ret;
+  } else {
+
+    return LIBUSB_FAILURE;
+  }
+}
+
+/*
+ * Some helper code for async I/O (Control, Interrupt and Bulk)
+ */
+struct async_io {
+  enum usbi_io_type type;
+  void *request;
+  void *callback;
+  void *arg;
+};
+
+static void *
+io_submit(void *arg)
+{
+  struct async_io *io = (struct async_io *)arg;
+  size_t transferred_bytes;
   int ret;
 
-  simple_io_setup(&io);
+  switch(io->type) {
+  case USBI_IO_CONTROL:
+  {
+    struct libusb_ctrl_request *ctrl;
+    libusb_ctrl_callback_t callback;
 
-  ret = libusb_bulk_submit(bulk, bulk_callback, &io);
-  if (ret)
+    ctrl = (struct libusb_ctrl_request *)io->request;
+    callback = (libusb_ctrl_callback_t)io->callback;
+    ret = usbi_sync_ctrl_submit(ctrl, &transferred_bytes);
+    if (callback)
+      callback(ctrl, io->arg, ret, transferred_bytes);
+
+    break;
+  }
+  case USBI_IO_INTERRUPT:
+  {
+    struct libusb_intr_request *intr;
+    libusb_intr_callback_t callback;
+
+    intr = (struct libusb_intr_request *)io->request;
+    callback = (libusb_intr_callback_t)io->callback;
+    ret = usbi_sync_intr_submit(intr, &transferred_bytes);
+    if (callback)
+      callback(intr, io->arg, ret, transferred_bytes);
+    
+    break;
+  }
+  case USBI_IO_BULK:
+  {
+    struct libusb_bulk_request *bulk;
+    libusb_bulk_callback_t callback;
+
+    bulk = (struct libusb_bulk_request *)io->request;
+    callback = (libusb_bulk_callback_t)io->callback;
+    ret = usbi_sync_bulk_submit(bulk, &transferred_bytes);
+    if (callback)
+      callback(bulk, io->arg, ret, transferred_bytes);
+
+    break;
+  }
+  case USBI_IO_ISOCHRONOUS:
+  {
+    struct libusb_isoc_request *iso;
+    libusb_isoc_callback_t callback;
+
+    /* FIXME: only NULL callback for isoc OUT is supported now */
+    iso = (struct libusb_isoc_request *)io->request;
+    callback = (libusb_isoc_callback_t)io->callback;
+    ret = usbi_sync_isoc_submit(iso, NULL);
+    if (callback)
+      callback(iso, io->arg, 0, NULL);
+
+    break;
+  }
+  }
+
+  free(io);
+
+  return NULL;
+}
+
+int libusb_ctrl_submit(struct libusb_ctrl_request *ctrl,
+	libusb_ctrl_callback_t callback, void *arg)
+{
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
+
+  dev = usbi_find_dev_handle(ctrl->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    ret = usbi_async_ctrl_submit(ctrl, callback, arg);
     return ret;
+  } else if (io_pattern == PATTERN_SYNC) {
+    pthread_t thrid;
+    struct async_io *io;
 
-  return simple_io_wait(&io, transferred_bytes);
+    io = malloc(sizeof (*io));
+    if (!io)
+      return LIBUSB_NO_RESOURCES;
+
+    memset(io, 0, sizeof(*io));
+
+    io->type = USBI_IO_CONTROL;
+    io->request = (void *)ctrl;
+    io->callback = (void *)callback;
+    io->arg = arg;
+
+    /* create sync thread */
+    ret = pthread_create(&thrid, NULL, io_submit, (void *)io);
+    if (ret < 0) {
+      free(io);
+      return LIBUSB_FAILURE;
+    }
+
+    return LIBUSB_SUCCESS;
+  } else {
+
+    return LIBUSB_FAILURE;
+  }
+}
+
+int libusb_intr_submit(struct libusb_intr_request *intr,
+	libusb_intr_callback_t callback, void *arg)
+{
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
+
+  dev = usbi_find_dev_handle(intr->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    ret = usbi_async_intr_submit(intr, callback, arg);
+    return ret;
+  } else if (io_pattern == PATTERN_SYNC) {
+    pthread_t thrid;
+    struct async_io *io;
+
+    io = malloc(sizeof (*io));
+    if (!io)
+      return LIBUSB_NO_RESOURCES;
+
+    memset(io, 0, sizeof(*io));
+
+    io->type = USBI_IO_INTERRUPT;
+    io->request = (void *)intr;
+    io->callback = (void *)callback;
+    io->arg = arg;
+
+    /* create sync thread */
+    ret = pthread_create(&thrid, NULL, io_submit, (void *)io);
+    if (ret < 0) {
+      free(io);
+      return LIBUSB_FAILURE;
+    }
+
+    return LIBUSB_SUCCESS;
+  } else {
+
+    return LIBUSB_FAILURE;
+  }
+}
+
+int libusb_bulk_submit(struct libusb_bulk_request *bulk,
+	libusb_bulk_callback_t callback, void *arg)
+{
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
+
+  dev = usbi_find_dev_handle(bulk->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if (io_pattern == PATTERN_ASYNC) {
+    ret = usbi_async_bulk_submit(bulk, callback, arg);
+    return ret;
+  } else if (io_pattern == PATTERN_SYNC) {
+    pthread_t thrid;
+    struct async_io *io;
+
+    io = malloc(sizeof (*io));
+    if (!io)
+      return LIBUSB_NO_RESOURCES;
+
+    memset(io, 0, sizeof(*io));
+
+    io->type = USBI_IO_BULK;
+    io->request = (void *)bulk;
+    io->callback = (void *)callback;
+    io->arg = arg;
+
+    /* create sync thread */
+    ret = pthread_create(&thrid, NULL, io_submit, (void *)io);
+    if (ret < 0) {
+      free(io);
+      return LIBUSB_FAILURE;
+    }
+
+    return LIBUSB_SUCCESS;
+  } else {
+
+    return LIBUSB_FAILURE;
+  }
+}
+
+int libusb_isoc_submit(struct libusb_isoc_request *iso,
+	libusb_isoc_callback_t callback, void *arg)
+{
+  struct usbi_dev_handle *dev;
+  int io_pattern, ret;
+
+  dev = usbi_find_dev_handle(iso->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io_pattern = dev->idev->bus->io_pattern;
+
+  if ((io_pattern == PATTERN_SYNC) &&
+    ((iso->endpoint & USB_ENDPOINT_DIR_MASK) == USB_ENDPOINT_OUT)) {
+    pthread_t thrid;
+    struct async_io *io;
+
+    io = malloc(sizeof (*io));
+    if (!io)
+      return LIBUSB_NO_RESOURCES;
+
+    memset(io, 0, sizeof(*io));
+
+    io->type = USBI_IO_ISOCHRONOUS;
+    io->request = (void *)iso;
+    io->callback = (void *)callback;
+    io->arg = arg;
+
+    /* create sync thread */
+    ret = pthread_create(&thrid, NULL, io_submit, (void *)io);
+    if (ret < 0) {
+      free(io);
+      return LIBUSB_FAILURE;
+    }
+
+    return LIBUSB_SUCCESS;
+  } else {
+    ret = usbi_async_isoc_submit(iso, callback, arg);
+    return ret;
+  }
 }
 
 /* FIXME: Maybe move these kinds of things to a util.c? */

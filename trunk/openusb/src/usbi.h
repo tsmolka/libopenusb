@@ -6,7 +6,6 @@
 #endif
 
 #include "libusb.h"
-#include "error.h"
 
 /* Prevent namespace pollution */
 #define list_init	__usb_list_init
@@ -21,6 +20,8 @@
 #include "bsd.h"
 #elif defined(DARWIN_API)
 #include "darwin.h"
+#elif defined(SUNOS_API)
+#include "sunos.h"
 #endif
 
 struct usbi_event_callback {
@@ -53,6 +54,7 @@ struct usbi_bus {
   unsigned int busnum;			/* Only needs to be unique */
 
   struct usbi_backend_ops *ops;
+  int io_pattern;
 
   struct list_head devices;
   struct usbi_device *root;
@@ -149,8 +151,8 @@ struct usbi_dev_handle {
   libusb_dev_handle_t handle;
   struct usbi_device *idev;	/* device opened */
 
-  unsigned int interface;	/* interface claimed */	
-  unsigned int altsetting;	/* alternate setting */
+  int interface;	/* interface claimed */	
+  int altsetting;	/* alternate setting */
 
   USBI_DEV_HANDLE_PRIVATE
 };
@@ -228,6 +230,8 @@ struct usbi_io {
 
       libusb_isoc_callback_t callback;
       /* FIXME: Fill this in */
+      unsigned int num_packets;
+      struct libusb_isoc_result *results;
     } isoc;
   };
 
@@ -263,6 +267,7 @@ struct usbi_backend_ops {
   int (*init)(void);
   int (*find_busses)(struct list_head *busses);
   int (*refresh_devices)(struct usbi_bus *bus);
+  void (*free_device)(struct usbi_device *idev);
   struct usbi_device_ops dev;
 };
 
@@ -271,6 +276,7 @@ struct usbi_backend {
   void *handle;
   char *filepath;
   struct usbi_backend_ops *ops;
+  int io_pattern;
 };
 
 /* usb.c */
@@ -283,6 +289,26 @@ struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev);
 
 /* async.c */
 void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes);
+struct usbi_io *usbi_alloc_io(libusb_dev_handle_t dev, enum usbi_io_type type,
+	unsigned char endpoint, unsigned int timeout);
+void usbi_free_io(struct usbi_io *io);
+int usbi_async_ctrl_submit(struct libusb_ctrl_request *ctrl,
+	libusb_ctrl_callback_t callback, void *arg);
+int usbi_async_intr_submit(struct libusb_intr_request *intr,
+	libusb_intr_callback_t callback, void *arg);
+int usbi_async_bulk_submit(struct libusb_bulk_request *bulk,
+	libusb_bulk_callback_t callback, void *arg);
+int usbi_async_isoc_submit(struct libusb_isoc_request *iso,
+	libusb_isoc_callback_t callback, void *arg);
+
+/* sync.c */
+int usbi_sync_ctrl_submit(struct libusb_ctrl_request *ctrl,
+	size_t *transferred_bytes);
+int usbi_sync_intr_submit(struct libusb_intr_request *intr,
+	size_t *transferred_bytes);
+int usbi_sync_bulk_submit(struct libusb_bulk_request *bulk,
+	size_t *transferred_bytes);
+int usbi_sync_isoc_submit(struct libusb_isoc_request *iso, void *arg);
 
 /* descriptors.c */
 void usb_fetch_descriptors(libusb_dev_handle_t dev);
@@ -296,8 +322,13 @@ int usbi_parse_device_descriptor(struct usbi_device *dev,
 void usbi_free_bus(struct usbi_bus *bus);
 void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev);
 void usbi_remove_device(struct usbi_device *idev);
+void usbi_free_device(struct usbi_device *idev);
 void usbi_rescan_devices(void);
 struct usbi_device *usbi_find_device_by_id(libusb_device_id_t devid);
+
+/* macro for backend I/O pattern */
+#define	PATTERN_ASYNC	1
+#define	PATTERN_SYNC	2
 
 #endif /* _USBI_H_ */
 

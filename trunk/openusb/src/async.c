@@ -74,6 +74,9 @@ void usbi_free_io(struct usbi_io *io)
   if (io->type == USBI_IO_CONTROL)
     free(io->ctrl.setup);
 
+  if ((io->type == USBI_IO_ISOCHRONOUS) && (io->isoc.results != NULL))
+    free(io->isoc.results);
+
   pthread_mutex_unlock(&io->lock);
 
   /* Delete the condition variable and wakeup any threads waiting */
@@ -118,8 +121,13 @@ void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
     break;
   case USBI_IO_ISOCHRONOUS:
     /* FIXME: Implement */
+    /* need to free results if not NULL; if NULL, not deal with in callback */
+    io->isoc.callback(io->isoc.request, io->isoc.arg, io->isoc.num_packets,
+	io->isoc.results);
     break;
   }
+
+  usbi_free_io(io);
 }
 
 /*
@@ -131,7 +139,7 @@ int libusb_io_cancel(libusb_dev_handle_t dev, unsigned char endpoint)
   return LIBUSB_NOT_SUPPORTED;
 }
 
-int libusb_ctrl_submit(struct libusb_ctrl_request *ctrl,
+int usbi_async_ctrl_submit(struct libusb_ctrl_request *ctrl,
 	libusb_ctrl_callback_t callback, void *arg)
 {
   struct usbi_dev_handle *dev;
@@ -174,10 +182,10 @@ int libusb_ctrl_submit(struct libusb_ctrl_request *ctrl,
     return ret;
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
-int libusb_intr_submit(struct libusb_intr_request *intr,
+int usbi_async_intr_submit(struct libusb_intr_request *intr,
 	libusb_intr_callback_t callback, void *arg)
 {
   struct usbi_dev_handle *dev;
@@ -205,10 +213,10 @@ int libusb_intr_submit(struct libusb_intr_request *intr,
     return ret;
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
-int libusb_bulk_submit(struct libusb_bulk_request *bulk,
+int usbi_async_bulk_submit(struct libusb_bulk_request *bulk,
 	libusb_bulk_callback_t callback, void *arg)
 {
   struct usbi_dev_handle *dev;
@@ -236,6 +244,33 @@ int libusb_bulk_submit(struct libusb_bulk_request *bulk,
     return ret;
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
+int usbi_async_isoc_submit(struct libusb_isoc_request *iso,
+	libusb_isoc_callback_t callback, void *arg)
+{
+  struct usbi_dev_handle *dev;
+  struct usbi_io *io;
+  int ret;
+
+  dev = usbi_find_dev_handle(iso->dev);
+  if (!dev)
+    return LIBUSB_UNKNOWN_DEVICE;
+
+  io = usbi_alloc_io(iso->dev, USBI_IO_ISOCHRONOUS, iso->endpoint, 0);
+  if (!io)
+    return LIBUSB_NO_RESOURCES;
+
+  io->isoc.request = iso;
+  io->isoc.callback = callback;
+  io->isoc.arg = arg;
+
+  ret = dev->idev->ops->submit_isoc(dev, io);
+  if (ret < 0) {
+    usbi_free_io(io);
+    return ret;
+  }
+
+  return LIBUSB_SUCCESS;
+}
