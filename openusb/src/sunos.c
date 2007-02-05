@@ -677,7 +677,7 @@ usb_set_ep_iface_alts(struct usbi_dev_handle *hdev,
 	if_desc = &as->desc;
 
 	for (i = 0; i < if_desc->bNumEndpoints; i++) {
-		ep_desc = (struct usb_endpoint_descr *)&as->endpoints[i];
+		ep_desc = (struct usb_endpoint_desc *)&as->endpoints[i];
 		hdev->ep_interface[usb_ep_index(
 		    ep_desc->bEndpointAddress)] = interface;
 	}
