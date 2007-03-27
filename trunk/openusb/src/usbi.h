@@ -24,6 +24,7 @@
 #include "sunos.h"
 #endif
 
+
 struct usbi_event_callback {
   libusb_event_callback_t func;
   void *arg;
@@ -188,6 +189,7 @@ struct usbi_io {
   enum usbi_io_type type;
   unsigned int endpoint;
   int inprogress;
+  unsigned int tag;
 
   unsigned int timeout;
   struct timeval tvo;
@@ -245,11 +247,11 @@ struct usbi_io {
 struct usbi_device_ops {
   int (*open)(struct usbi_dev_handle *dev);
   int (*close)(struct usbi_dev_handle *dev);
-  int (*set_configuration)(struct usbi_device *idev, int cfg);
-  int (*get_configuration)(struct usbi_device *idev, int *cfg);
+  int (*set_configuration)(struct usbi_dev_handle *hdev, int cfg);
+  int (*get_configuration)(struct usbi_dev_handle *hdev, int *cfg);
   int (*claim_interface)(struct usbi_dev_handle *dev, int interface);
   int (*release_interface)(struct usbi_dev_handle *dev, int interface);
-  int (*set_altinterface)(struct usbi_dev_handle *dev, int alt);
+  int (*set_altinterface)(struct usbi_dev_handle *hdev, int alt);
   int (*get_altinterface)(struct usbi_device *idev, int *alt);
   int (*reset)(struct usbi_dev_handle *dev);
   int (*get_driver_np)(struct usbi_dev_handle *dev, int interface,
@@ -284,6 +286,7 @@ void _usbi_debug(int level, const char *func, int line, char *fmt, ...);
 void usbi_callback(libusb_device_id_t devid, enum libusb_event_type type);
 int usbi_timeval_compare(struct timeval *tva, struct timeval *tvb);
 struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev);
+void _usbi_debug(int level, const char *func, int line, char *fmt, ...);
 
 #define usbi_debug(level, fmt...) _usbi_debug(level, __FUNCTION__, __LINE__, fmt)
 
