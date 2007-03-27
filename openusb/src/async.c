@@ -130,14 +130,6 @@ void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
   usbi_free_io(io);
 }
 
-/*
- * API implementation
- */
-int libusb_io_cancel(libusb_dev_handle_t dev, unsigned char endpoint)
-{
-  /* FIXME: Implement */
-  return LIBUSB_NOT_SUPPORTED;
-}
 
 int usbi_async_ctrl_submit(struct libusb_ctrl_request *ctrl,
 	libusb_ctrl_callback_t callback, void *arg)
@@ -175,6 +167,8 @@ int usbi_async_ctrl_submit(struct libusb_ctrl_request *ctrl,
   io->ctrl.setup = setup;
   io->ctrl.buf = ctrl->buf;
   io->ctrl.buflen = ctrl->buflen;
+  
+  io->tag = ctrl->tag;
 
   ret = dev->idev->ops->submit_ctrl(dev, io);
   if (ret < 0) {
@@ -206,6 +200,8 @@ int usbi_async_intr_submit(struct libusb_intr_request *intr,
 
   io->intr.buf = intr->buf;
   io->intr.buflen = intr->buflen;
+  
+  io->tag = intr->tag;
 
   ret = dev->idev->ops->submit_intr(dev, io);
   if (ret < 0) {
@@ -237,6 +233,8 @@ int usbi_async_bulk_submit(struct libusb_bulk_request *bulk,
 
   io->bulk.buf = bulk->buf;
   io->bulk.buflen = bulk->buflen;
+
+  io->tag = bulk->tag;
 
   ret = dev->idev->ops->submit_bulk(dev, io);
   if (ret < 0) {
@@ -274,3 +272,4 @@ int usbi_async_isoc_submit(struct libusb_isoc_request *iso,
 
   return LIBUSB_SUCCESS;
 }
+
