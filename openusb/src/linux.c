@@ -16,6 +16,8 @@
 #include <sys/time.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <stdarg.h>
+#include <sysfs/libsysfs.h>
 
 #include "usbi.h"
 
@@ -27,10 +29,34 @@ static struct list_head usbi_ios = { .prev = &usbi_ios, .next = &usbi_ios };
 
 static char device_dir[PATH_MAX + 1] = "";
 
-/*
- * FIXME: We should try to translate errno error values into the standard
- * libusb errors instead of just returning LIBUSB_FAILURE
- */
+
+static int translate_errno(int errnum)
+{
+  switch(errnum)
+  {
+    default:
+      return (LIBUSB_FAILURE);
+
+    case EPERM:
+      return (LIBUSB_INVALID_PERM);
+
+    case EINVAL: 
+      return (LIBUSB_BADARG);
+
+    case ENOMEM:
+      return (LIBUSB_NO_RESOURCES);
+
+    case EACCES:
+      return (LIBUSB_NOACCESS);
+
+    case EBUSY:
+      return (LIBUSB_BUSY);
+
+    case EPIPE:
+      return (LIBUSB_IO_STALL);
+  }
+} 
+
 
 static int device_open(struct usbi_device *idev)
 {
@@ -41,7 +67,7 @@ static int device_open(struct usbi_device *idev)
     fd = open(idev->filename, O_RDONLY);
     if (fd < 0) {
       usbi_debug(1, "failed to open %s: %s", idev->filename, strerror(errno));
-      return LIBUSB_FAILURE;
+      return translate_errno(errno);
     }
   }
   
@@ -53,12 +79,16 @@ static int linux_open(struct usbi_dev_handle *hdev)
   struct usbi_device *idev = hdev->idev;
 
   hdev->fd = device_open(idev);
+  if (hdev->fd == LIBUSB_FAILURE)
+    return LIBUSB_FAILURE;
 
   list_init(&hdev->ios);
 
-  /* FIXME: We need to query the current config here and set cur_config */
+  /* there's no need to get the current configuration here and set it, that's
+   * already handled by the kernel driver.
+   */
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_close(struct usbi_dev_handle *hdev)
@@ -73,29 +103,27 @@ static int linux_close(struct usbi_dev_handle *hdev)
   return 0;
 }
 
-static int linux_set_configuration(struct usbi_device *idev, int cfg)
+static int linux_set_configuration(struct usbi_dev_handle *hdev, int cfg)
 {
-  /* FIXME: Open device and change configuration */
-#if 0
-  struct usbi_dev_handle *hdev;
-  int ret, _cfg = cfg;
+  int ret;
 
-  ret = ioctl(hdev->fd, IOCTL_USB_SETCONFIG, &_cfg);
+  ret = ioctl(hdev->fd, IOCTL_USB_SETCONFIG, &cfg);
   if (ret < 0) {
     usbi_debug(1, "could not set config %u: %s", cfg, strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   hdev->idev->cur_config = cfg;
-#endif
 
-  return LIBUSB_NOT_SUPPORTED;
+  return LIBUSB_SUCCESS;
 }
 
-static int linux_get_configuration(struct usbi_device *idev, int *cfg)
+static int linux_get_configuration(struct usbi_dev_handle *hdev, int *cfg)
 {
-  /* FIXME: Requery the kernel to make sure this is current information */
-  *cfg = idev->cur_config;
+  /* There's no IOCTL for querying the current confiruation, so let's just this
+   * info from what we have cached.
+   */ 
+  *cfg = hdev->idev->cur_config;
 
   return 0;
 }
@@ -112,7 +140,9 @@ static int linux_claim_interface(struct usbi_dev_handle *hdev, int interface)
 
   hdev->interface = interface;
 
-  /* FIXME: We need to query the current alternate setting and set altsetting */
+  /* There's no usbfs IOCTL for querying the current alternate setting, we'll
+   * leave it up to the user to set later.
+   */
 
   return 0;
 }
@@ -124,7 +154,7 @@ static int linux_release_interface(struct usbi_dev_handle *hdev, int interface)
   ret = ioctl(hdev->fd, IOCTL_USB_RELEASEINTF, &interface);
   if (ret < 0) {
     usbi_debug(1, "could not release interface %d: %s", interface, strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   hdev->interface = -1;
@@ -148,10 +178,7 @@ static int linux_set_altinterface(struct usbi_dev_handle *hdev, int alt)
     /* FIXME: Add device number of filename to debug message? */
     usbi_debug(1, "could not set alternate interface %d/%d, errno = %d", hdev->interface, alt, errno);
 
-    if (errno == EPIPE)
-      return LIBUSB_IO_STALL;
-
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   hdev->altsetting = alt;
@@ -171,10 +198,10 @@ static int wakeup_event_thread(void)
 
   if (write(event_pipe[1], buf, 1) < 1) {
     usbi_debug(1, "unable to write to event pipe: %s", strerror(errno));
-    return -1;
+    return translate_errno(errno);
   }
-
-  return 0;
+  
+  return LIBUSB_SUCCESS;
 }
 
 static int urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
@@ -210,9 +237,7 @@ static int urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
     list_del(&io->list);
     pthread_mutex_unlock(&usbi_ios_lock);
 
-    /* FIXME: Convert error codes? */
-printf("URB submit failed (errno = %d)\n", errno);
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   /* Always do this to avoid race conditions */
@@ -284,21 +309,22 @@ static int io_complete(struct usbi_dev_handle *hdev)
   ret = ioctl(hdev->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb);
   if (ret < 0) {
     usbi_debug(1, "error reaping URB: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   io = urb->usercontext;
   list_del(&io->list);		/* lock obtained by caller */
 
-  /* FIXME: Translate the status code */
-
   if (io->type == USBI_IO_CONTROL && io->ctrl.setup)
     memcpy(io->ctrl.buf, io->urb.buffer + USBI_CONTROL_SETUP_LEN, io->ctrl.buflen);
 
-  /* FIXME: Should this be done without a lock held so the completion handler can callback into this code? */
+  /* urb->status == -2, indicates that the URB was discarded, aka canceled */
+  if (urb->status == -2)
+    urb->status = LIBUSB_IO_CANCELED;
+  
   usbi_io_complete(io, urb->status, urb->actual_length);
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
@@ -315,8 +341,7 @@ static int io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
       ret = ioctl(hdev->fd, IOCTL_USB_DISCARDURB, &io->urb);
       if (ret < 0) {
         usbi_debug(1, "error cancelling URB: %s", strerror(errno));
-        /* FIXME: Better error handling */
-        return LIBUSB_FAILURE;
+        return translate_errno(errno);
       }
 
       usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
@@ -327,58 +352,79 @@ static int io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 
   memcpy(&hdev->tvo, &tvo, sizeof(hdev->tvo));
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_io_cancel(struct usbi_io *io)
 {
   int ret;
 
+  /* Prevent anyone else from accessing the io */
+  pthread_mutex_lock(&io->lock);
+  
+  /* Discard/Cancel the URB */
   ret = ioctl(io->dev->fd, IOCTL_USB_DISCARDURB, &io->urb);
   if (ret < 0) {
     usbi_debug(1, "error cancelling URB: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
+
+  /* Unlock... */
+  pthread_mutex_unlock(&io->lock);
 
   /* Always do this to avoid race conditions */
   wakeup_event_thread();
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static void *poll_events(void *unused)
 {
   char filename[PATH_MAX + 1];
-  int fd;
-
-  snprintf(filename, sizeof(filename), "%s/devices", device_dir);
-  fd = open(filename, O_RDONLY);
-  if (fd < 0)
-    usbi_debug(0, "unable to open %s to check for topology changes", filename);
-
+  char sysfsmnt[PATH_MAX + 1]; 
+  int  fd = -1;
+  int  usingSysfs = 0; 
+  
+  if (sysfs_get_mnt_path(sysfsmnt,PATH_MAX+1) == 0)
+  {
+    usingSysfs = 1;
+  }
+  else
+  {
+    snprintf(filename, sizeof(filename), "%s/devices", device_dir);
+    fd = open(filename, O_RDONLY);
+    if (fd < 0)
+      usbi_debug(0, "unable to open %s to check for topology changes", filename);
+  }
+  
   while (1) {
     struct usbi_dev_handle *dev, *tdev;
-    struct timeval tvc, tvo;
+    struct timeval tvc, tvo;  
+    struct timeval tvLastRescan;  
     fd_set readfds, writefds;
-    int ret, maxfd;
+    int ret, maxfd, doRescan = 1;
 
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
 
     /* Always check the event_pipe and the devices file */
     FD_SET(event_pipe[0], &readfds);
-    if (fd >= 0)
+    if (fd >= 0) {
       FD_SET(fd, &readfds);
+		}
 
-    maxfd = fd > event_pipe[0] ? fd : event_pipe[0];
-
+	  maxfd = fd > event_pipe[0] ? fd : event_pipe[0];
+    
     gettimeofday(&tvc, NULL);
 
     memset(&tvo, 0, sizeof(tvo));
 
+    /* determine if we have any file descriptors to check for writes and find
+     * the next soonest timeout so select() knows how long to wait */  
     pthread_mutex_lock(&usbi_ios_lock);
     list_for_each_entry(dev, &usbi_ios, io_list) {
       FD_SET(dev->fd, &writefds);
+
       if (dev->fd > maxfd)
         maxfd = dev->fd;
 
@@ -389,6 +435,7 @@ static void *poll_events(void *unused)
     }
     pthread_mutex_unlock(&usbi_ios_lock);
 
+    /* calculate the timeout for select() based on what we found above */
     if (!tvo.tv_sec) {
       /* Default to an hour from now */
       tvo.tv_sec = tvc.tv_sec + (60 * 60);
@@ -405,9 +452,10 @@ static void *poll_events(void *unused)
     } else
       tvo.tv_usec -= tvc.tv_usec;
 
-printf("select(%d, { tv_sec = %d, tv_usec = %d })\n", maxfd + 1, (int)tvo.tv_sec, (int)tvo.tv_usec);
+    /* determine if we have file descriptors reading for reading/writing */
+    /*printf("select(%d, { tv_sec = %d, tv_usec = %d })\n", maxfd + 1, (int)tvo.tv_sec, (int)tvo.tv_usec);*/
     ret = select(maxfd + 1, &readfds, &writefds, NULL, &tvo);
-printf("select() = %d\n", ret);
+    /*printf("select() = %d\n", ret);*/
     if (ret < 0) {
       usbi_debug(1, "select() call failed: %s", strerror(errno));
       continue;
@@ -421,10 +469,24 @@ printf("select() = %d\n", ret);
       read(event_pipe[0], buf, sizeof(buf));
     }
 
-    /* FIXME: We need to handle new/removed busses as well */
-    if (fd >= 0 && FD_ISSET(fd, &readfds))
-      usbi_rescan_devices();
+    /* We'll only do a rescan if it's been at least 500ms since our
+     * last rescan */
+    if ( tvc.tv_sec - tvLastRescan.tv_sec > 1) {
+      doRescan = 1;
+    } else if (tvc.tv_usec - tvLastRescan.tv_usec > 500000) {
+      doRescan = 1;
+    } else {
+      doRescan = 0;
+    }
+    if (doRescan) {
+      if ( (fd >= 0 && FD_ISSET(fd, &readfds)) || usingSysfs) {
+        /* FIXME: We need to handle new/removed busses as well */
+        usbi_rescan_devices();
+        gettimeofday(&tvLastRescan, NULL);
+      }
+    }
 
+    /* now we'll process any pending io requests & timeouts */
     pthread_mutex_lock(&usbi_ios_lock);
     list_for_each_entry_safe(dev, tdev, &usbi_ios, io_list) {
       if (FD_ISSET(dev->fd, &writefds))
@@ -437,6 +499,7 @@ printf("select() = %d\n", ret);
         list_del(&dev->io_list);
     }
     pthread_mutex_unlock(&usbi_ios_lock);
+  
   }
 
   return NULL;
@@ -452,7 +515,7 @@ static int linux_find_busses(struct list_head *busses)
   dir = opendir(device_dir);
   if (!dir) {
     usbi_debug(1, "could not opendir(%s): %s", device_dir, strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   while ((entry = readdir(dir)) != NULL) {
@@ -487,7 +550,7 @@ static int linux_find_busses(struct list_head *busses)
 
   closedir(dir);
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int device_is_new(struct usbi_device *idev, unsigned short devnum)
@@ -501,7 +564,7 @@ static int device_is_new(struct usbi_device *idev, unsigned short devnum)
 
   if (st.st_mtime == idev->mtime)
     /* mtime matches, not a new device */
-    return 0;
+    return LIBUSB_SUCCESS;
 
   /*
    * FIXME: mtime does not match. Maybe the USB drivers have been unloaded and
@@ -509,9 +572,10 @@ static int device_is_new(struct usbi_device *idev, unsigned short devnum)
    * case and detach all devices on the bus. We would then detect all of
    * the devices as new.
    */
-
+  /*
   usbi_debug(1, "device %s previously existed, but mtime has changed",
 	filename);
+  */
 
   return 0;
 }
@@ -570,8 +634,6 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
   }
 
   idev->desc.device_raw.len = USBI_DEVICE_DESC_SIZE;
-/*  usbi_parse_device_descriptor(idev, idev->desc.device_raw.data, idev->desc.device_raw.len);
-*/
   libusb_parse_data("..wbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
 
   usbi_debug(2, "found device %03d on %s", idev->devnum, ibus->filename);
@@ -666,162 +728,305 @@ err:
   close(fd);
   free(idev);
 
-  return ret;
+  return translate_errno(errno);
 }
 
 static int linux_refresh_devices(struct usbi_bus *ibus)
 {
-  char devfilename[PATH_MAX + 1];
-  struct usbi_device *idev, *tidev;
-  FILE *f;
+	char devfilename[PATH_MAX + 1];
+	struct usbi_device *idev, *tidev;
+	int busnum = 0, pdevnum = 0, pport = 0, devnum = 0, max_children = 0;
+	char sysfsdir[PATH_MAX + 1];
+	FILE *f;
+  
+  /* we'll use libsysfs as our primary way of getting the device topology */  
+  if (sysfs_get_mnt_path(sysfsdir,PATH_MAX+1) == 0)
+  {
+    struct sysfs_class *class;
+    struct sysfs_class_device *classdev;
+    struct sysfs_device *dev;
+    struct sysfs_device *parentdev;
+    struct sysfs_attribute *devattr;
+    struct dlist *devlist;
+    char *p, *b, *d, *t;
+  
+    pthread_mutex_lock(&ibus->lock);
 
-  /*
-   * This used to scan the bus directory for files named like devices.
-   * Unfortunately, this has a couple of problems:
-   * 1) Devices are added out of order. We need the root device first atleast.
-   * 2) All kernels (up through 2.6.12 atleast) require write and/or root
-   *    access to get to some important topology information.
-   * So, we parse /proc/bus/usb/devices instead. It will give us the topology
-   * information we're looking for, in the order we need, while being
-   * available to normal users.
-   */
-
-printf("start /proc/bus/usb/devices\n");
-  snprintf(devfilename, sizeof(devfilename), "%s/devices", device_dir);
-  f = fopen(devfilename, "r");
-  if (!f) {
-    usbi_debug(1, "could not open %s: %s", devfilename, strerror(errno));
-    return LIBUSB_FAILURE;
-  }
-
-  pthread_mutex_lock(&ibus->lock);
-
-  /* Reset the found flag for all devices */
-  list_for_each_entry(idev, &ibus->devices, bus_list)
-    idev->found = 0;
-
-  while (!feof(f)) {
-    int busnum = 0, pdevnum = 0, pport = 0, devnum = 0, max_children = 0;
-    char buf[1024], *p, *k, *v;
-
-    if (!fgets(buf, sizeof(buf), f))
-      continue;
-
-    /* Strip off newlines and trailing spaces */
-    for (p = strchr(buf, 0) - 1; p >= buf && isspace(*p); p--)
-      *p = 0;
-
-    /* Skip blank or short lines */
-    if (!buf[0] || strlen(buf) < 4)
-      continue;
-
-    /* We need a character and colon to start the line */
-    if (buf[1] != ':')
-      break;
-
-    switch (buf[0]) {
-    case 'T': /* Topology information for a device. Also starts a new device */
-      /* T:  Bus=02 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  5 Spd=12  MxCh= 0 */
-
-      /* We need the bus number, parent dev number, this dev number */
-
-      /* Tokenize into key and value pairs */
-      p = buf + 2;
-      do {
-        /* Skip over whitespace */
-        while (*p && isspace(*p))
+    /* Reset the found flag for all devices */
+    list_for_each_entry(idev, &ibus->devices, bus_list)
+      idev->found = 0;
+  
+    /* if we were able to get the mount path, it's safe to say we support
+     * sysfs and we'll use that to get our info
+     */
+    class = sysfs_open_class("usb_device");
+    if (!class) {
+      usbi_debug(1, "could not open sysfs usb_device class: %s\n",strerror(errno));
+      return translate_errno(errno);
+    }
+  
+    devlist = sysfs_get_class_devices(class);
+    if (!devlist) {
+      usbi_debug(1, "could not get sysfs/bus/usb devices: %s",strerror(errno));
+      return translate_errno(errno);
+    }
+    
+    /* loop through the list of class devices */
+    dlist_for_each_data(devlist,classdev,struct sysfs_class_device) {
+      
+        /* the class name is usbdevBUS.DEV (where BUS is the bus number and DEV
+         * is the device number, e.g usbdev8.1). We'll parse our number from 
+         * this name.
+        */
+         
+        p = classdev->name;
+        while (!isdigit(*p))
           p++;
-        if (!*p)
-          break;
-
-        /* Parse out the key */
-        k = p;
-        while (*p && (isalnum(*p) || *p == '#'))
+        b = p; /* bus number string starts here, save it as b */
+        while (*p != '.')
           p++;
-        if (!*p)
-          break;
-        *p++ = 0;
+        t = p;   /* bus number string ends here, save it as t */
+        d = ++p; /* device number string starts here, save it as d */ 
+        *t = 0;  /* terminate our bus number string */
+    
+        busnum = atoi(b);
+        devnum = atoi(d);
+    
+        /* now we'll get the sysfs_device for this class device and it's parent */
+        dev = sysfs_get_classdev_device(classdev);
+        if (!dev) {
+          usbi_debug(1, "could not open sysfs device this class device (%s): %s\n",classdev->name,strerror(errno));
+          return translate_errno(errno);
+        }
+    
+        /* we need to get the maximum number of children*/
+        devattr = sysfs_get_device_attr(dev,"maxchild");
+        if (!devattr) {
+          max_children = 0;
+        } else {
+          max_children = atoi(devattr->value);
+        }
+    
+        parentdev = sysfs_get_device_parent(dev);
+        if (!parentdev) {
+          /* we may not have a parent, in which case our parent number is 0 */
+          pdevnum = 0;
+        } else {
+          devattr = sysfs_get_device_attr(parentdev,"devnum");
+          if (!devattr) {
+            /* there's no dev number for the parent, so parent num = 0 */
+            pdevnum = 0;
+          } else {
+            pdevnum = atoi(devattr->value);
+          } 
+        }
+    
+        /* now we should have all the information we need to procede */
+    
+        /* Is this a device on the bus we're looking for? */
+        if (busnum != ibus->busnum)
+          continue;
 
-        /* Skip over the = */
-        while (*p && (isspace(*p) || *p == '='))
-          p++;
-        if (!*p)
-          break;
-
-        /* Parse out the value */
-        v = p;
-        while (*p && (isdigit(*p) || *p == '.'))
-          p++;
-        if (*p)
-          *p++ = 0;
-
-        if (strcasecmp(k, "Bus") == 0)
-          busnum = atoi(v);
-        else if (strcasecmp(k, "Prnt") == 0)
-          pdevnum = atoi(v);
-        else if (strcasecmp(k, "Port") == 0)
-          pport = atoi(v);
-        else if (strcasecmp(k, "Dev#") == 0)
-          devnum = atoi(v);
-        else if (strcasecmp(k, "MxCh") == 0)
-          max_children = atoi(v);
-      } while (*p);
-
-      /* Is this a device on the bus we're looking for? */
-      if (busnum != ibus->busnum)
-        break;
-
-      /* Validate the data we parsed out */
-      if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
-	  max_children >= USB_MAX_DEVICES_PER_BUS ||
-          pdevnum >= USB_MAX_DEVICES_PER_BUS ||
-	  pport >= USB_MAX_DEVICES_PER_BUS) {
-        usbi_debug(1, "invalid device number, max children or parent device");
-        break;
-      }
-
-      /* Validate the parent device */
-      if (pdevnum && (!ibus->dev_by_num[pdevnum] ||
-          pport >= ibus->dev_by_num[pdevnum]->num_ports)) {
-        usbi_debug(1, "no parent device or invalid child port number");
-        break;
-      }
-
-      if (!pdevnum && ibus->root && ibus->root->found) {
-        usbi_debug(1, "cannot have two root devices");
-        break;
-      }
-
-      /* Only add this device if it's new */
-
-      /* If we don't have a device by this number yet, it must be new */
-      idev = ibus->dev_by_num[devnum];
-      if (idev && device_is_new(idev, devnum))
-        idev = NULL;
-
-      if (!idev) {
-        int ret;
-
-        ret = create_new_device(&idev, ibus, devnum, max_children);
-        if (ret) {
-          usbi_debug(1, "ignoring new device because of errors");
-          break;
+        /* Validate the data we parsed out */
+        if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
+            max_children >= USB_MAX_DEVICES_PER_BUS ||
+            pdevnum >= USB_MAX_DEVICES_PER_BUS) {
+          usbi_debug(1, "invalid device number, max children or parent device");
+          continue;
         }
 
-        usbi_add_device(ibus, idev);
+        /* Validate the parent device */
+        if (pdevnum && (!ibus->dev_by_num[pdevnum])) {
+          usbi_debug(1, "no parent device or invalid child port number");
+          continue;
+        }
 
-        /* Setup parent/child relationship */
-        if (pdevnum) {
-          ibus->dev_by_num[pdevnum]->children[pport] = idev;
-          idev->parent = ibus->dev_by_num[pdevnum];
-        } else
-          ibus->root = idev;
+        /* make sure we don't have two root devices */
+        if (!pdevnum && ibus->root && ibus->root->found) {
+           usbi_debug(1, "cannot have two root devices");
+           continue;
+        }
+
+        /* Only add this device if it's new */
+
+        /* If we don't have a device by this number yet, it must be new */
+        idev = ibus->dev_by_num[devnum];
+        if (idev && device_is_new(idev, devnum))
+          idev = NULL;
+
+        if (!idev) {
+           int ret;
+
+           ret = create_new_device(&idev, ibus, devnum, max_children);
+           if (ret) {
+             usbi_debug(1, "ignoring new device because of errors");
+             continue;
+           }
+  
+           usbi_add_device(ibus, idev);
+
+           /* Setup parent/child relationship */
+           if (pdevnum) {
+             ibus->dev_by_num[pdevnum]->children[pport] = idev;
+             idev->parent = ibus->dev_by_num[pdevnum];
+           } else {
+             ibus->root = idev;
+           }
+        }
+        
+        idev->found = 1;
       }
+      
+      /* close our sysfs class - this also destroys our dlist*/
+      sysfs_close_class(class);
+  
+  } else {
+   /*
+		* This used to scan the bus directory for files named like devices.
+    * Unfortunately, this has a couple of problems:
+		* 1) Devices are added out of order. We need the root device first atleast.
+		* 2) All kernels (up through 2.6.12 atleast) require write and/or root
+		*    access to get to some important topology information.
+		* So, we parse /proc/bus/usb/devices instead. It will give us the topology
+		* information we're looking for, in the order we need, while being
+		* available to normal users.
+	  */
+    printf("start /proc/bus/usb/devices\n");
+    snprintf(devfilename, sizeof(devfilename), "%s/devices", device_dir);
+    f = fopen(devfilename, "r");
+    if (!f) {
+      usbi_debug(1, "could not open %s: %s", devfilename, strerror(errno));
+      return translate_errno(errno);
+    }   
+      
+		pthread_mutex_lock(&ibus->lock);
 
-      idev->found = 1;
-      break;
+		/* Reset the found flag for all devices */
+		list_for_each_entry(idev, &ibus->devices, bus_list)
+				idev->found = 0;
 
-    /* Ignore the rest */
+		while (!feof(f)) {
+//    int busnum = 0, pdevnum = 0, pport = 0, devnum = 0, max_children = 0;
+			char buf[1024], *p, *k, *v;
+
+			if (!fgets(buf, sizeof(buf), f))
+				continue;
+
+			/* Strip off newlines and trailing spaces */
+			for (p = strchr(buf, 0) - 1; p >= buf && isspace(*p); p--)
+				*p = 0;
+
+			/* Skip blank or short lines */
+			if (!buf[0] || strlen(buf) < 4)
+				continue;
+
+			/* We need a character and colon to start the line */
+			if (buf[1] != ':')
+				break;
+
+			switch (buf[0]) {
+				case 'T': /* Topology information for a device. Also starts a new device */
+					/* T:  Bus=02 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  5 Spd=12  MxCh= 0 */
+
+					/* We need the bus number, parent dev number, this dev number */
+
+					/* Tokenize into key and value pairs */
+					p = buf + 2;
+					do {
+						/* Skip over whitespace */
+						while (*p && isspace(*p))
+							p++;
+						if (!*p)
+							break;
+
+						/* Parse out the key */
+						k = p;
+						while (*p && (isalnum(*p) || *p == '#'))
+							p++;
+						if (!*p)
+							break;
+						*p++ = 0;
+
+						/* Skip over the = */
+						while (*p && (isspace(*p) || *p == '='))
+							p++;
+						if (!*p)
+							break;
+
+						/* Parse out the value */
+						v = p;
+						while (*p && (isdigit(*p) || *p == '.'))
+							p++;
+						if (*p)
+							*p++ = 0;
+
+						if (strcasecmp(k, "Bus") == 0)
+							busnum = atoi(v);
+						else if (strcasecmp(k, "Prnt") == 0)
+							pdevnum = atoi(v);
+						else if (strcasecmp(k, "Port") == 0)
+							pport = atoi(v);
+						else if (strcasecmp(k, "Dev#") == 0)
+							devnum = atoi(v);
+						else if (strcasecmp(k, "MxCh") == 0)
+							max_children = atoi(v);
+					} while (*p);
+
+					/* Is this a device on the bus we're looking for? */
+					if (busnum != ibus->busnum)
+						break;
+
+					/* Validate the data we parsed out */
+					if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
+									 max_children >= USB_MAX_DEVICES_PER_BUS ||
+									 pdevnum >= USB_MAX_DEVICES_PER_BUS ||
+									 pport >= USB_MAX_DEVICES_PER_BUS) {
+						usbi_debug(1, "invalid device number, max children or parent device");
+						break;
+					}
+
+					/* Validate the parent device */
+					if (pdevnum && (!ibus->dev_by_num[pdevnum] ||
+							pport >= ibus->dev_by_num[pdevnum]->num_ports)) {
+						usbi_debug(1, "no parent device or invalid child port number");
+						break;
+					}
+
+					if (!pdevnum && ibus->root && ibus->root->found) {
+						usbi_debug(1, "cannot have two root devices");
+						break;
+					}
+
+					/* Only add this device if it's new */
+
+					/* If we don't have a device by this number yet, it must be new */
+					idev = ibus->dev_by_num[devnum];
+					if (idev && device_is_new(idev, devnum))
+						idev = NULL;
+
+					if (!idev) {
+						int ret;
+
+						ret = create_new_device(&idev, ibus, devnum, max_children);
+						if (ret) {
+							usbi_debug(1, "ignoring new device because of errors");
+							break;
+						}
+
+						usbi_add_device(ibus, idev);
+
+						/* Setup parent/child relationship */
+						if (pdevnum) {
+							ibus->dev_by_num[pdevnum]->children[pport] = idev;
+							idev->parent = ibus->dev_by_num[pdevnum];
+						} else
+							ibus->root = idev;
+						}
+
+						idev->found = 1;      
+						break;
+
+		/* Ignore the rest */
 #if 0
     case 'B': /* Bandwidth related information */
     case 'D': /* Device related information */
@@ -831,23 +1036,24 @@ printf("start /proc/bus/usb/devices\n");
     case 'I': /* Interface information */
     case 'E': /* Endpoint information */
 #endif
-    default:
-      break;
+				default:
+					break;
+			}
+		printf("done /proc/bus/usb/devices\n");
     }
   }
-printf("done /proc/bus/usb/devices\n");
+	
+	list_for_each_entry_safe(idev, tidev, &ibus->devices, bus_list) {
+		if (!idev->found) {
+			/* Device disappeared, remove it */
+			usbi_debug(2, "device %d removed", idev->devnum);
+			usbi_remove_device(idev);
+		}
+	}
 
-  list_for_each_entry_safe(idev, tidev, &ibus->devices, bus_list) {
-    if (!idev->found) {
-      /* Device disappeared, remove it */
-      usbi_debug(2, "device %d removed", idev->devnum);
-      usbi_remove_device(idev);
-    }
-  }
+	pthread_mutex_unlock(&ibus->lock);
 
-  pthread_mutex_unlock(&ibus->lock);
-
-  return 0;
+	return LIBUSB_SUCCESS;
 }
 
 static int check_usb_path(const char *dirname)
@@ -877,8 +1083,9 @@ static int check_usb_path(const char *dirname)
 
 static int linux_init(void)
 {
-  int ret;
-
+  int  ret;
+  char sysfsdir[PATH_MAX+1];
+  
   /* Find the path to the directory tree with the device nodes */
   if (getenv("USB_PATH")) {
     if (check_usb_path(getenv("USB_PATH"))) {
@@ -889,13 +1096,17 @@ static int linux_init(void)
   }
 
   if (!device_dir[0]) {
-    if (check_usb_path("/proc/bus/usb")) {
+    if (sysfs_get_mnt_path(sysfsdir,PATH_MAX+1) == 0) {
+      /* we have sysfs support so our device dir = /dev/bus/usb (from udev) */
+      if (check_usb_path("/dev/bus/usb")) {
+        strncpy(device_dir, "/dev/bus/usb", sizeof(device_dir) - 1);
+        device_dir[sizeof(device_dir) - 1] = 0;
+      } else
+        device_dir[0] = 0;
+    } else if (check_usb_path("/proc/bus/usb")) {
       strncpy(device_dir, "/proc/bus/usb", sizeof(device_dir) - 1);
       device_dir[sizeof(device_dir) - 1] = 0;
-    } else if (check_usb_path("/dev/bus/usb")) {
-      strncpy(device_dir, "/dev/bus/usb", sizeof(device_dir) - 1);
-      device_dir[sizeof(device_dir) - 1] = 0;
-    } else
+    } else 
       device_dir[0] = 0;	/* No path, no USB support */
   }
 
@@ -913,7 +1124,7 @@ static int linux_init(void)
 
   /* FIXME: Wait until first scan of devices is finished */
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int libusb_clear_halt(struct usbi_dev_handle *hdev, unsigned char ep)
@@ -923,10 +1134,10 @@ int libusb_clear_halt(struct usbi_dev_handle *hdev, unsigned char ep)
   ret = ioctl(hdev->fd, IOCTL_USB_CLEAR_HALT, &ep);
   if (ret) {
     usbi_debug(1, "could not clear halt ep %d: %s", ep, strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_reset(struct usbi_dev_handle *hdev)
@@ -936,10 +1147,10 @@ static int linux_reset(struct usbi_dev_handle *hdev)
   ret = ioctl(hdev->fd, IOCTL_USB_RESET, NULL);
   if (ret) {
     usbi_debug(1, "could not reset: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_get_driver(struct usbi_dev_handle *hdev, int interface,
@@ -952,13 +1163,13 @@ static int linux_get_driver(struct usbi_dev_handle *hdev, int interface,
   ret = ioctl(hdev->fd, IOCTL_USB_GETDRIVER, &getdrv);
   if (ret) {
     usbi_debug(1, "could not get bound driver: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
   strncpy(name, getdrv.driver, namelen - 1);
   name[namelen - 1] = 0;
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
@@ -974,10 +1185,10 @@ static int linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
   ret = ioctl(hdev->fd, IOCTL_USB_IOCTL, &command);
   if (ret) {
     usbi_debug(1, "could not attach kernel driver to interface %d: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 static int linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
@@ -993,38 +1204,38 @@ static int linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
   ret = ioctl(hdev->fd, IOCTL_USB_IOCTL, &command);
   if (ret) {
     usbi_debug(1, "could not detach kernel driver to interface %d: %s", strerror(errno));
-    return LIBUSB_FAILURE;
+    return translate_errno(errno);
   }
 
-  return 0;
+  return LIBUSB_SUCCESS;
 }
+
 
 int backend_version = 1;
 int backend_io_pattern = PATTERN_ASYNC;
 
 struct usbi_backend_ops backend_ops = {
-  .init				= linux_init,
-  .find_busses			= linux_find_busses,
-  .refresh_devices		= linux_refresh_devices,
-  .free_device			= NULL,
+  .init       = linux_init,
+  .find_busses      = linux_find_busses,
+  .refresh_devices    = linux_refresh_devices,
+  .free_device      = NULL,
   .dev = {
-    .open			= linux_open,
-    .close			= linux_close,
-    .set_configuration		= linux_set_configuration,
-    .get_configuration		= linux_get_configuration,
-    .claim_interface		= linux_claim_interface,
-    .release_interface		= linux_release_interface,
-    .get_altinterface		= linux_get_altinterface,
-    .set_altinterface		= linux_set_altinterface,
-    .reset			= linux_reset,
-    .get_driver_np		= linux_get_driver,
-    .attach_kernel_driver_np	= linux_attach_kernel_driver,
-    .detach_kernel_driver_np	= linux_detach_kernel_driver,
-    .submit_ctrl		= linux_submit_ctrl,
-    .submit_intr		= linux_submit_intr,
-    .submit_bulk		= linux_submit_bulk,
-    .submit_isoc		= linux_submit_isoc,
-    .io_cancel			= linux_io_cancel,
+    .open     = linux_open,
+    .close      = linux_close,
+    .set_configuration    = linux_set_configuration,
+    .get_configuration    = linux_get_configuration,
+    .claim_interface    = linux_claim_interface,
+    .release_interface    = linux_release_interface,
+    .get_altinterface   = linux_get_altinterface,
+    .set_altinterface   = linux_set_altinterface,
+    .reset      = linux_reset,
+    .get_driver_np    = linux_get_driver,
+    .attach_kernel_driver_np  = linux_attach_kernel_driver,
+    .detach_kernel_driver_np  = linux_detach_kernel_driver,
+    .submit_ctrl    = linux_submit_ctrl,
+    .submit_intr    = linux_submit_intr,
+    .submit_bulk    = linux_submit_bulk,
+    .submit_isoc    = linux_submit_isoc,
+    .io_cancel      = linux_io_cancel,
   },
 };
-
