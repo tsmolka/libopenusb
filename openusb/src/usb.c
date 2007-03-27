@@ -16,24 +16,17 @@
 #include <errno.h>
 
 #include "usbi.h"
+#include "linux.h"
 
 #define USB_DEFAULT_DEBUG_LEVEL		4
 static int usb_debug = USB_DEFAULT_DEBUG_LEVEL;
 static int usb_inited = 0;
+static libusb_debug_callback_t  debug_callback = NULL;
 
 static struct list_head usbi_handles = { .prev = &usbi_handles, .next = &usbi_handles };
 static libusb_dev_handle_t cur_handle = 1;
 
 struct list_head backends = { .prev = &backends, .next = &backends };
-
-void libusb_set_debug(int level)
-{
-  if (usb_debug || level)
-    fprintf(stderr, "libusb: setting debugging level to %d (%s)\n",
-	level, level ? "on" : "off");
-
-  usb_debug = level;
-}
 
 void _usbi_debug(int level, const char *func, int line, char *fmt, ...)
 {
@@ -44,11 +37,31 @@ void _usbi_debug(int level, const char *func, int line, char *fmt, ...)
     return;
 
   va_start(ap, fmt);
-  vsnprintf(str, sizeof(str), fmt, ap);
+  if (debug_callback) {
+    snprintf(str, sizeof(str), "libusb: [%s:%d] %s", func, line, fmt);
+    debug_callback(str,ap);
+  } else {
+    vsnprintf(str, sizeof(str), fmt, ap);
+    fprintf(stderr, "libusb: [%s:%d] %s\n", func, line, str);
+  }
   va_end(ap);
-
-  fprintf(stderr, "libusb: [%s:%d] %s\n", func, line, str);
 }
+
+void libusb_set_debug(int level, int flags, libusb_debug_callback_t callback)
+{
+  if (callback) {
+    debug_callback = callback;
+  }
+
+  usb_debug = level;
+  flags = flags; /* this isn't used yet, so we just prevent a warning here */
+  
+  if (usb_debug || level) {
+      _usbi_debug(1,"setting debuggin level to %d (%s)", level, 
+                  level ? "on" : "off");
+  }
+}
+
 
 struct callback {
   struct list_head list;
@@ -131,7 +144,7 @@ static int load_backend(const char *filepath)
     fprintf(stderr, "no backend ops, skipping\n");
     goto err;
   }
-
+  
   io_pattern = dlsym(handle, "backend_io_pattern");
   if (!io_pattern) {
     fprintf(stderr, "no backend io pattern, skipping\n");
@@ -212,7 +225,7 @@ static int load_backends(const char *dirpath)
       load_backend(filepath);
   }
   closedir(dir);
-
+  
   return 0;
 }
 
@@ -228,8 +241,13 @@ int libusb_init(void)
   usb_inited = 1;
 
   if (getenv("USB_DEBUG") && usb_debug == USB_DEFAULT_DEBUG_LEVEL)
-    libusb_set_debug(atoi(getenv("USB_DEBUG")));
+    libusb_set_debug(atoi(getenv("USB_DEBUG")),0,NULL);
 
+  // Initialize our event callbacks
+  usbi_event_callbacks[USB_ATTACH].func = (libusb_event_callback_t)NULL;
+  usbi_event_callbacks[USB_DETACH].func = (libusb_event_callback_t)NULL;
+
+  // Initialize the callback list and thread
   list_init(&callbacks);
   pthread_mutex_init(&callback_lock, NULL);
   pthread_cond_init(&callback_cond, NULL);
@@ -362,6 +380,30 @@ int libusb_close(libusb_dev_handle_t dev)
   return ret;
 }
 
+
+int libusb_abort(unsigned int tag)
+{
+  struct usbi_dev_handle *hdev;
+  struct usbi_io *io, *tio;
+  int ret = LIBUSB_FAILURE; 
+
+  /* We're looking at all open devices (open devices are ones we have handles
+   * for) and search for io requests with the specified tag. When we find one
+   * we'll cancel it. We don't lock here because we leave it up to the backend
+   * to handle that appropriately.
+   */
+  list_for_each_entry(hdev, &usbi_handles, list) {
+    list_for_each_entry_safe(io, tio, &hdev->ios, list) {
+      if (io->tag == tag) {
+        ret = hdev->idev->ops->io_cancel(io);
+      }
+    }
+  }
+
+  return ret;
+}
+
+
 /*
  * We used to determine endian at build time, but this was causing problems
  * with cross-compiling, so I decided to try this instead. It determines
@@ -401,7 +443,8 @@ uint32_t libusb_le32_to_cpu(uint32_t data)
  */
 struct simple_io {
   pthread_mutex_t lock;
-  pthread_cond_t cond;
+  pthread_cond_t  complete;   /* signaled when the io is complete */
+  int completed;              /* this provides an alternate signal */
 
   int status;
   size_t transferred_bytes;
@@ -410,27 +453,45 @@ struct simple_io {
 static void simple_io_setup(struct simple_io *io)
 {
   pthread_mutex_init(&io->lock, NULL);
-  pthread_cond_init(&io->cond, NULL);
+  pthread_cond_init(&io->complete, NULL);
+  
+  io->completed = 0; 
 }
 
 static int simple_io_wait(struct simple_io *io,
 	size_t *transferred_bytes)
 {
+  int status;
+
+  /* Race Condition: We do not want to wait on io->complete if it's already
+   * been signaled. Use io->completed == 1 as the signal this has happened. 
+   */
   pthread_mutex_lock(&io->lock);
-  pthread_cond_wait(&io->cond, &io->lock);
+  if (!io->completed) {
+    pthread_cond_wait(&io->complete, &io->lock);
+  }
   pthread_mutex_unlock(&io->lock);
 
   *transferred_bytes = io->transferred_bytes;
+  status = io->status; 
 
-  return io->status;
+  return status;
 }
 
 static void simple_io_complete(struct simple_io *io,
 	int status, size_t transferred_bytes)
 {
+  /* Race Condition: We do not want to wait on io->complete if it's already
+   * been signaled. Use io->completed == 1 as the signal this has happened. 
+   */
+  pthread_mutex_lock(&io->lock); 
+  io->completed = 1;
+  pthread_mutex_unlock(&io->lock); 
+  
   io->status = status;
   io->transferred_bytes = transferred_bytes;
-  pthread_cond_signal(&io->cond);
+  pthread_cond_signal(&io->complete);
+  
 }
 
 /*
@@ -849,7 +910,8 @@ static struct errorstr {
   { LIBUSB_IO_BUFFER_UNDERRUN,      "Buffer underrun" },
   { LIBUSB_IO_PID_CHECK_FAILURE,    "PID check failure" },
   { LIBUSB_IO_DATA_TOGGLE_MISMATCH, "Data toggle mismatch" },
-  { LIBUSB_IO_TIMEOUT,              "I/O timeout" }
+  { LIBUSB_IO_TIMEOUT,              "I/O timeout" },
+  { LIBUSB_IO_CANCELED,             "I/O canceled" } 
 };
 
 const char *libusb_strerror(int err)
@@ -863,4 +925,3 @@ const char *libusb_strerror(int err)
 
   return "Unknown error";
 }
-
