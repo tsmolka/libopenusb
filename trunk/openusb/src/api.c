@@ -8,26 +8,26 @@
 
 #include "usbi.h"
 
-int libusb_set_configuration(libusb_device_id_t devid, int cfg)
+int libusb_set_configuration(libusb_dev_handle_t dev, int cfg)
 {
-  struct usbi_device *idev;
+  struct usbi_dev_handle *hdev;
 
-  idev = usbi_find_device_by_id(devid);
-  if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+  hdev = usbi_find_dev_handle(dev);
+  if (!hdev)
+	  return LIBUSB_UNKNOWN_DEVICE;
 
-  return idev->ops->set_configuration(idev, cfg);
+  return hdev->idev->ops->set_configuration(hdev, cfg);
 }
 
-int libusb_get_configuration(libusb_device_id_t devid, int *cfg)
+int libusb_get_configuration(libusb_dev_handle_t dev, int *cfg)
 {
-  struct usbi_device *idev;
+  struct usbi_dev_handle *hdev;
 
-  idev = usbi_find_device_by_id(devid);
-  if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+  hdev = usbi_find_dev_handle(dev);
+  if (!hdev)
+	  return LIBUSB_UNKNOWN_DEVICE;
 
-  return idev->ops->get_configuration(idev, cfg);
+  return hdev->idev->ops->get_configuration(hdev, cfg);
 }
 
 int libusb_claim_interface(libusb_dev_handle_t dev, int interface)
