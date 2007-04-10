@@ -21,6 +21,7 @@
 
 #include "usbi.h"
 
+static pthread_t io_thread;
 static pthread_t event_thread;
 static int event_pipe[2];
 
@@ -192,7 +193,7 @@ static int linux_get_altinterface(struct usbi_device *idev, int *alt)
   return LIBUSB_FAILURE;
 }
 
-static int wakeup_event_thread(void)
+static int wakeup_io_thread(void)
 {
   char buf[1] = { 0x01 };
 
@@ -241,7 +242,7 @@ static int urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
   }
 
   /* Always do this to avoid race conditions */
-  wakeup_event_thread();
+  wakeup_io_thread();
 
   return 0;
 }
@@ -373,48 +374,35 @@ static int linux_io_cancel(struct usbi_io *io)
   pthread_mutex_unlock(&io->lock);
 
   /* Always do this to avoid race conditions */
-  wakeup_event_thread();
+  wakeup_io_thread();
 
   return LIBUSB_SUCCESS;
 }
 
-static void *poll_events(void *unused)
+static void *poll_io(void *unused)
 {
-  char filename[PATH_MAX + 1];
-  char sysfsmnt[PATH_MAX + 1]; 
-  int  fd = -1;
-  int  usingSysfs = 0; 
-  
-  if (sysfs_get_mnt_path(sysfsmnt,PATH_MAX+1) == 0)
-  {
-    usingSysfs = 1;
-  }
-  else
-  {
-    snprintf(filename, sizeof(filename), "%s/devices", device_dir);
-    fd = open(filename, O_RDONLY);
-    if (fd < 0)
-      usbi_debug(0, "unable to open %s to check for topology changes", filename);
-  }
-  
+  /* 
+   * Loop forever checking to see if we have io requests that need to be
+   * processed and process them.
+   */ 
   while (1) {
     struct usbi_dev_handle *dev, *tdev;
     struct timeval tvc, tvo;  
-    struct timeval tvLastRescan;  
     fd_set readfds, writefds;
-    int ret, maxfd, doRescan = 1;
+    int ret, maxfd;
 
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
 
     /* Always check the event_pipe and the devices file */
     FD_SET(event_pipe[0], &readfds);
-    if (fd >= 0) {
-      FD_SET(fd, &readfds);
-		}
+    //if (fd >= 0) {
+    //  FD_SET(fd, &readfds);
+		//}
 
-	  maxfd = fd > event_pipe[0] ? fd : event_pipe[0];
-    
+	  //maxfd = fd > event_pipe[0] ? fd : event_pipe[0];
+    maxfd = event_pipe[0];
+
     gettimeofday(&tvc, NULL);
 
     memset(&tvo, 0, sizeof(tvo));
@@ -469,23 +457,6 @@ static void *poll_events(void *unused)
       read(event_pipe[0], buf, sizeof(buf));
     }
 
-    /* We'll only do a rescan if it's been at least 500ms since our
-     * last rescan */
-    if ( tvc.tv_sec - tvLastRescan.tv_sec > 1) {
-      doRescan = 1;
-    } else if (tvc.tv_usec - tvLastRescan.tv_usec > 500000) {
-      doRescan = 1;
-    } else {
-      doRescan = 0;
-    }
-    if (doRescan) {
-      if ( (fd >= 0 && FD_ISSET(fd, &readfds)) || usingSysfs) {
-        /* FIXME: We need to handle new/removed busses as well */
-        usbi_rescan_devices();
-        gettimeofday(&tvLastRescan, NULL);
-      }
-    }
-
     /* now we'll process any pending io requests & timeouts */
     pthread_mutex_lock(&usbi_ios_lock);
     list_for_each_entry_safe(dev, tdev, &usbi_ios, io_list) {
@@ -505,6 +476,53 @@ static void *poll_events(void *unused)
   return NULL;
 }
 
+static void *poll_events(void *unused)
+{
+  char filename[PATH_MAX + 1];
+  char sysfsmnt[PATH_MAX + 1]; 
+  int  fd = -1;
+  int  usingSysfs = 0; 
+
+  /* Determine if we're using SYSFS or /proc/bus/usb/devices to check events */
+  if (sysfs_get_mnt_path(sysfsmnt,PATH_MAX+1) == 0)
+  {
+    usingSysfs = 1;
+  }
+  else
+  {
+    snprintf(filename, sizeof(filename), "%s/devices", device_dir);
+    fd = open(filename, O_RDONLY);
+    if (fd < 0)
+      usbi_debug(0, "unable to open %s to check for topology changes", filename);
+  }
+  
+  /* Loop forever, checking for events every 0.5 second */
+  while(1) {
+    struct timeval tvc;
+    struct timeval tvLastRescan;
+    int doRescan = 1;
+
+    /* We'll only do a rescan if it's been at least 500ms since our
+     * last rescan */
+    gettimeofday(&tvc, NULL);
+    if ( tvc.tv_sec - tvLastRescan.tv_sec > 1) {
+      doRescan = 1;
+    } else if (tvc.tv_usec - tvLastRescan.tv_usec > 500000) {
+      doRescan = 1;
+    } else {
+      doRescan = 0;
+    }
+    if (doRescan) {
+      if ( (fd >= 0) || usingSysfs ) {
+        /* FIXME: We need to handle new/removed busses as well */
+        usbi_rescan_devices();
+        gettimeofday(&tvLastRescan, NULL);
+      }
+    }
+  }
+
+}
+ 
 static int linux_find_busses(struct list_head *busses)
 {
   DIR *dir;
@@ -526,7 +544,7 @@ static int linux_find_busses(struct list_head *busses)
       continue;
 
     if (!strchr("0123456789", entry->d_name[strlen(entry->d_name) - 1])) {
-      usbi_debug(2, "skipping non bus dir %s", entry->d_name);
+      usbi_debug(3, "skipping non bus dir %s", entry->d_name);
       continue;
     }
 
@@ -545,7 +563,7 @@ static int linux_find_busses(struct list_head *busses)
 
     list_add(&ibus->list, busses);
 
-    usbi_debug(2, "found bus dir %s", ibus->filename);
+    usbi_debug(3, "found bus dir %s", ibus->filename);
   }
 
   closedir(dir);
@@ -611,7 +629,7 @@ static int create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
 
   fd = device_open(idev);
   if (fd < 0) {
-    usbi_debug(2, "couldn't open %s: %s", idev->filename, strerror(errno));
+    usbi_debug(1, "couldn't open %s: %s", idev->filename, strerror(errno));
 
     free(idev);
     return LIBUSB_UNKNOWN_DEVICE;
@@ -1120,7 +1138,12 @@ static int linux_init(void)
   /* Start up thread for polling events */
   ret = pthread_create(&event_thread, NULL, poll_events, NULL);
   if (ret < 0)
-    usbi_debug(1, "unable to create polling thread (ret = %d)", ret);
+    usbi_debug(1, "unable to create event polling thread (ret = %d)", ret);
+
+  /* Start up thread for polling io */
+  ret = pthread_create(&io_thread, NULL, poll_io, NULL);
+  if (ret < 0)
+    usbi_debug(1, "unable to create io polling thread (ret = %d)", ret);
 
   /* FIXME: Wait until first scan of devices is finished */
 
