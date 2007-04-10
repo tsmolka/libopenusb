@@ -55,10 +55,9 @@ void libusb_set_debug(int level, int flags, libusb_debug_callback_t callback)
 
   usb_debug = level;
   flags = flags; /* this isn't used yet, so we just prevent a warning here */
-  
+
   if (usb_debug || level) {
-      _usbi_debug(1,"setting debuggin level to %d (%s)", level, 
-                  level ? "on" : "off");
+    usbi_debug(1,"setting debuggin level to %d (%s)", level, level ? "on" : "off");
   }
 }
 
