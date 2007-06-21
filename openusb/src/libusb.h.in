@@ -1,11 +1,15 @@
-#ifndef __USB_H__
-#define __USB_H__
+#ifndef __LIBUSB_H__
+#define __LIBUSB_H__
 
 /*
  * Prototypes, structure definitions and macros.
  *
  * Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
- * Copyright 2004-2005 Sun Microsystems, Inc.  All rights reserved.
+ *
+ * Copyright 2007 Peter Stuge <stuge-libusb@cdy.org>
+ *
+ * Copyright 2004-2007 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  *
  * This file (and only this file) may alternatively be licensed under the
  * BSD license as well, read LICENSE for details.
@@ -33,6 +37,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -41,256 +49,545 @@
 #include <stdarg.h>
 
 /*
+ *********************************************************************
  * USB spec information
  *
  * This is all stuff grabbed from various USB specs and is pretty much
  * not subject to change
+ *********************************************************************
  */
 
 /*
  * Device and/or Interface Class codes
  */
-#define USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
-#define USB_CLASS_AUDIO			1
-#define USB_CLASS_COMM			2
-#define USB_CLASS_HID			3
-#define USB_CLASS_STILL_IMAGE_CAPTURE	6
-#define USB_CLASS_PRINTER		7
-#define USB_CLASS_MASS_STORAGE		8
-#define USB_CLASS_HUB			9
-#define USB_CLASS_CDC			10
-#define USB_CLASS_VIDEO			14
-#define USB_CLASS_WIRELESS		0xe0
-#define USB_CLASS_APP_SPEC		0xfe
-#define USB_CLASS_VENDOR_SPEC		0xff
+#define	USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
+#define	USB_CLASS_AUDIO			1
+#define	USB_CLASS_COMM			2
+#define	USB_CLASS_HID			3
+#define	USB_CLASS_PHYSICAL		5
+#define	USB_CLASS_STILL_IMAGE		6
+#define	USB_CLASS_PRINTER		7
+#define	USB_CLASS_MASS_STORAGE		8
+#define	USB_CLASS_HUB			9
+#define	USB_CLASS_CDC_DATA		10
+#define	USB_CLASS_SMART_CARD		11
+#define	USB_CLASS_CONT_SECURITY		13
+#define	USB_CLASS_VIDEO			14
+#define	USB_CLASS_DIAGNOSTIC		0xdc
+#define	USB_CLASS_WIRELESS		0xe0
+#define	USB_CLASS_MISC			0xef
+#define	USB_CLASS_APP_SPEC		0xfe
+#define	USB_CLASS_VENDOR_SPEC		0xff
 
 /*
  * Descriptor types
  */
-#define USB_DESC_TYPE_DEVICE		0x01
-#define USB_DESC_TYPE_CONFIG		0x02
-#define USB_DESC_TYPE_STRING		0x03
-#define USB_DESC_TYPE_INTERFACE		0x04
-#define USB_DESC_TYPE_ENDPOINT		0x05
-
-#define USB_DESC_TYPE_HID		0x21
-#define USB_DESC_TYPE_REPORT		0x22
-#define USB_DESC_TYPE_PHYSICAL		0x23
-#define USB_DESC_TYPE_HUB		0x29
-
-/* Endpoint descriptor */
-struct usb_endpoint_desc {
-  uint8_t  bEndpointAddress;
-  uint8_t  bmAttributes;
-  uint16_t wMaxPacketSize;
-  uint8_t  bInterval;
-  uint8_t  bRefresh;
-  uint8_t  bSynchAddress;
-};
-
-#define USB_ENDPOINT_ADDRESS_MASK	0x0f    /* in bEndpointAddress */
-#define USB_ENDPOINT_DIR_MASK		0x80
-
-#define USB_ENDPOINT_IN			0x80	/* endpoint direction */
-#define USB_ENDPOINT_OUT		0x00
-
-#define USB_ENDPOINT_TYPE_MASK		0x03    /* in bmAttributes */
-#define USB_ENDPOINT_TYPE_CONTROL	0
-#define USB_ENDPOINT_TYPE_ISOCHRONOUS	1
-#define USB_ENDPOINT_TYPE_BULK		2
-#define USB_ENDPOINT_TYPE_INTERRUPT	3
-
-/* Interface descriptor */
-struct usb_interface_desc {
-  uint8_t  bInterfaceNumber;
-  uint8_t  bAlternateSetting;
-  uint8_t  bNumEndpoints;
-  uint8_t  bInterfaceClass;
-  uint8_t  bInterfaceSubClass;
-  uint8_t  bInterfaceProtocol;
-  uint8_t  iInterface;
-};
-
-/* Configuration descriptor */
-struct usb_config_desc {
-  uint16_t wTotalLength;
-  uint8_t  bNumInterfaces;
-  uint8_t  bConfigurationValue;
-  uint8_t  iConfiguration;
-  uint8_t  bmAttributes;
-  uint8_t  MaxPower;
-};
+#define	USB_DESC_TYPE_DEVICE			0x01
+#define	USB_DESC_TYPE_CONFIG			0x02
+#define	USB_DESC_TYPE_STRING			0x03
+#define	USB_DESC_TYPE_INTERFACE			0x04
+#define	USB_DESC_TYPE_ENDPOINT			0x05
+#define	USB_DESC_TYPE_DEVICE_QUALIFIER		0x06
+#define	USB_DESC_TYPE_OTHER_SPEED_CONFIG	0x07
+#define	USB_DESC_TYPE_INTERFACE_POWER		0x08
+#define	USB_DESC_TYPE_OTG			0x09
+#define	USB_DESC_TYPE_DEBUG			0x0a
+#define	USB_DESC_TYPE_INTERFACE_ASSOCIATION	0x0b
 
 /* Device descriptor */
-struct usb_device_desc {
-  uint16_t bcdUSB;
-  uint8_t  bDeviceClass;
-  uint8_t  bDeviceSubClass;
-  uint8_t  bDeviceProtocol;
-  uint8_t  bMaxPacketSize0;
-  uint16_t idVendor;
-  uint16_t idProduct;
-  uint16_t bcdDevice;
-  uint8_t  iManufacturer;
-  uint8_t  iProduct;
-  uint8_t  iSerialNumber;
-  uint8_t  bNumConfigurations;
-};
+typedef struct usb_device_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bcdUSB;
+	uint8_t		bDeviceClass;
+	uint8_t		bDeviceSubClass;
+	uint8_t		bDeviceProtocol;
+	uint8_t		bMaxPacketSize0;
+	uint16_t	idVendor;
+	uint16_t	idProduct;
+	uint16_t	bcdDevice;
+	uint8_t		iManufacturer;
+	uint8_t		iProduct;
+	uint8_t		iSerialNumber;
+	uint8_t		bNumConfigurations;
+} usb_device_desc_t;
+
+/* Configuration & other speed configuration descriptor */
+typedef struct usb_config_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	wTotalLength;
+	uint8_t		bNumInterfaces;
+	uint8_t		bConfigurationValue;
+	uint8_t		iConfiguration;
+	uint8_t		bmAttributes;
+	uint8_t		bMaxPower;
+} usb_config_desc_t;
+
+/* bmAttributes for configuration desc */
+#define	USB_CFG_ATTR_SELFPWR		0x40
+#define	USB_CFG_ATTR_REMOTE_WAKEUP	0x20
+
+/* Interface descriptor */
+typedef struct usb_interface_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bInterfaceNumber;
+	uint8_t		bAlternateSetting;
+	uint8_t		bNumEndpoints;
+	uint8_t		bInterfaceClass;
+	uint8_t		bInterfaceSubClass;
+	uint8_t		bInterfaceProtocol;
+	uint8_t		iInterface;
+} usb_interface_desc_t;
+
+/* Endpoint descriptor */
+typedef struct usb_endpoint_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bEndpointAddress;
+	uint8_t		bmAttributes;
+	uint16_t	wMaxPacketSize;
+	uint8_t		bInterval;
+	uint8_t		bRefresh;
+	uint8_t		bSynchAddress;
+} usb_endpoint_desc_t;
+
+/* bEndpointAddress for endpoint desc */
+#define	USB_ENDPOINT_NUM_MASK		0x0f	/* endpoint number mask */
+#define	USB_ENDPOINT_DIR_MASK		0x80	/* direction mask */
+#define	USB_ENDPOINT_IN			0x80	/* IN endpoint */
+#define	USB_ENDPOINT_OUT		0x00	/* OUT endpoint */
+
+/* bmAttributes for endpoint desc */
+#define	USB_ENDPOINT_TYPE_MASK		0x03	/* transfer type mask */
+#define	USB_ENDPOINT_TYPE_CONTROL	0x00	/* control transfer */
+#define	USB_ENDPOINT_TYPE_ISOCHRONOUS	0x01	/* isochronous transfer */
+#define	USB_ENDPOINT_TYPE_BULK		0x02	/* bulk transfer */
+#define	USB_ENDPOINT_TYPE_INTERRUPT	0x03	/* interrupt transfer */
+
+#define	USB_ENDPOINT_SYNC_MASK		0x0c	/* synchronization mask */
+#define	USB_ENDPOINT_SYNC_NONE		0x00	/* no synchronization */
+#define	USB_ENDPOINT_SYNC_ASYNC		0x04	/* asynchronous */
+#define	USB_ENDPOINT_SYNC_ADPT		0x08	/* adaptive */
+#define	USB_ENDPOINT_SYNC_SYNC		0x0c	/* synchronous */
+
+#define	USB_ENDPOINT_USAGE_MASK		0x30	/* sync feedback mask */
+#define	USB_ENDPOINT_USAGE_DATA		0x00	/* data endpoint */
+#define	USB_ENDPOINT_USAGE_FEED		0x10	/* feedback endpoint */
+#define	USB_ENDPOINT_USAGE_IMPL_FEED	0x20	/* implicit feedback ep */
+
+/* wMaxPacketSize for endpoint desc */
+#define	USB_ENDPOINT_MAX_PKTSZ_MASK	0x03ff	/* Mask for packetsize bits */
+#define	USB_ENDPOINT_MAX_XACTS_MASK	0x0c00	/* Max Transactns/microframe */
+#define	USB_ENDPOINT_MAX_XACTS_SHIFT	11	/* 11 bits from end */
+
+/* String descriptor of index zero */
+typedef struct usb_string_desc_zero {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	wLANGID[];	/* flexible array member */
+} usb_string_desc_zero_t;
+
+/* UNICODE String descriptor */
+typedef struct usb_string_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bString[];	/* flexible array member */
+} usb_string_desc_t;
+
+/* Device qualifier descriptor */
+typedef struct usb_device_qualif_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bcdUSB;
+	uint8_t		bDeviceClass;
+	uint8_t		bDeviceSubClass;
+	uint8_t		bDeviceProtocol;
+	uint8_t		bMaxPacketSize0;
+	uint8_t		bNumConfigurations;
+	uint8_t		bReserved;
+} usb_device_qualif_desc_t;
+
+/* OTG descriptor */
+typedef struct usb_otg_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bmAttributes;
+} usb_otg_desc_t;
+
+/* bmAttributes for OTG desc */
+#define	USB_OTG_SRP			0x00
+#define	USB_OTG_HNP			0x01
+
+/* Debug descriptor */
+typedef struct usb_debug_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bDebugInEndpoint;
+	uint8_t		bDebugOutEndpoint;
+} usb_debug_desc_t;
+
+/* Interface association descriptor */
+typedef struct usb_interface_association_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bFirstInterface;
+	uint8_t		bInterfaceCount;
+	uint8_t		bFunctionClass;
+	uint8_t		bFunctionSubClass;
+	uint8_t		bFunctionProtocol;
+	uint8_t		iFunction;
+} usb_interface_association_desc_t;
 
 /*
  * Standard requests
  */
-#define USB_REQ_GET_STATUS		0x00
-#define USB_REQ_CLEAR_FEATURE		0x01
+#define	USB_REQ_GET_STATUS		0x00
+#define	USB_REQ_CLEAR_FEATURE		0x01
 /* 0x02 is reserved */
-#define USB_REQ_SET_FEATURE		0x03
+#define	USB_REQ_SET_FEATURE		0x03
 /* 0x04 is reserved */
-#define USB_REQ_SET_ADDRESS		0x05
-#define USB_REQ_GET_DESCRIPTOR		0x06
-#define USB_REQ_SET_DESCRIPTOR		0x07
-#define USB_REQ_GET_CONFIGURATION	0x08
-#define USB_REQ_SET_CONFIGURATION	0x09
-#define USB_REQ_GET_INTERFACE		0x0A
-#define USB_REQ_SET_INTERFACE		0x0B
-#define USB_REQ_SYNCH_FRAME		0x0C
+#define	USB_REQ_SET_ADDRESS		0x05
+#define	USB_REQ_GET_DESCRIPTOR		0x06
+#define	USB_REQ_SET_DESCRIPTOR		0x07
+#define	USB_REQ_GET_CONFIGURATION	0x08
+#define	USB_REQ_SET_CONFIGURATION	0x09
+#define	USB_REQ_GET_INTERFACE		0x0a
+#define	USB_REQ_SET_INTERFACE		0x0b
+#define	USB_REQ_SYNCH_FRAME		0x0c
 
 /* Bitmaps for bmRequestType */
-#define USB_REQ_HOST_TO_DEV		0x00
-#define USB_REQ_DEV_TO_HOST		0x80
-#define USB_REQ_DIR_MASK		0x80
+#define	USB_REQ_HOST_TO_DEV		0x00
+#define	USB_REQ_DEV_TO_HOST		0x80
+#define	USB_REQ_DIR_MASK		0x80
 
-#define USB_REQ_TYPE_STANDARD		(0x00 << 5)
-#define USB_REQ_TYPE_CLASS		(0x01 << 5)
-#define USB_REQ_TYPE_VENDOR		(0x02 << 5)
-#define USB_REQ_TYPE_RESERVED		(0x03 << 5)
-#define USB_REQ_TYPE_MASK		0x60
+#define	USB_REQ_TYPE_STANDARD		(0x00 << 5)
+#define	USB_REQ_TYPE_CLASS		(0x01 << 5)
+#define	USB_REQ_TYPE_VENDOR		(0x02 << 5)
+#define	USB_REQ_TYPE_RESERVED		(0x03 << 5)
+#define	USB_REQ_TYPE_MASK		0x60
 
-#define USB_REQ_RECIP_DEVICE		0x00
-#define USB_REQ_RECIP_INTERFACE		0x01
-#define USB_REQ_RECIP_ENDPOINT		0x02
-#define USB_REQ_RECIP_OTHER		0x03
-#define USB_REQ_RECIP_MASK		0x1f
+#define	USB_REQ_RECIP_DEVICE		0x00
+#define	USB_REQ_RECIP_INTERFACE		0x01
+#define	USB_REQ_RECIP_ENDPOINT		0x02
+#define	USB_REQ_RECIP_OTHER		0x03
+#define	USB_REQ_RECIP_MASK		0x1f
+
+/* Feature selector */
+#define	USB_FEATURE_EP_HALT		0
+#define	USB_FEATURE_DEV_REMOTE_WAKEUP	1
+
+/* Bits returned by GET_STATUS request */
+#define	USB_DEVICE_STATUS_SELFPWR	0x0001
+#define	USB_DEVICE_STATUS_REMOTE_WAKEUP	0x0002
+#define	USB_ENDPOINT_STATUS_HALT	0x0001
+
 
 /*
+ ************************************************************
  * All libusb functions return an OS independent error code
  * (ie. no OS specific errno).
- * XXX more needed
+ * XXX more will be added during the implementation
+ ************************************************************
  */
-#define LIBUSB_SUCCESS			0	/* Call success */
-#define LIBUSB_FAILURE			-1	/* Unspecified error */
-#define LIBUSB_NO_RESOURCES		-2	/* No resources available */
-#define LIBUSB_NO_BANDWIDTH		-3	/* No bandwidth available */
-#define LIBUSB_NOT_SUPPORTED		-4	/* Not supported by HCD */
-#define LIBUSB_HC_HARDWARE_ERROR	-5	/* USB host controller error */
-#define LIBUSB_INVALID_PERM		-6	/* Privileged operation */
-#define LIBUSB_BUSY			-7	/* Busy condition */
-#define LIBUSB_BADARG			-8	/* Invalid parameter */
-#define LIBUSB_NOACCESS			-9	/* Access to device denied */
-#define LIBUSB_PARSE_ERROR		-10	/* Data could not be parsed */
-#define LIBUSB_UNKNOWN_DEVICE		-11	/* Device id is stale or invalid */
+#define	LIBUSB_SUCCESS			0	/* Call success */
+#define	LIBUSB_PLATFORM_FAILURE		-1	/* Unspecified kernel/driver failure */
+#define	LIBUSB_NO_RESOURCES		-2	/* No resources available */
+#define	LIBUSB_NO_BANDWIDTH		-3	/* No bandwidth available */
+#define	LIBUSB_NOT_SUPPORTED		-4	/* Not supported by HCD */
+#define	LIBUSB_HC_HARDWARE_ERROR	-5	/* USB host controller error */
+#define	LIBUSB_INVALID_PERM		-6	/* Privileged operation */
+#define	LIBUSB_BUSY			-7	/* Busy condition */
+#define	LIBUSB_BADARG			-8	/* Invalid parameter */
+#define	LIBUSB_NOACCESS			-9	/* Access to device denied */
+#define	LIBUSB_PARSE_ERROR		-10	/* Data could not be parsed */
+#define	LIBUSB_UNKNOWN_DEVICE		-11	/* Device id is stale or invalid */
+#define	LIBUSB_INVALID_HANDLE		-12	/* Handle is invalid */
+#define	LIBUSB_SYS_FUNC_FAILURE		-13	/* Call other system function failed */
+#define	LIBUSB_NULL_LIST		-14	/* Can not find bus or device */
 
-#define LIBUSB_IO_STALL			-50	/* Endpoint stalled */
-#define LIBUSB_IO_CRC_ERROR		-51	/* CRC error */
-#define LIBUSB_IO_DEVICE_HUNG		-52	/* Device hung */
-#define LIBUSB_IO_REQ_TOO_BIG		-53	/* Request too big */
-#define LIBUSB_IO_BIT_STUFFING		-54	/* Bit stuffing error */
-#define LIBUSB_IO_UNEXPECTED_PID	-55	/* Unexpected PID */
-#define LIBUSB_IO_DATA_OVERRUN		-56	/* Data overrun */
-#define LIBUSB_IO_DATA_UNDERRUN		-57	/* Data underrun */
-#define LIBUSB_IO_BUFFER_OVERRUN	-58	/* Buffer overrun */
-#define LIBUSB_IO_BUFFER_UNDERRUN	-59	/* Buffer underrun */
-#define LIBUSB_IO_PID_CHECK_FAILURE	-60	/* PID check failure */
-#define LIBUSB_IO_DATA_TOGGLE_MISMATCH	-61	/* Data toggle mismatch */
-#define LIBUSB_IO_TIMEOUT		-62	/* I/O timeout */
-#define LIBUSB_IO_CANCELED		-63 /* I/O was canceled */
+/* return values for asynchronous transfer callback function */
+#define	LIBUSB_CB_CONTINUE		-20	/* Continue with next request */
+#define	LIBUSB_CB_TERMINATE		-21	/* Stop doing next request */
 
-/* Maximum Data Transfer Sizes for Linux */
+#define	LIBUSB_IO_STALL			-50	/* Endpoint stalled */
+#define	LIBUSB_IO_CRC_ERROR		-51	/* CRC error */
+#define	LIBUSB_IO_DEVICE_HUNG		-52	/* Device hung */
+#define	LIBUSB_IO_REQ_TOO_BIG		-53	/* Request too big */
+#define	LIBUSB_IO_BIT_STUFFING		-54	/* Bit stuffing error */
+#define	LIBUSB_IO_UNEXPECTED_PID	-55	/* Unexpected PID */
+#define	LIBUSB_IO_DATA_OVERRUN		-56	/* Data overrun */
+#define	LIBUSB_IO_DATA_UNDERRUN		-57	/* Data underrun */
+#define	LIBUSB_IO_BUFFER_OVERRUN	-58	/* Buffer overrun */
+#define	LIBUSB_IO_BUFFER_UNDERRUN	-59	/* Buffer underrun */
+#define	LIBUSB_IO_PID_CHECK_FAILURE	-60	/* PID check failure */
+#define	LIBUSB_IO_DATA_TOGGLE_MISMATCH	-61	/* Data toggle mismatch */
+#define	LIBUSB_IO_TIMEOUT		-62	/* I/O timeout */
+#define	LIBUSB_IO_CANCELED		-63 	/* I/O was canceled */
+
+
 /*
- * Linux usbfs has a limit of 16KB for the URB interface. We use this now
- * to get better performance for USB 2.0 devices.
+ ********************************
+ * Library specific data types
+ ********************************
  */
-#define LIBUSB_LINUX_MAX_READWRITE  (16 * 1024)
-  
-/*
- * Linux usbfs has a limit of 4096 for the USB control interface. Since that
- * includes the 8 bytes setup packet we have to take that into account
- */
-#define LIBUSB_LINUX_MAX_CTRL_SIZE  (4096 - 8)
 
+typedef uint64_t libusb_devid_t;
+typedef uint64_t libusb_busid_t;
+typedef uint64_t libusb_handle_t;
+typedef uint64_t libusb_dev_handle_t;
 
-/* Data types */
-typedef unsigned int libusb_device_id_t;
-typedef unsigned int libusb_bus_id_t;
+typedef enum libusb_event {
+	USB_ATTACH = 0,
+	USB_REMOVE,
+	USB_SUSPEND,
+	USB_RESUME,
+	USB_HC_ATTACH,
+	USB_HC_REMOVE,
+	USB_COLDPLUG_COMPLETED,
+} libusb_event_t;
 
-typedef unsigned int libusb_dev_handle_t;
-typedef unsigned int libusb_match_handle_t;
-
-typedef enum libusb_event_type {
-  USB_ATTACH = 0,
-  USB_DETACH,
-} libusb_event_type_t;
+#define	LIBUSB_EVENT_TYPE_COUNT		7
 
 typedef enum libusb_transfer_type {
-  USB_TYPE_ALL = 0,
-  USB_TYPE_CONTROL,
-  USB_TYPE_INTERRUPT,
-  USB_TYPE_BULK,
-  USB_TYPE_ISOCHRONOUS,
+	USB_TYPE_ALL = 0,
+	USB_TYPE_CONTROL,
+	USB_TYPE_INTERRUPT,
+	USB_TYPE_BULK,
+	USB_TYPE_ISOCHRONOUS,
 } libusb_transfer_type_t;
 
-typedef void (*libusb_event_callback_t)(libusb_device_id_t devid,
-	libusb_event_type_t event_type, void *arg);
+typedef void	(*libusb_event_callback_t)(libusb_handle_t handle,
+	libusb_devid_t devid, libusb_event_t event, void *arg);
 
-typedef void (*libusb_debug_callback_t)(const char *fmt, va_list args);
+typedef void	(*libusb_debug_callback_t)(libusb_handle_t handle,
+	const char *fmt, va_list args);
 
+typedef libusb_dev_data {
+	libusb_busid_t		busid;
+	libusb_devid_t		devid;
+	uint8_t			bus_address;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	/* parent device id, 0 for root-hub */
+	libusb_devid_t		pdevid;
+
+	/* parent port the device is connected to */
+	uint8_t			pport;
+
+	/* number of ports on the device, 0 for non-hub device */
+	uint8_t			nports;
+
+	/* descriptive path such as /dev/bus/usb/xxx */
+	char			*sys_path;
+
+	/* topological path such as 1.2.1 */
+	char			*bus_path;
+
+	usb_device_desc_t	dev_desc;
+	usb_config_desc_t	cfg_desc;
+
+	/* raw configuration desc cloud */
+	uint8_t			*raw_cfg_desc;
+  
+	/* string descriptors with the first langid */
+	usb_string_desc_t	*manufacturer;
+	usb_string_desc_t	*product;
+	usb_string_desc_t	*serialnumber;
+
+	/* max transfer size for each request, 0 if not supported */
+	uint32_t		ctrl_max_xfer_size;
+	uint32_t		intr_max_xfer_size;
+	uint32_t		bulk_max_xfer_size;
+	uint32_t		isoc_max_xfer_size;
+} libusb_dev_data_t;
+
+/* Data types for I/O */
+
+typedef struct libusb_request_result {
+	int32_t			status;
+	uint32_t		transferred_bytes;
+} libusb_request_result_t;
+
+typedef struct libusb_ctrl_request {
+	struct libusb_ctrl_setup {
+		uint8_t		bmRequestType;
+		uint8_t		bRequest;
+		uint16_t	wValue;
+		uint16_t	wIndex;
+
+		/* wLength set automatically based on length */
+	} setup;
+
+	uint8_t			*payload;
+	uint32_t		length;
+	uint32_t		timeout;
+	uint32_t		flags;
+	libusb_request_result_t	result;
+	struct libusb_ctrl_request	*next;
+} libusb_ctrl_request_t;
+
+typedef struct libusb_intr_request {
+	uint16_t		interval;	/* may not work on some OS */
+	uint8_t			*payload;
+	uint32_t		length;
+	uint32_t		timeout;
+	uint32_t		flags;
+	libusb_request_result_t	result;
+	struct libusb_intr_request	*next;
+} libusb_intr_request_t;
+
+typedef struct libusb_bulk_request {
+	uint8_t			*payload;
+	uint32_t		length;
+	uint32_t		timeout;
+	uint32_t		flags;
+	libusb_request_result_t	result;
+	struct libusb_bulk_request	*next;
+} libusb_bulk_request_t;
+
+typedef struct libusb_isoc_pkts {
+	uint32_t		num_packets;
+	struct libusb_isoc_packet {
+		uint8_t		*payload;
+		uint32_t	length;
+	} *packets;
+} libusb_isoc_pkts_t;
+
+typedef struct libusb_isoc_request {
+	uint32_t		start_frame;
+	uint32_t		flags;
+	libusb_isoc_pkts_t	pkts;
+
+	/* pointer to isoc result array */
+	libusb_request_result_t	*isoc_results;
+
+	/* overall isoc transfer completion status */
+	int32_t			isoc_status;
+
+	struct libusb_isoc_request	*next;
+} libusb_isoc_request_t;
+
+struct libusb_request_handle {
+	libusb_dev_handle_t	dev;
+	uint8_t			interface;	/* ignored for ep0 */
+	uint8_t			endpoint;
+	libusb_transfer_type_t	type;
+
+	union libusb_request {
+		libusb_ctrl_request_t	*ctrl;
+		libusb_intr_request_t	*intr;
+		libusb_bulk_request_t	*bulk;
+		libusb_isoc_request_t	*isoc;
+	} req;
+
+	int32_t	(*cb)(struct libusb_request_handle *handle);
+	void	*arg;	/* additional arg for callback */
+};
+
+typedef struct libusb_request_handle *libusb_request_handle_t;
+
+/* flags for opening device and claiming interface */
+typedef enum libusb_init_flag {
+	USB_INIT_DEFAULT = 0,
+	USB_INIT_FAIL_FAST,	 /* fail if not immediately available */
+	USB_INIT_REVERSIBLE,	 /* try platform dependent things that are */
+				 /* guaranteed to be reversed on close */
+	USB_INIT_NON_REVERSIBLE, /* try advanced platform dependent */
+				 /* things that may not be guaranteed */
+				 /* to be reversible on close */
+} libusb_init_flag_t;
+
+/* Max length for device path of topological depiction */
+#define	LIBUSB_BUS_PATH_MAX		28
+
+/*
+ ****************************************
+ * Library function prototypes
+ ****************************************
+ */
 
 /*
  *  libusb_init()
  *
  *   Arguments:
- *	none
+ *	flags           - TBD
+ *	handle          - Libusb handle
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE      - Unspecified failure
- *	LIBUSB_BADARG       - Invalid structure data
- *	LIBUSB_NO_RESOURCES - Memory allocation failures
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_BADARG           - Invalid structure data
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
  *
- * Notes:
- *	- This function must be called before any other libusb function
+ *   Notes:
+ *	This function must be called before any other libusb function, and
+ *	it returns one libusb handle upon each call
  */
-int libusb_init(void);
+int32_t libusb_init(uint32_t flags, libusb_handle_t *handle);
 
 /*
- * Register with libusb framework for event callbacks
+ * Cleanup resources:
+ *
+ *  libusb_fini()
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *   Return Values:
+ *	none
+ *
+ *   Notes:
+ *	This function must be called at the end of each libusb application.
+ *	Each call to libusb_init() needs a call to libusb_fini()
+ */
+void libusb_fini(libusb_handle_t handle);
+
+/*
+ * Register with libusb framework for event callbacks:
  *
  *  libusb_set_event_callback()  ........... Set event callback
  *
  *   Arguments:
+ *	handle          - Libusb handle
  *	type            - Event type
  *	callback        - Pointer to event callback handler or NULL to unset
  *	arg             - User specified argument
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE      - Unspecified failure
- *	LIBUSB_BADARG       - Invalid structure data
- *	LIBUSB_NO_RESOURCES - Memory allocation failures
+ *	LIBUSB_BADARG           - Invalid structure data
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
  */
-int libusb_set_event_callback(libusb_event_type_t type,
+int32_t libusb_set_event_callback(libusb_handle_t handle,
+	libusb_event_t type,
 	libusb_event_callback_t callback, void *arg);
+
+/*
+ * Block until end of coldplug events:
+ *
+ *  libusb_coldplug_callbacks_done()
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *
+ *   Return Values:
+ *	none
+ *
+ *   Notes:
+ *	For MT applications that can handle coldplug events and need to
+ *	know end of the events
+ */
+void libusb_coldplug_callbacks_done(libusb_handle_t handle);
 
 /*
  *  libusb_set_debug() ............... Specify debug level
  *
  *   Arguments:
+ *	handle          - Libusb handle
  *	level		- Debug level
  *	flags		- TBD
- *  callback	- Callback to call when a debug message needs to be logged
- *				  If this parameter is NULL, logging will go to stderr
+ *	callback	- Callback for user defined debug function
+ *			  If NULL, the library embedded debug function is
+ *			  is used and the messages will go to stderr
  *
  *   Return Values:
  *	none
@@ -298,7 +595,27 @@ int libusb_set_event_callback(libusb_event_type_t type,
  * Notes:
  *	This function enables tracing of libusb with increasing level of detail
  */
-void libusb_set_debug(int level, int flags, libusb_debug_callback_t callback);
+void libusb_set_debug(libusb_handle_t handle, uint32_t level,
+	uint32_t flags, libusb_debug_callback_t callback);
+
+/*
+ * Set default timeout:
+ *
+ *  libusb_set_default_timeout() .. Set default timeout for a request type
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *	type            - Type of transfer
+ *	timeout         - Timeout in milliseconds (0 == infinite)
+ *
+ *   Return Values:
+ *	LIBUSB_SUCCESS
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ */
+int32_t libusb_set_default_timeout(libusb_handle_t handle,
+	libusb_transfer_type_t type, uint32_t timeout);
 
 /*
  * Endianness conversion functions:
@@ -307,24 +624,24 @@ void libusb_set_debug(int level, int flags, libusb_debug_callback_t callback);
  *  libusb_le32_to_cpu() ..... Convert LE 32 bit quantity to CPU endianess
  *
  *   Arguments:
- *	data        - Pointer to data
+ *	data        - Data to be converted
  *
  *   Return Values  - Converted data
  */
-uint16_t libusb_le16_to_cpu(uint16_t data);
-uint32_t libusb_le32_to_cpu(uint32_t data);
-#define libusb_cpu_to_le16 libusb_le16_to_cpu
-#define libusb_cpu_to_le32 libusb_le32_to_cpu
+inline uint16_t libusb_le16_to_cpu(uint16_t data);
+inline uint32_t libusb_le32_to_cpu(uint32_t data);
+#define	libusb_cpu_to_le16	libusb_le16_to_cpu
+#define	libusb_cpu_to_le32	libusb_le32_to_cpu
 
 /*
  *  libusb_strerror() ........ Return english text representation of error code
  *
  *   Arguments:
- *	err         - Error code
+ *	error       - Error code
  *
  *   Return Values  - Pointer to english text representation
  */
-const char *libusb_strerror(int err);
+const char *libusb_strerror(int32_t error);
 
 /* 
  * Unpack arbitrary little endian data (ie. descriptors)
@@ -374,307 +691,211 @@ const char *libusb_strerror(int err);
  *              uint8_t         unused[3];
  *              uint32_t        d;
  */
-int libusb_parse_data(char *format, unsigned char *data, size_t datalen,
-	void *structure, size_t structlen, size_t *count);
+int32_t libusb_parse_data(char *format, uint8_t *data, uint32_t datalen,
+	void *structure, uint32_t structlen, uint32_t *count);
 
 /*
- * Bus enumeration functions:
+ * Functions for searching busses:
  *
- *  libusb_get_first_bus_id() ........... Return first bus from unordered list
- *  libusb_get_next_bus_id() ............ Return next bus in unordered list
- *  libusb_get_prev_bus_id() ............ Return prev bus in unordered list
+ *  libusb_get_busid_list() ........... Return all busids in unordered list
+ *  libusb_free_busid_list() .......... Free the returned buffer for busids
  *
  *   Arguments:
- *	busid            - Pointer to bus id token
- *                         libusb writes back the first, next or previous
- *                         busid or 0 (end of list, or error)
+ *	handle           - Libusb handle
+ *	busids           - Pointer to address of the busid list
+ *	num_busids       - Number of bus ids in the list
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
  */
-int libusb_get_first_bus_id(libusb_bus_id_t *busid);
-int libusb_get_next_bus_id(libusb_bus_id_t *busid);
-int libusb_get_prev_bus_id(libusb_bus_id_t *busid);
+int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
+	uint32_t *num_busids);
+void libusb_free_busid_list(libusb_busid_t *busids);
 
 /*
- * Device enumeration functions:
+ * Functions for searching devices:
  *
- *  libusb_get_first_device_id() ........ Return 1st device from unordered list
- *  libusb_get_next_device_id() ......... Return next device in unordered list
- *  libusb_get_prev_device_id() ......... Return prev device in unordered list
+ *  libusb_get_devids_by_bus() .......... Return all devids on a bus, the
+ *                                        first devid in the list is root-hub;
+ *                                        or return all devids on all busses
+ *                                        if busid equals 0
+ *  libusb_get_devids_by_vendor() ....... Match on vid, pid
+ *  libusb_get_devids_by_class() ........ Match on class, subclass, protocol
+ *  libusb_free_devid_list() ............ Free the devid list returned above
  *   
  *   Arguments:
- *	busid            - Which bus, (0 all busses)
- *	devid            - Pointer to device id
- *                         libusb writes back the first, next, or previous
- *                         device id or 0 (end of list or error)
+ *	handle           - Libusb handle
+ *	busid            - Which bus (0 all busses)
+ *	vendor           - Vendor id (0 - 0xffff, -1 for all)
+ *	product          - Product id (0 - 0xffff, -1 for all)
+ *	devclass         - Device class (0 - 0xff, -1 for all)
+ *	subclass         - Subclass (0 - 0xff, -1 for all)
+ *	protocol         - Protocol (0 - 0xff, -1 for all)
+ *	devids           - Pointer to address of the devid list
+ *	num_devids       - Number of device ids in the list
  *   
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
  */ 
-int libusb_get_first_device_id(libusb_bus_id_t busid,
-	libusb_device_id_t *devid);
-int libusb_get_next_device_id(libusb_device_id_t *devid);
-int libusb_get_prev_device_id(libusb_device_id_t *devid);
+int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
+	libusb_devid_t **devids, uint32_t *num_devids);
+int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
+	int32_t product, libusb_devid_t **devids, uint32_t *num_devids);
+int32_t libusb_get_devids_by_class(libusb_handle_t handle, int16_t devclass,
+	int16_t subclass, int16_t protocol, libusb_devid_t **devids,
+	uint32_t *num_devids);
+void libusb_free_devid_list(libusb_devid_t *devids);
 
 /*
- * Get child count:
+ * Get device data:
  *
- *  libusb_get_child_count()
+ *  libusb_get_device_data()
  *
  *   Arguments:
- *	devid            - Hub's device id
- *	count            - Pointer to count where the number of children
- *                         will be returned
+ *	handle           - Libusb handle
+ *	devid            - Device id
+ *	flags            - TBD
+ *	data             - Pointer to device data
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_BADARG         - The device is not a hub
+ *	LIBUSB_UNKNOWN_DEVICE   - Device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	The data buffer is allocated by libusb
  */
-int libusb_get_child_count(libusb_device_id_t devid, unsigned char *count);
+int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
+	uint32_t flags, libusb_dev_data_t **data);
+
+/*
+ * Free device data:
+ *
+ *  libusb_free_device_data()
+ *
+ *   Arguments:
+ *	data             - Pointer to device data
+ *
+ *   Return Values:
+ *	none
+ */
+void libusb_free_device_data(libusb_dev_data_t *data);
 
 /*
  * Get child ID  (return ID of device at specified hub port):
  *
- *  libusb_get_child_device_id()
+ *  libusb_get_child_devid()
  *
  *   Arguments:
- *	hub_devid        - Hub's device id
- *	port             - Port number (> 0 and < 128)
- *	child_devid      - Pointer to child's device id
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_BADARG         - The device is not a hub
- *
- *   Notes:
- *	are all devices accessible? Solaris will not allow unconstrained
- *	access
- */
-int libusb_get_child_device_id(libusb_device_id_t hub_devid, int port,
-	libusb_device_id_t *child_devid);
-
-/*
- * Get device's parent's ID
- *
- *  libusb_get_parent_device_id()
- *
- *   Arguments:
- *	child_devid     - Child's device id
- *	hub_devid       - Pointer to the parent's (hub's) device id
- *                         libusb writes back device id or 0
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_BADARG         - The device is a root hub
- */
-int libusb_get_parent_device_id(libusb_device_id_t child_devid,
-	libusb_device_id_t *hub_devid);
-
-/*
- * Get bus ID:
- *
- *  libusb_get_bus_id()
- *
- *   Arguments:
- *	devid           - Device id
- *	busid           - Pointer to bus id
- *                        libusb writes back busid or 0
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
- */
-int libusb_get_bus_id(libusb_device_id_t devid, libusb_bus_id_t *busid);
-
-/*
- * Get device number:
- *
- *  libusb_get_devnum()
- *
- *   Arguments:
- *	devid           - Device id
- *	devnum          - Device number
- *
- *   Return Value:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
- */
-int libusb_get_devnum(libusb_device_id_t devid, unsigned char *devnum);
-
-/*  
- * Configuration selection:
- *   
- *  libusb_get_configuration() .... Returns bConfigurationValue
- *  libusb_set_configuration() .... Sets the configuration
- *
- *   Arguments:
- *	devid           - Device id
- *	cfg             - Configuration value
- *      
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */
-int libusb_get_configuration(libusb_device_id_t devid, int *cfg);
-int libusb_set_configuration(libusb_device_id_t devid, int cfg);
-
-/*
- * Hardware pseudonyms:
- *
- *  libusb_get_device_designator() ... Return pseudonym for device
- *  libusb_get_bus_designator() ...... Return pseudonym for bus
- *
- *   Arguments:
- *	devid            - Device id
- *	buffer           - Buffer for returning device id
- *	buflen           - Length of buffer
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- */
-int libusb_get_device_designator(libusb_device_id_t devid,
-	unsigned char *buffer, size_t buflen);
-int libusb_get_bus_designator(libusb_device_id_t devid,
-	unsigned char *buffer, size_t buflen);
-
-/*
- * Topological depiction:
- *
- *  libusb_get_hub_path()
- *
- *   Arguments:
- *	devid            - Device id
- *	buffer           - Buffer for returning path as an array of
- *                         port numbers (eg. 1.2.0 reflects port 1
- *                         on the root hub, port 2 on the external hub, and
- *                         0 terminates the list
- *	buflen           - Length of buffer
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- */
-int libusb_get_hub_path(libusb_device_id_t devid, unsigned char *buffer,
-	size_t buflen);
+ *	handle           - Libusb handle
+int32_t libusb_get_child_devid(libusb_handle_t handle,
+	libusb_devid_t hub_devid, uint8_t port,
+	libusb_devid_t *child_devid);
 
 /*
  * Descriptor accessors:
  *
- *  libusb_get_device_desc() ......... Get cooked device desc.
- *  libusb_get_config_desc() ......... Get cooked configuration desc.
- *  libusb_get_interface_desc() ...... Get cooked interface desc.
- *  libusb_get_endpoint_desc() ....... Get cooked endpoint desc.
- *  libusb_get_raw_device_desc() ..... Get raw device desc.
- *  libusb_get_raw_config_desc() ..... Get raw config desc.
+ * Getting standard descriptors from device
+ *  libusb_get_raw_desc() ........ Return a buffer that contains raw desc.
+ *  libusb_free_raw_desc() ....... Free the raw desc. buffer
+ *
+ * These are for parsing the raw descriptors getting above
+ *  libusb_parse_device_desc() ......... Get cooked device desc.
+ *  libusb_parse_config_desc() ......... Get cooked configuration desc.
+ *  libusb_parse_interface_desc() ...... Get cooked interface desc.
+ *  libusb_parse_endpoint_desc() ....... Get cooked endpoint desc.
  *
  *   Arguments:
+ *	handle           - Libusb handle
  *	devid            - Device id
- *	devdesc          - Pointer to device descriptor
+ *	type             - Descriptor type
+ *	descidx          - Index for config/string desc., zero for others
+ *	langid           - Language ID for string desc., zero for others
+ *	buffer           - Data buffer for raw desc.
+ *	buflen           - Length of raw desc.
+ *	devdesc          - Pointer to device desc.
  *	cfgidx           - Configuration index
- *	cfgdesc          - Pointer to configuration descriptor
+ *	cfgdesc          - Pointer to configuration desc.
  *	ifcidx           - Interface index
- *	ifcdesc          - Pointer to interface descriptor
+ *	alt              - Alternate setting number
+ *	ifcdesc          - Pointer to interface desc.
  *	eptidx           - Endpoint index
- *	eptdesc          - Pointer to endpoint descriptor
+ *	eptdesc          - Pointer to endpoint desc.
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	libusb_get_raw_desc() should be called before one can
+ *	get cooked descriptors. And the raw data buffer and buflen
+ *	are then passed to the parsing functions. The buffer passed
+ *	for getting cooked interface desc and endpoint desc is the
+ *	raw configuration desc buffer.
+ *	The parsing functions also accept NULL buffer pointer, in which
+ *	case user doesn't need to call libusb_get_raw_desc() beforehand,
+ *	the parsing functions would do that internally.
  */
-int libusb_get_device_desc(libusb_device_id_t devid,
-	struct usb_device_desc *devdesc);
-int libusb_get_config_desc(libusb_device_id_t devid, int cfgidx,
-	struct usb_config_desc *cfgdesc);
-int libusb_get_interface_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
-	struct usb_interface_desc *ifcdesc);
-int libusb_get_endpoint_desc(libusb_device_id_t devid, int cfgidx, int ifcidx,
-	int eptidx, struct usb_endpoint_desc *eptdesc);
-int libusb_get_raw_device_desc(libusb_device_id_t devid,
-	unsigned char *buffer, size_t buflen);
-int libusb_get_raw_config_desc(libusb_device_id_t devid,
-	int cfgidx, unsigned char *buffer, size_t buflen);
+int32_t libusb_get_raw_desc(libusb_handle_t handle,
+	libusb_devid_t devid, uint8_t type, uint8_t descidx,
+	uint16_t langid, uint8_t **buffer, uint16_t *buflen);
+void libusb_free_raw_desc(uint8_t *buffer);
+int32_t libusb_parse_device_desc(libusb_handle_t handle,
+	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	usb_device_desc_t *devdesc);
+int32_t libusb_parse_config_desc(libusb_handle_t handle,
+	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, usb_config_desc_t *cfgdesc);
+int32_t libusb_parse_interface_desc(libusb_handle_t handle,
+	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt,
+	usb_interface_desc_t *ifcdesc);
+int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
+	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt, uint8_t eptidx,
+	usb_endpoint_desc_t *eptdesc);
 
 /*
- * Functions for searching for devices:
+ * Function for preparing device and making the default
+ * endpoint accessible to libusb:
  *
- *  libusb_match_devices_by_vendor() ..... Match on vid, pid
- *  libusb_match_devices_by_class() ...... Match on class, subclass, protocol
- *  libusb_match_next_device() ........... Find next matching device
- *  libusb_match_prev_device() ........... Find previous matching device
- *  libusb_match_terminate() ............. Free match handle
+ * libusb_open_device() .......... Prepare device for using by libusb
+ * libusb_close_device() ......... Return device to original state
  *
- *   Arguments:
+ *  Arguments:
+ *	handle            - Libusb handle
  *	devid             - Device id
- *	handle            - Match handle
- *	vendor            - Vendor id
- *	product           - Product id
- *	devclass          - Device class
- *	subclass          - Subclass
- *	protocol          - Protocol
+ *	flags             - Initialization flag
+ *      dev               - Device handle
  *
- *   Return Values
+ *  Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *	More TBD
+ *
+ *  Notes:
+ *	libusb_open_device() will
+ *	- trigger some reconfiguration on some platforms
+ *	- provide access to ep0
+ *	- return a dev handle
  */
-int libusb_match_devices_by_vendor(libusb_match_handle_t *handle,
-	int vendor, int product);
-int libusb_match_devices_by_class(libusb_match_handle_t *handle,
-	int devclass, int subclass, int protocol);
-int libusb_match_next_device(libusb_match_handle_t handle,
-	libusb_device_id_t *devid);
-int libusb_match_terminate(libusb_match_handle_t handle);
+int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
+	libusb_init_flag_t flags, libusb_dev_handle_t *dev);
+int32_t libusb_close_device(libusb_dev_handle_t dev);
 
 /*
- * Device handle management:
+ * Extract device ID from device handle:
  *
- *  libusb_open() ................ Get device handle for device_id
- *  libusb_close() ............... Free device handle
- *
- *   Arguments:
- *	devid            - Device id
- *	dev              - Device handle
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */ 
-int libusb_open(libusb_device_id_t devid, libusb_dev_handle_t *dev);
-int libusb_close(libusb_dev_handle_t dev);
-
-/*
- * Extract device ID from handle:
- *
- *  libusb_get_device_id()
+ *  libusb_get_devid()
  *
  *   Arguments:
  *	dev              - Device handle
@@ -682,10 +903,49 @@ int libusb_close(libusb_dev_handle_t dev);
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
+ *	LIBUSB_UNKNOWN_DEVICE - Device handle is no longer valid
  */
-int libusb_get_device_id(libusb_dev_handle_t dev, libusb_device_id_t *devid);
+int32_t libusb_get_devid(libusb_dev_handle_t dev, libusb_devid_t *devid);
+
+/*
+ * Extract libusb handle from device handle:
+ *
+ *  libusb_get_lib_handle()
+ *
+ *   Arguments:
+ *	dev              - Device handle
+ *	lib_handle       - Pointer to libusb handle
+ *
+ *   Return Values:
+ *	LIBUSB_SUCCESS
+ *	LIBUSB_UNKNOWN_DEVICE - Device handle is no longer valid
+ */
+int32_t libusb_get_lib_handle(libusb_dev_handle_t dev,
+	libusb_handle_t *lib_handle);
+
+/*  
+ * Configuration selection:
+ *   
+ *  libusb_get_configuration() .... Return bConfigurationValue
+ *  libusb_set_configuration() .... Set the configuration
+ *
+ *   Arguments:
+ *	dev             - Device handle
+ *	cfg             - Configuration value
+ *      
+ *   Return Values:
+ *	LIBUSB_SUCCESS
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	libusb_set_configuration() must be called before any interface
+ *	on the device is claimed
+ */
+int32_t libusb_get_configuration(libusb_dev_handle_t dev, uint8_t *cfg);
+int32_t libusb_set_configuration(libusb_dev_handle_t dev, uint8_t cfg);
 
 /*
  * Interface claiming:
@@ -696,38 +956,48 @@ int libusb_get_device_id(libusb_dev_handle_t dev, libusb_device_id_t *devid);
  *
  *   Arguments:
  *	dev              - Device handle
- *	interface        - Interface number
+ *	ifc              - Interface number
+ *	flags            - Claiming flag (0 - default to open flag)
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	Need to reserve necessary bandwidth for periodic endpoints
  */
-int libusb_claim_interface(libusb_dev_handle_t dev, int interface);
-int libusb_release_interface(libusb_dev_handle_t dev, int interface);
-int libusb_is_interface_claimed(libusb_dev_handle_t dev, int interface);
+int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
+	libusb_init_flag_t flags);
+int32_t libusb_release_interface(libusb_dev_handle_t dev, uint8_t ifc);
+int32_t libusb_is_interface_claimed(libusb_dev_handle_t dev, uint8_t ifc);
 
 /*
  * Alternate interface selection:
  *
- *  libusb_get_altinterface() ....... Get alternate interface number
- *  libusb_set_altinterface() ....... Set alternate interface
+ *  libusb_get_altsetting() ....... Get alternate setting number
+ *  libusb_set_altsetting() ....... Set alternate setting
  *
  *   Arguments:
  *	dev              - Device handle
- *	alt              - Alternate interface number
+ *	ifc              - Interface number
+ *	alt              - Alternate setting number
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	May need to release old bandwidth reservation and make
+ *	reservation again
  */
-int libusb_get_altinterface(libusb_dev_handle_t dev, int *alt);
-int libusb_set_altinterface(libusb_dev_handle_t dev, int alt);
+int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc, uint8_t *alt);
+int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc, uint8_t alt);
 
 /*
  * Intervention functions:
@@ -739,228 +1009,67 @@ int libusb_set_altinterface(libusb_dev_handle_t dev, int alt);
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_IO_*             - USB host controller errors
  */
-int libusb_reset(libusb_dev_handle_t dev);
+int32_t libusb_reset(libusb_dev_handle_t dev);
 
-/* FIXME: We need to preprocess this with configure.in */
 /*
- * Platform dependent driver management functions:
+ * I/O functions:
  *
- *  libusb_get_driver_np ................ Get driver name bound to interface
- *  libusb_attach_kernel_driver_np ...... Attach kernel driver to interface
- *  libusb_detach_kernel_driver_np ...... Detach kernel driver from interface
+ *  libusb_xfer_wait() .............. Issue synchronous I/O request
+ *  libusb_xfer_aio()  .............. Issue asynchronous I/O request
  *
  *   Arguments:
- *	dev              - Device handle
- *	interface        - Interface number
- *	name             - Driver name
- *	namelen          - Length of name
+ *	handle            - Pointer to request handle
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
  */
-int libusb_get_driver_np(libusb_dev_handle_t dev, int interface, char *name,
-	size_t namelen);
-int libusb_attach_kernel_driver_np(libusb_dev_handle_t dev, int interface);
-int libusb_detach_kernel_driver_np(libusb_dev_handle_t dev, int interface);
-
-/* I/O functions */
-
-/* Control */
-struct libusb_ctrl_request {
-  libusb_dev_handle_t dev;
-  unsigned char endpoint;
-
-  struct libusb_ctrl_setup {
-    uint8_t bRequestType;
-    uint8_t bRequest;
-    uint16_t wValue;
-    uint16_t wIndex;
-    // wLength set automatically based on buflen
-  } setup;
-
-  void *buf;
-  size_t buflen;
-  long timeout;
-  unsigned long flags;
-  unsigned int tag;
-};
-
-typedef void (*libusb_ctrl_callback_t)(
-	struct libusb_ctrl_request *ctrl, void *arg,
-	int status, size_t transferred_bytes);
+int32_t libusb_xfer_wait(libusb_request_handle_t handle);
+int32_t libusb_xfer_aio(libusb_request_handle_t handle);
 
 /*
- * Control request:
+ * Wrapper functions for synchronous I/O:
  *
- *  libusb_ctrl()               .... Issue synchronous control request
- *  libusb_ctrl_submit()        .... Issue asynchronous control request
+ *  libusb_ctrl_xfer() ............. Issue synchronous control request
+ *  libusb_intr_xfer() ............. Issue synchronous interrupt request
+ *  libusb_bulk_xfer() ............. Issue synchronous bulk request
+ *  libusb_isoc_xfer() ............. Issue synchronous isochronous request
  *
  *   Arguments:
+ *	dev               - Device handle
+ *      ifc               - Interface number
+ *      ept               - Endpoint number
  *	ctrl              - Pointer to USB control request
- *	transferred_bytes - Actually transferred bytes 
- *	callback          - Callback handler
- *	arg               - Caller defined
+ *	intr              - Pointer to USB interrupt request
+ *	bulk              - Pointer to USB bulk request
+ *	isoc              - Pointer to USB isochronous request
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	Please use libusb_xfer_wait() for synchronous I/O that needs
+ *	to be aborted. The wrapper functions don't support abort.
  */
-int libusb_ctrl(struct libusb_ctrl_request *ctrl, size_t *transferred_bytes);
-int libusb_ctrl_submit(struct libusb_ctrl_request *ctrl,
-	libusb_ctrl_callback_t callback, void *arg);
-
-/* Interrupt */
-struct libusb_intr_request {
-  libusb_dev_handle_t dev;
-  unsigned char endpoint;
-  unsigned int interval;
-  void *buf;
-  size_t buflen;
-  long timeout;
-  unsigned long flags;
-  unsigned int tag;
-};
-
-typedef void (*libusb_intr_callback_t)(
-	struct libusb_intr_request *ctrl, void *arg,
-	int status, size_t transferred_bytes);
-
-/*
- * Interrupt I/O:
- *
- *  libusb_intr()               ... Issue synchronous interrupt request
- *  libusb_intr_submit()        ... Issue asynchronous interrupt request
- *
- *   Arguments:
- *	intr              - Pointer to USB intr request
- *                              (EP direction determines R/W)
- *	transferred_bytes - Actually transferred bytes
- *	callback          - Callback handler
- *	arg               - Caller defined
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE 
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */
-int libusb_intr(struct libusb_intr_request *intr, size_t *transferred_bytes);
-int libusb_intr_submit(struct libusb_intr_request *intr,
-	libusb_intr_callback_t callback, void *arg);
-
-/* Bulk */
-struct libusb_bulk_request {
-  libusb_dev_handle_t dev;
-  unsigned char endpoint;
-  void *buf;
-  size_t buflen;
-  long timeout;
-  unsigned long flags;
-  unsigned int tag;
-};
-
-typedef void (*libusb_bulk_callback_t)(
-	struct libusb_bulk_request *ctrl, void *arg,
-	int status, size_t transferred_bytes);
-
-/*
- * Bulk I/O:
- *
- *  libusb_bulk()               ...  Issue synchronous bulk request
- *  libusb_bulk_submit()        ...  Issue asynchronous bulk request
- *
- *   Arguments:
- *	bulk              -  Pointer to USB bulk request
- *                              (EP direction determines R/W)
- *	transferred_bytes - Actually transferred bytes
- *	callback          - Callback handler
- *	arg               - Caller defined
- *   
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */
-int libusb_bulk(struct libusb_bulk_request *bulk, size_t *transferred_bytes);
-int libusb_bulk_submit(struct libusb_bulk_request *bulk,
-	libusb_bulk_callback_t callback, void *arg);
-
-/* Isochronous */
-struct libusb_isoc_request {
-  libusb_dev_handle_t dev;
-  unsigned char endpoint;
-  unsigned int start_frame;
-  unsigned long flags;
-  unsigned int tag;
-  unsigned int num_packets;
-
-  struct libusb_isoc_packet {
-    void *buf;
-    size_t buflen;
-  } *packets;
-};
-
-struct libusb_isoc_result {
-  int status;
-  size_t transferred_bytes;
-};
-
-typedef void (*libusb_isoc_callback_t)(
-	struct libusb_isoc_request *iso,
-	void *arg, unsigned int num_packets,
-	struct libusb_isoc_result *results);
-
-/*
- * Isochronous I/O:
- *
- *  libusb_isoc_submit()        ... Issue asynchronous isochronous request
- *
- *   Arguments:
- *	isoc              - Pointer to USB isoc request
- *                              (EP direction determines R/W)
- *	callback          - Callback handler
- *	arg               - Caller defined
- *
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */
-int libusb_isoc_submit(struct libusb_isoc_request *iso,
-	libusb_isoc_callback_t callback, void *arg);
-
-/*
- * Set default timeout:
- *
- *  libusb_set_default_timeout() .. Set default timeout for a request type
- *
- *   Arguments:
- *	type              - Type of transfer
- *	timeout           - Timeout in milliseconds (-1 == infinite)
- *
- *   Return Values:
- *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
- */
-int libusb_set_default_timeout(libusb_transfer_type_t type, long timeout);
+int32_t libusb_ctrl_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	libusb_ctrl_request_t *ctrl);
+int32_t libusb_intr_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	libusb_intr_request_t *intr);
+int32_t libusb_bulk_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	libusb_bulk_request_t *bulk);
+int32_t libusb_isoc_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	libusb_isoc_request_t *isoc);
 
 /*
  * Abort I/O request:
@@ -968,16 +1077,16 @@ int libusb_set_default_timeout(libusb_transfer_type_t type, long timeout);
  *  libusb_abort() ................ Abort previously submitted I/O request
  *
  *   Arguments:
- *	tag               - User defined tag for request
+ *	handle            - Pointer to request handle
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
- *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
- *	LIBUSB_NO_RESOURCES   - Memory allocation failures
- *	LIBUSB_IO_*           - USB host controller errors
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
  */
-int libusb_abort(unsigned int tag);
+int32_t libusb_abort(libusb_request_handle_t handle);
 
 /*
  * I/O Support:
@@ -986,25 +1095,103 @@ int libusb_abort(unsigned int tag);
  *  libusb_poll() ................. Poll I/O request completion status
  *
  *   Arguments:
- *	num_tags          - Number of tags in list
- *	tags              - Pointer to list of tags
- *	tag               - Tag that has completed
+ *	num_reqs          - Number of req handles in list
+ *	handles           - Pointer to list of request handles
+ *	handle            - Request handle that has completed
  *
  *   Return Values:
  *	LIBUSB_SUCCESS
- *	LIBUSB_FAILURE
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	LIBUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	LIBUSB_NO_RESOURCES     - Memory allocation failures
+ *	LIBUSB_IO_*             - USB host controller errors
+ */
+int32_t libusb_wait(uint32_t num_reqs, libusb_request_handle_t *handles,
+	libusb_request_handle_t *handle);
+int32_t libusb_poll(uint32_t num_reqs, libusb_request_handle_t *handles,
+	libusb_request_handle_t *handle);
+
+
+/*
+ *********************************************************
+ * The following data types and functions are to support
+ * one request/multi-xfer mode
+ *********************************************************
+ */
+
+typedef struct libusb_multi_intr_request {
+	uint8_t		**payloads;	/* array of payload buffer pointers */
+	uint32_t	*lengths;	/* array of payload buffer lengths */
+	uint32_t	num_bufs;	/* buffer numbers */
+	uint32_t	rp;		/* index of buffer to read */
+	uint32_t	wp;		/* index of buffer to write */
+	uint16_t	interval;
+	uint32_t	timeout;
+	uint32_t	flags;
+} libusb_multi_intr_request_t;
+
+typedef struct libusb_multi_bulk_request {
+	uint8_t		**payloads;	/* array of payload buffer pointers */
+	uint32_t	*lengths;	/* array of payload buffer lengths */
+	uint32_t	num_bufs;	/* buffer numbers */
+	uint32_t	rp;		/* index of buffer to read */
+	uint32_t	wp;		/* index of buffer to write */
+	uint32_t	timeout;
+	uint32_t	flags;
+} libusb_multi_bulk_request_t;
+
+typedef struct libusb_multi_isoc_request {
+	uint32_t	start_frame;
+	uint32_t	flags;
+	libusb_isoc_pkts_t	*pkts;	/* array of pkts pointers */
+	uint32_t	num_pkts;	/* number of pkts pointers */
+	uint32_t	rp;		/* index of pkts to read */
+	uint32_t	wp;		/* index of pkts to write */
+} libusb_multi_isoc_request_t;
+
+struct libusb_multi_request_handle {
+	libusb_dev_handle_t	dev;
+	uint8_t			interface;
+	uint8_t			endpoint;
+	libusb_transfer_type_t	type;
+
+	union libusb_multi_request {
+		libusb_multi_intr_request_t	*intr;
+		libusb_multi_bulk_request_t	*bulk;
+		libusb_multi_isoc_request_t	*isoc;
+	} req;
+
+	/* callback function */
+	int32_t	(*cb)(struct libusb_multi_request_handle *handle,
+		uint32_t bufidx, libusb_request_result_t *result);
+
+	void	*arg; /* additional arg for callback */
+};
+
+typedef struct libusb_multi_request_handle *libusb_multi_request_handle_t;
+
+/*
+ * one request/multi-xfer I/O functions:
+ *
+ *  libusb_start()               .... Start multi-xfer mode I/O
+ *  libusb_stop()                .... Stop multi-xfer mode I/O
+ *
+ *   Arguments:
+ *	handle            - Pointer to multi-xfer request handle
+ *
+ *   Return Values:
+ *	LIBUSB_SUCCESS
+ *	LIBUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
  *	LIBUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
  *	LIBUSB_NO_RESOURCES   - Memory allocation failures
  *	LIBUSB_IO_*           - USB host controller errors
  */
-int libusb_wait(unsigned int num_tags, unsigned int *tags,
-	unsigned int *tag);
-int libusb_poll(unsigned int num_tags, unsigned int *tags,
-	unsigned int *tag);
+int32_t libusb_start(libusb_multi_request_handle_t handle);
+int32_t libusb_stop(libusb_multi_request_handle_t handle);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __USB_H__ */
+#endif /* __LIBUSB_H__ */
 
