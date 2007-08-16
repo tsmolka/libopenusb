@@ -6,8 +6,6 @@
  *
  * Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
  *
- * Copyright 2007 Peter Stuge <stuge-libusb@cdy.org>
- *
  * Copyright 2004-2007 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  *
@@ -149,8 +147,8 @@ typedef struct usb_endpoint_desc {
 	uint8_t		bmAttributes;
 	uint16_t	wMaxPacketSize;
 	uint8_t		bInterval;
-	uint8_t		bRefresh;
-	uint8_t		bSynchAddress;
+	uint8_t		bRefresh; /* AC Int EP */
+	uint8_t		bSynchAddress; /* AC Int EP */
 } usb_endpoint_desc_t;
 
 /* bEndpointAddress for endpoint desc */
@@ -161,10 +159,15 @@ typedef struct usb_endpoint_desc {
 
 /* bmAttributes for endpoint desc */
 #define	USB_ENDPOINT_TYPE_MASK		0x03	/* transfer type mask */
+
+#ifndef USB_ENDPOINT_TYPE_CONTROL
+
 #define	USB_ENDPOINT_TYPE_CONTROL	0x00	/* control transfer */
 #define	USB_ENDPOINT_TYPE_ISOCHRONOUS	0x01	/* isochronous transfer */
 #define	USB_ENDPOINT_TYPE_BULK		0x02	/* bulk transfer */
 #define	USB_ENDPOINT_TYPE_INTERRUPT	0x03	/* interrupt transfer */
+
+#endif
 
 #define	USB_ENDPOINT_SYNC_MASK		0x0c	/* synchronization mask */
 #define	USB_ENDPOINT_SYNC_NONE		0x00	/* no synchronization */
@@ -253,9 +256,14 @@ typedef struct usb_interface_association_desc {
 #define	USB_REQ_SET_DESCRIPTOR		0x07
 #define	USB_REQ_GET_CONFIGURATION	0x08
 #define	USB_REQ_SET_CONFIGURATION	0x09
+
+#ifndef USB_REQ_GET_INTERFACE
+
 #define	USB_REQ_GET_INTERFACE		0x0a
 #define	USB_REQ_SET_INTERFACE		0x0b
 #define	USB_REQ_SYNCH_FRAME		0x0c
+
+#endif
 
 /* Bitmaps for bmRequestType */
 #define	USB_REQ_HOST_TO_DEV		0x00
@@ -333,10 +341,10 @@ typedef struct usb_interface_association_desc {
  ********************************
  */
 
-typedef uint64_t libusb_devid_t;
-typedef uint64_t libusb_busid_t;
-typedef uint64_t libusb_handle_t;
-typedef uint64_t libusb_dev_handle_t;
+typedef uint64_t libusb_devid_t; /* every devices in the USB bus has a devid */
+typedef uint64_t libusb_busid_t; /* every bus in a USB host has a busid */
+typedef uint64_t libusb_handle_t; /* every libusb instance has a lib handle */
+typedef uint64_t libusb_dev_handle_t;/* every OPENED USB device has a handle */
 
 typedef enum libusb_event {
 	USB_ATTACH = 0,
@@ -358,13 +366,15 @@ typedef enum libusb_transfer_type {
 	USB_TYPE_ISOCHRONOUS,
 } libusb_transfer_type_t;
 
+#define USB_TYPE_LAST USB_TYPE_ISOCHRONOUS+1
+
 typedef void	(*libusb_event_callback_t)(libusb_handle_t handle,
 	libusb_devid_t devid, libusb_event_t event, void *arg);
 
 typedef void	(*libusb_debug_callback_t)(libusb_handle_t handle,
 	const char *fmt, va_list args);
 
-typedef libusb_dev_data {
+typedef struct libusb_dev_data {
 	libusb_busid_t		busid;
 	libusb_devid_t		devid;
 	uint8_t			bus_address;
@@ -420,7 +430,7 @@ typedef struct libusb_ctrl_request {
 	} setup;
 
 	uint8_t			*payload;
-	uint32_t		length;
+	uint32_t		length; /* platform endian */
 	uint32_t		timeout;
 	uint32_t		flags;
 	libusb_request_result_t	result;
@@ -794,6 +804,7 @@ void libusb_free_device_data(libusb_dev_data_t *data);
 int32_t libusb_get_child_devid(libusb_handle_t handle,
 	libusb_devid_t hub_devid, uint8_t port,
 	libusb_devid_t *child_devid);
+*/
 
 /*
  * Descriptor accessors:
@@ -811,9 +822,9 @@ int32_t libusb_get_child_devid(libusb_handle_t handle,
  *   Arguments:
  *	handle           - Libusb handle
  *	devid            - Device id
- *	type             - Descriptor type
- *	descidx          - Index for config/string desc., zero for others
- *	langid           - Language ID for string desc., zero for others
+ *	type             - descriptor type
+ *	descidx          - index for config/string desc., zero for others
+ *	langid           - language ID for string desc., zero for others
  *	buffer           - Data buffer for raw desc.
  *	buflen           - Length of raw desc.
  *	devdesc          - Pointer to device desc.
