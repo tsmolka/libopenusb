@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include "libusb.h"
+#include "usbi.h"
 
 /*
  * These structures MUST match up to the structures in the kernel. They are
@@ -96,49 +98,109 @@ struct usbk_hub_portinfo {
   unsigned char port[127];	/* port to device num mapping */
 };
 
-#define IOCTL_USB_CONTROL	_IOWR('U', 0, struct usbk_ctrltransfer)
-#define IOCTL_USB_BULK		_IOWR('U', 2, struct usbk_bulktransfer)
-#define IOCTL_USB_RESETEP	_IOR('U', 3, unsigned int)
-#define IOCTL_USB_SETINTF	_IOR('U', 4, struct usbk_setinterface)
-#define IOCTL_USB_SETCONFIG	_IOR('U', 5, unsigned int)
-#define IOCTL_USB_GETDRIVER	_IOW('U', 8, struct usbk_getdriver)
-#define IOCTL_USB_SUBMITURB	_IOR('U', 10, struct usbk_urb)
-#define IOCTL_USB_DISCARDURB	_IO('U', 11)
-#define IOCTL_USB_REAPURB	_IOW('U', 12, void *)
-#define IOCTL_USB_REAPURBNDELAY	_IOW('U', 13, void *)
-#define IOCTL_USB_CLAIMINTF	_IOR('U', 15, unsigned int)
-#define IOCTL_USB_RELEASEINTF	_IOR('U', 16, unsigned int)
-#define IOCTL_USB_CONNECTINFO	_IOW('U', 17, struct usbk_connectinfo)
-#define IOCTL_USB_IOCTL		_IOWR('U', 18, struct usbk_ioctl)
-#define IOCTL_USB_HUB_PORTINFO	_IOR('U', 19, struct usbk_hub_portinfo)
-#define IOCTL_USB_RESET		_IO('U', 20)
-#define IOCTL_USB_CLEAR_HALT	_IOR('U', 21, unsigned int)
-#define IOCTL_USB_DISCONNECT	_IO('U', 22)
-#define IOCTL_USB_CONNECT	_IO('U', 23)
 
+#define USB_MAX_DEVICES_PER_BUS 128
+#define ISOC_URB_MAX_NUM        10
+#define RESUBMIT                1
+#define NO_RESUBMIT             0
+
+/*
+ * IOCTL Definitions
+ */
+#define IOCTL_USB_CONTROL	      _IOWR('U', 0, struct usbk_ctrltransfer)
+#define IOCTL_USB_BULK		      _IOWR('U', 2, struct usbk_bulktransfer)
+#define IOCTL_USB_RESETEP	      _IOR('U', 3, unsigned int)
+#define IOCTL_USB_SETINTF	      _IOR('U', 4, struct usbk_setinterface)
+#define IOCTL_USB_SETCONFIG     _IOR('U', 5, unsigned int)
+#define IOCTL_USB_GETDRIVER     _IOW('U', 8, struct usbk_getdriver)
+#define IOCTL_USB_SUBMITURB     _IOR('U', 10, struct usbk_urb)
+#define IOCTL_USB_DISCARDURB    _IO('U', 11)
+#define IOCTL_USB_REAPURB       _IOW('U', 12, void *)
+#define IOCTL_USB_REAPURBNDELAY _IOW('U', 13, void *)
+#define IOCTL_USB_CLAIMINTF     _IOR('U', 15, unsigned int)
+#define IOCTL_USB_RELEASEINTF   _IOR('U', 16, unsigned int)
+#define IOCTL_USB_CONNECTINFO   _IOW('U', 17, struct usbk_connectinfo)
+#define IOCTL_USB_IOCTL         _IOWR('U', 18, struct usbk_ioctl)
+#define IOCTL_USB_HUB_PORTINFO  _IOR('U', 19, struct usbk_hub_portinfo)
+#define IOCTL_USB_RESET         _IO('U', 20)
+#define IOCTL_USB_CLEAR_HALT    _IOR('U', 21, unsigned int)
+#define IOCTL_USB_DISCONNECT    _IO('U', 22)
+#define IOCTL_USB_CONNECT       _IO('U', 23)
 /*
  * IOCTL_USB_HUB_PORTINFO, IOCTL_USB_DISCONNECT and IOCTL_USB_CONNECT
  * all work via IOCTL_USB_IOCTL
  */
 
+/* Thread Functions */
+void *poll_io(void *usbihdl);
+void *poll_events(void *unused);
+
+/* Helper Functions */
+struct usbi_io* isoc_io_clone(struct usbi_io *io);
+int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io);
+int32_t io_complete(struct usbi_dev_handle *hdev);
+int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc);
+int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
+                          uint16_t devnum, uint32_t max_children);
+int32_t device_is_new(struct usbi_device *idev, uint16_t devnum);
+int32_t check_usb_path(const char *dirname);
+int32_t translate_errno(int errnum);
+int32_t wakeup_io_thread(struct usbi_dev_handle *hdev);
+
+
 /* Linux specific members for various internal structures */
+#if 0
 #define USBI_BUS_PRIVATE \
 	char filename[PATH_MAX + 1]; \
 	struct usbi_device *dev_by_num[USB_MAX_DEVICES_PER_BUS];
+#endif
 
+struct usbi_bus_private
+{
+	char                filename[PATH_MAX + 1];
+	struct usbi_device  *dev_by_num[USB_MAX_DEVICES_PER_BUS];
+};
+
+#if 0
 #define USBI_DEVICE_PRIVATE \
 	char filename[PATH_MAX + 1]; /* full path to usbfs file */	\
 	time_t mtime; /* modify time to detect dev changes */		\
 	int found; /* flag to denote if we saw this dev during rescan */
+#endif 
 
+struct usbi_dev_private
+{
+	char    filename[PATH_MAX + 1];   /* full path to usbfs file */
+	time_t  mtime;                    /* modify time to detect dev changes */
+	int     found;                    /* flag to denote if we saw this dev during rescan */
+};
+
+
+#if 0
 #define USBI_DEV_HANDLE_PRIVATE \
 	int fd;		/* file descriptor for usbdevfs entry */	\
 	struct list_head io_list; /* list for devs with pending IO */	\
 	struct list_head ios; /* list of IOs for this devices */	\
 	struct timeval tvo; /* next timeout for IOs on this dev */
+#endif
 
+struct usbi_dev_hdl_private
+{
+	int             fd;        /* file descriptor for usbdevfs entry */
+  pthread_t       io_thread; /* thread for processing io requests */
+  struct timeval  tvo;       /* the next soonest timeout */ 
+};
+
+#if 0
 #define USBI_IO_HANDLE_PRIVATE \
 	struct usbk_urb urb;
+#endif 
+
+struct usbi_io_private
+{
+	struct usbk_urb urb;        /* URB for IOCTLs */
+};
+
 
 #define LIBUSB_HAS_GET_DRIVER_NP 1
 #define LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP 1
