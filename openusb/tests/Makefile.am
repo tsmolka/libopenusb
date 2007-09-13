@@ -1,8 +1,9 @@
 
 INCLUDES = -I$(top_srcdir)/src
 
-noinst_PROGRAMS = testlibusb
+noinst_PROGRAMS = testopenusb
 
-testlibusb_SOURCES = testlibusb.c ezusb.c
-testlibusb_LDADD = $(top_builddir)/src/libusb.la @OSLIBS@
+testopenusb_SOURCES = testopenusb.c
+testopenusb_LDADD = $(top_builddir)/src/libusb.la @OSLIBS@ -lusb
 
+#testopenusb_la_LDFLAGS = -lusb
