@@ -23,10 +23,352 @@
 #include "usbi.h"
 #include "sunos.h"
 
-#if 1
+#if 1 /* hal */
+
+#include <glib.h>
+#include <dbus/dbus-glib-lowlevel.h>
+#include <dbus/dbus-glib.h>
+#include <libhal.h>
+
+static LibHalContext *hal_ctx;
+static char *show_device = NULL;
+GMainLoop *event_loop;
+
+pthread_t hotplug_thread;
+
+struct usbi_device *find_device_by_syspath(char *path)
+{
+	struct usbi_device *idev;
+	char newpath[PATH_MAX+1];
+	
+
+	snprintf(newpath, PATH_MAX, "/devices%s", path);
+
+//	usbi_debug(NULL, 4, "searching %s  newpath %s", path, newpath);
+
+	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
+		if ((strcmp(path, idev->sys_path) == 0) ||
+			strcmp(newpath, idev->sys_path) == 0) {
+			return idev;
+		}
+	}
+
+	return NULL;
+}
+
+
+struct usbi_device *find_device_by_udi(const char *udi)
+{
+	struct usbi_device *idev = NULL;
+	
+	usbi_debug(NULL, 4, "searching device: %s", udi);
+	
+	pthread_mutex_lock(&usbi_devices.lock);
+
+	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
+#if 0
+	usbi_debug(NULL, 4, "priv = %p", idev->priv);
+
+	usbi_debug(NULL, 4, "udi=%s\n priv->udi=%p", udi, idev->priv->udi);
+#endif
+		if (!idev->priv->udi) {
+			continue;
+		}
+
+		if (strcmp(udi, idev->priv->udi) == 0) {
+	usbi_debug(NULL, 4, "device: %s", idev->sys_path);
+			pthread_mutex_unlock(&usbi_devices.lock);
+			return idev;
+		}
+	}
+
+	pthread_mutex_unlock(&usbi_devices.lock);
+
+	return NULL;
+}
+
+static void
+set_device_udi(void)
+{
+	int i;
+	int num_devices;
+	char **device_names;
+	DBusError error;
+	char *devpath;
+	struct usbi_device *idev;
+
+//	usbi_debug(NULL, 4, "Begin");
+
+	dbus_error_init (&error);
+
+	device_names = libhal_get_all_devices (hal_ctx, &num_devices, &error);
+
+	if (device_names == NULL) {
+		LIBHAL_FREE_DBUS_ERROR (&error);
+		usbi_debug(NULL, 1, "Couldn't obtain list of devices\n");
+		return;
+	}
+
+//	usbi_debug(NULL, 1, "devices number:%d", num_devices);
+
+	for (i = 0;i < num_devices;i++) {
+
+		devpath = libhal_device_get_property_string (hal_ctx,
+				device_names[i], "solaris.devfs_path", &error);
+
+		if (dbus_error_is_set (&error)) {
+			/* Free the error (which include a dbus_error_init())
+			   This should prevent errors if a call above fails */
+			usbi_debug(NULL, 4, "get device syspath error");
+			dbus_error_free (&error);
+		}
+
+		idev = find_device_by_syspath(devpath);
+		if (idev) {
+			usbi_debug(NULL, 4, "set udi: %s of device: %s",
+				device_names[i], devpath);
+			if (idev->priv->udi == NULL) {
+			/*
+			 * if the device is re-inserted before internal
+			 * structure getting freed, its udi will be still
+			 * valid
+			 */
+				idev->priv->udi = strdup(device_names[i]);
+			}
+		}
+		
+		libhal_free_string(devpath);
+	}
+
+//	usbi_debug(NULL, 4, "End");
+
+	libhal_free_string_array (device_names);
+}
+
+void process_new_device(const char *udi)
+{
+	/* assign new device id,
+	 * get device descripotr?
+	 * fill device structures
+	 * add a callback if ATTACH callback is set
+	 */
+	struct usbi_device  *pidev;
+	char *parent;
+	DBusError error;
+	char *devpath;
+	char *subsys;
+
+	dbus_error_init(&error);
+
+	devpath = libhal_device_get_property_string(hal_ctx,
+			udi, "solaris.devfs_path", &error);
+	if (dbus_error_is_set(&error)) {
+		dbus_error_free(&error);
+		return;
+	}
+
+	subsys = libhal_device_get_property_string(hal_ctx,
+			udi, "info.subsystem", &error);
+	if (dbus_error_is_set(&error)) {
+		libhal_free_string(devpath);
+		dbus_error_free(&error);
+		return;
+	}
+	
+	usbi_debug(NULL, 4, "subsys = %s", subsys);
+
+	if (strcmp(subsys, "usb_device") != 0) {
+	/* we only care usb device */
+		libhal_free_string(subsys);
+		dbus_error_free(&error);
+		return;
+	}
+
+	parent = libhal_device_get_property_string(hal_ctx, udi,
+		"info.parent", NULL);
+	usbi_debug(NULL, 4, "parent: %s");
+
+	pidev = find_device_by_udi(parent); /* get parent's usbi_device */
+	if (!pidev) {
+		goto add_fail;
+	}
+
+	solaris_refresh_devices(pidev->bus);
+
+#if 0
+	idev = calloc(sizeof(struct usbi_device), 1);
+	if (!idev) {
+		goto add_fail;
+	}
+
+	idev->priv = calloc(sizeof(struct usbi_dev_private), 1);
+	if (!idev->priv) {
+		free(idev);
+		goto add_fail;
+	}
+	idev->priv->info.ep0_fd = -1;
+        idev->priv->info.ep0_fd_stat = -1;
+
+	snprintf(idev->sys_path, PATH_MAX, "%s", devpath); 
+	
+	idev->priv->udi = strdup(udi);
+	idev->parent = pidev;
+
+	usbi_add_device(pidev->bus, idev);
+#endif
+
+add_fail:
+	libhal_free_string(parent);
+	libhal_free_string(devpath);
+	libhal_free_string(subsys);
+}
+
+/*
+ * Invoked when a device is added to the Global Device List.
+ *
+ */
+static void
+device_added (LibHalContext *ctx, const char *udi)
+{
+	struct usbi_device *idev = NULL;
+	struct usbi_handle *handle, *thdl;
+
+	usbi_debug(NULL, 4, "Event: device_added, udi='%s'", udi);
+
+	idev = find_device_by_udi(udi);
+	if (idev) {
+		/* old device re-inserted */
+		usbi_debug(NULL, 4, "old device: %d", (int)idev->devid);
+		pthread_mutex_lock(&usbi_handles.lock);
+		list_for_each_entry_safe(handle, thdl, &usbi_handles.head,
+			list) {
+			/* every libusb instance should get notification
+			 * of this event
+			 */
+			usbi_add_event_callback(handle, idev->devid,
+				USB_ATTACH);
+		}
+		pthread_mutex_unlock(&usbi_handles.lock);
+
+	} else {
+		usbi_debug(NULL, 4, "new device");
+		process_new_device(udi);
+		set_device_udi();
+	}
+}
+
+
+/*
+ * Invoked when a device is removed from the Global Device List.
+ *
+ */
+static void
+device_removed (LibHalContext *ctx, const char *udi)
+{
+	struct usbi_device *idev = NULL;
+	struct usbi_handle *hdl;
+
+	usbi_debug(NULL, 4, "Event: device_removed, udi='%s'", udi);
+
+	idev = find_device_by_udi(udi);
+
+	if (idev) {
+		/* add a callback if REMOVE callback is set */ 
+		pthread_mutex_lock(&usbi_handles.lock);
+		list_for_each_entry(hdl, &usbi_handles.head, list) {
+			pthread_mutex_unlock(&usbi_handles.lock);
+			usbi_add_event_callback(hdl, idev->devid, USB_REMOVE);
+			pthread_mutex_lock(&usbi_handles.lock);
+		}
+		pthread_mutex_unlock(&usbi_handles.lock);
+
+	} else {
+		/* we don't care */
+	}
+}
+
+
+
+/*
+ * hotplug event monitoring thread
+ */
+int
+hal_hotplug_event_thread(void)
+{
+	DBusError error;
+	DBusConnection *conn;
+	GMainContext *context;
+	
+	usbi_debug(NULL, 4, "start hotplug thread");
+
+	context = g_main_context_new();
+	event_loop = g_main_loop_new (context, FALSE);
+
+	dbus_error_init (&error);
+	conn = dbus_bus_get (DBUS_BUS_SYSTEM, &error);
+	if (conn == NULL) {
+		fprintf (stderr, "error: dbus_bus_get: %s: %s\n",
+				error.name, error.message);
+		LIBHAL_FREE_DBUS_ERROR (&error);
+		return 1;
+	}
+
+	dbus_connection_setup_with_g_main (conn, context);
+
+	if ((hal_ctx = libhal_ctx_new ()) == NULL) {
+		fprintf (stderr, "error: libhal_ctx_new\n");
+		return 1;
+	}
+	if (!libhal_ctx_set_dbus_connection (hal_ctx, conn)) {
+		fprintf (stderr,
+			"error: libhal_ctx_set_dbus_connection: %s: %s\n",
+				error.name, error.message);
+		return 1;
+	}
+	if (!libhal_ctx_init (hal_ctx, &error)) {
+		if (dbus_error_is_set(&error)) {
+			fprintf (stderr, "error: libhal_ctx_init: %s: %s\n",
+			error.name, error.message);
+			LIBHAL_FREE_DBUS_ERROR (&error);
+		}
+		fprintf (stderr, "Could not initialise connection to hald.\n"
+				"Normally this means the HAL daemon (hald) is"
+				"not running or not ready.\n");
+		return 1;
+	}
+
+	set_device_udi();
+
+	libhal_ctx_set_device_added (hal_ctx, device_added);
+	libhal_ctx_set_device_removed (hal_ctx, device_removed);
+
+	/* run the main loop */
+	if (event_loop != NULL) {
+
+		usbi_debug(NULL, 4, "hotplug thread running");
+		g_main_loop_run (event_loop);
+
+		pthread_testcancel();
+	}
+
+	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE)
+		LIBHAL_FREE_DBUS_ERROR (&error);
+	libhal_ctx_free (hal_ctx);
+
+	dbus_connection_unref (conn);
+	
+	g_main_context_unref(context);
+	g_main_context_release(context);
+
+	if (show_device)
+		free(show_device);
+
+	return 0;
+}
+#endif
 
 static int busnum = 0;
-static di_node_t root_node;
+//static di_node_t root_node;
 static di_devlink_handle_t devlink_hdl;
 
 static pthread_t cb_thread;
@@ -34,77 +376,6 @@ static pthread_mutex_t cb_io_lock;
 static pthread_cond_t cb_io_cond;
 static struct list_head cb_ios = {.prev = &cb_ios, .next = &cb_ios};
 static int32_t solaris_back_inited;
-
-#if 0
-struct sunos_aio {
-	aio_result_t result; /* Keep its position */
-	struct usbi_io *io;
-};
-
-void *pollaio(void *arg) 
-{
-	struct timeval timeout = {0,0};
-	aio_result_t *res;
-	struct sunos_aio *aio;
-	libusb_request_result_t *result = NULL;
-	libusb_request_handle_t req;
-	struct usbi_io *io = NULL;
-
-	while(1) {
-		if ( (res = aiowait(&timeout)) == (aio_result_t *)-1 ) {
-			continue;
-		}
-		if (res == (aio_result_t *)0) {
-			continue;
-		}
-
-		aio = (struct sunos_aio *)res;
-		io = aio->io;
-
-		req = aio->io->phandle;
-		switch(req->type) {
-			case USB_TYPE_CONTROL:
-				result = &req->req.ctrl->result;
-				break;
-			case USB_TYPE_INTERRUPT:
-				result = &req->req.intr->result;
-				break;
-			case USB_TYPE_BULK:
-				result = &req->req.bulk->result;
-				break;
-			case USB_TYPE_ISOCHRONOUS:
-			default:
-				break;
-		}
-		result->status = res->aio_errno;
-		result->transferred_bytes = res->aio_return;
-
-		list_del(&io->list); /* remove it from original list */
-		io->status = USBI_IO_COMPLETED;
-		list_add(&io->list, &io->dev->lib_hdl->complete_list);
-	}
-}
-#endif
-
-/*
-static int device_is_new(struct usbi_device *idev, unsigned short devnum)
-{
-  char filename[PATH_MAX + 1];
-  struct stat st;
-
-  snprintf(filename, sizeof(filename) - 1, "%s/%03d", idev->bus->filename,
-  	devnum);
-  stat(filename, &st);
-
-  if (st.st_mtime == idev->mtime)
-    return 0;
-
-  usbi_debug(1, "device %s previously existed, but mtime has changed",
-	filename);
-
-  return 0;
-}
-*/
 
 
 /*
@@ -142,6 +413,7 @@ static int solaris_poll_devstat(void *arg)
 		if(fds[0].revents & POLLIN) {
 			if (read(statfd, &status, sizeof(status)) 
 				!= sizeof(status)) {
+				close(statfd);
 				return(LIBUSB_SYS_FUNC_FAILURE);
 			}
 			switch(status) {
@@ -149,18 +421,23 @@ static int solaris_poll_devstat(void *arg)
 				/*device is disconnected */
 					usbi_add_event_callback(hdev->lib_hdl,
 						idev->devid, USB_REMOVE);
-					return(0);
+
+					close(statfd);
+					return 0;
 				case USB_DEV_STAT_RESUMED:
 				/*device is resumed */
 				case USB_DEV_STAT_UNAVAILABLE:
 					usbi_add_event_callback(hdev->lib_hdl,
 						idev->devid, USB_RESUME);
-					break;
+
+					close(statfd);
+					return 0;
 				default:
 					break;
 			}
 		}
 	}
+
 }
 
 /*
@@ -542,6 +819,7 @@ int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
 			*buffer = (char *)descrp;
 			*buflen = USBI_DEVICE_DESC_SIZE;
 
+			close(fd);
 			return 0;
 
 		case USB_DESC_TYPE_CONFIG:
@@ -584,6 +862,7 @@ int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
 			}
 			*buflen = size;
 
+			close(fd);
 			return 0;
 
 		case USB_DESC_TYPE_STRING:
@@ -716,35 +995,61 @@ get_minor_node_link(di_node_t node, struct usbi_device *idev)
 	}
 }
 
+/*
+ * start from node, recursively set up device info
+ */
 static void
 create_new_device(di_node_t node, struct usbi_device *pdev,
 	struct usbi_bus *ibus)
 {
 	di_node_t cnode;
 	struct usbi_device *idev;
+
+	struct usbi_device *tmpdev = NULL;
+
 	int *nport_prop, *port_prop, *addr_prop, n;
 	char *phys_path;
 	
 	usbi_debug(NULL,4, "check %s%d", di_driver_name(node),
 		di_instance(node));
-	idev = (struct usbi_device *)malloc(sizeof (struct usbi_device));
-	if (idev == NULL)
-		return;
 
-	memset(idev, 0, sizeof (struct usbi_device));
-	
-	idev->priv = calloc(sizeof(struct usbi_dev_private), 1);
-	if (!idev->priv) {
-		free(idev);
-		return;
+	phys_path = di_devfs_path(node);
+
+#if 1
+	usbi_debug(NULL, 4, "device path: %s", phys_path);
+	tmpdev = find_device_by_syspath(phys_path);
+	if (tmpdev) {
+		/* 
+		 * this device was already there, use the old structure
+		 * But refresh its data.
+		 */
+		usbi_debug(NULL, 4, "an old device already there");
+		idev = tmpdev;
+	} else { 
+		/* new device */
+#endif
+		idev = (struct usbi_device *)malloc(sizeof (struct usbi_device));
+		if (idev == NULL)
+			return;
+
+		memset(idev, 0, sizeof (struct usbi_device));
+
+		idev->priv = calloc(sizeof(struct usbi_dev_private), 1);
+		if (!idev->priv) {
+			free(idev);
+			return;
+		}
+
+		list_init(&idev->dev_list);
+		list_init(&idev->bus_list);
 	}
 
-	list_init(&idev->dev_list);
-	list_init(&idev->bus_list);
-
 	if (node == ibus->priv->node) { /* root node */
+		usbi_debug(NULL, 4, "root node");
+
 		idev->devnum = 1;
 		idev->parent = NULL;
+		idev->found = 1;
 	} else {
 		n = di_prop_lookup_ints(DDI_DEV_T_ANY, node,
 		    "assigned-address", &addr_prop);
@@ -782,8 +1087,11 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 
 	if (n == 1) {
 		idev->nports = *nport_prop;
-		idev->children = malloc(idev->nports *
-		    sizeof (idev->children[0]));
+
+		if (!tmpdev) { /* new device */
+			idev->children = malloc(idev->nports *
+					sizeof (idev->children[0]));
+		}
 		if (idev->children == NULL) {
 			free(idev);
 
@@ -795,10 +1103,20 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 	} else {
 		idev->nports = 0;
 	}
-
+/*
 	phys_path = di_devfs_path(node);
+*/
 	snprintf(idev->sys_path, sizeof (idev->sys_path), "/devices%s",
 	    phys_path);
+
+#if 0 //chenl
+	usbi_debug(NULL, 4, "chenl: %s", phys_path);
+	tmpdev = find_device_by_syspath(phys_path);
+	if (tmpdev) {
+		/* this device was already there */
+		usbi_debug(NULL, 4, "chenl already there");
+	}
+#endif
 	di_devfs_path_free(phys_path);
 
 	get_minor_node_link(node, idev);
@@ -812,9 +1130,12 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 	} else {
 		pdev->children[*port_prop-1] = idev;
 	}
+	
+	if (!tmpdev) {
+	/* new device only */
+		usbi_add_device(ibus, idev);
+	}
 
-	//ibus->dev_by_num[idev->devnum] = idev;
-	usbi_add_device(ibus, idev);
 	idev->found = 1;
 	idev->priv->info.ep0_fd = -1;
 	idev->priv->info.ep0_fd_stat = -1;
@@ -836,7 +1157,9 @@ static int
 solaris_refresh_devices(struct usbi_bus *ibus)
 {
 	struct usbi_device *idev, *tidev;
+	di_node_t root_node;
 
+	usbi_debug(NULL, 4, "Begin:%p %s", ibus, ibus->sys_path);
 	/* Search devices from root-hub */
 	if ((root_node = di_init(ibus->sys_path, DINFOCPYALL)) ==
 	    DI_NODE_NIL) {
@@ -955,6 +1278,8 @@ detect_root_hub(di_node_t node, void *arg)
 static int
 solaris_find_busses(struct list_head *busses)
 {
+	di_node_t root_node;
+
 	/* Search dev_info tree for root-hubs */
 	if ((root_node = di_init("/", DINFOCPYALL)) == DI_NODE_NIL) {
 		usbi_debug(NULL, 1, "di_init() failed: %s", strerror(errno));
@@ -1355,7 +1680,16 @@ static int
 solaris_close(struct usbi_dev_handle *hdev)
 {
 	int i;
-	char buf[1]={1};
+
+	/* terminate all working threads of this handle */
+	pthread_cancel(hdev->priv->pollthr);
+	pthread_join(hdev->priv->pollthr, NULL);
+
+	pthread_cancel(hdev->priv->timeout_thr);
+
+	/* wait for timeout thread exiting */
+	pthread_join(hdev->priv->timeout_thr, NULL);
+	usbi_debug(hdev->lib_hdl, 4, "timeout thread exit");
 
 	for(i = 0; i < USBI_MAXINTERFACES ; i++) {
 		solaris_release_interface(hdev, i);
@@ -1367,12 +1701,6 @@ solaris_close(struct usbi_dev_handle *hdev)
 	pthread_mutex_lock(&hdev->lock);
 	hdev->state = USBI_DEVICE_CLOSING;
 	pthread_mutex_unlock(&hdev->lock);
-
-	/* terminate all working threads of this handle */
-	pthread_cancel(hdev->priv->pollthr);
-	pthread_cancel(hdev->priv->timeout_thr);
-
-	write(hdev->event_pipe[1], buf, 1);
 
 	free(hdev->priv);
 	return (LIBUSB_SUCCESS);
@@ -1563,8 +1891,8 @@ solaris_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	data[3] = (ctrl->setup.wValue >> 8) & 0xFF;
 	data[4] = ctrl->setup.wIndex & 0xFF;
 	data[5] = (ctrl->setup.wIndex >> 8) & 0xFF;
-	data[6] = libusb_cpu_to_le16(ctrl->length) & 0xFF;
-	data[7] = (libusb_cpu_to_le16(ctrl->length) >> 8) & 0xFF;
+	data[6] = ctrl->length & 0xFF;
+	data[7] = (ctrl->length >> 8) & 0xFF;
 
 	usbi_debug(hdev->lib_hdl, 4, "ep0:data%d ,stat%d",hdev->priv->eps[0].datafd,
 		hdev->priv->eps[0].statfd);
@@ -2100,7 +2428,7 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		return (LIBUSB_NO_RESOURCES);
 	}
 
-	usbi_debug(hdev->lib_hdl, 4, "endpoint:%02x",ep_addr);
+	usbi_debug(hdev->lib_hdl, 4, "endpoint:%02x, len=%d", ep_addr, len);
 	memset(buf, 0, len);
 
 	/* isoc packet header */
@@ -2186,14 +2514,15 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 			return (LIBUSB_PLATFORM_FAILURE);
 		}
 		
-		usbi_debug(hdev->lib_hdl, 4, "Read isoc data");
+		usbi_debug(hdev->lib_hdl, 4, "Read isoc data: n_pkt=%d",n_pkt);
 
 		packet = isoc->pkts.packets;
 		p = buf;
 		p += n_pkt * sizeof(struct usbk_isoc_pkt_descr);
 
-		for(pkt = 0;pkt < n_pkt; pkt++) {
-			usbi_debug(hdev->lib_hdl, 4, "packet %d",pkt);
+		for(pkt = 0; pkt < n_pkt; pkt++) {
+			usbi_debug(hdev->lib_hdl, 4, "packet: %d, len: %d", pkt,
+					packet[pkt].length);
 			memcpy(packet[pkt].payload, p, packet[pkt].length); 
 			p += packet[pkt].length;
 			isoc->isoc_results[pkt].status = 
@@ -2393,6 +2722,20 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 	}
 #endif
 
+#if 1 //hal
+	ret = pthread_create(&hotplug_thread, NULL,
+		(void *) hal_hotplug_event_thread, NULL);
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "unable to create polling callback thread"
+		    "(ret = %d)", ret);
+		pthread_cond_destroy(&cb_io_cond);
+		pthread_mutex_destroy(&cb_io_lock);
+
+		return (LIBUSB_PLATFORM_FAILURE);
+
+	}
+#endif
+
 	solaris_back_inited++;
 
 	usbi_debug(NULL, 4, "End");
@@ -2408,6 +2751,12 @@ void solaris_fini(struct usbi_handle *hdl)
 	pthread_cancel(cb_thread); /*stop this thread */
 	pthread_mutex_destroy(&cb_io_lock);
 	pthread_cond_destroy(&cb_io_cond);
+
+	if (solaris_back_inited == 1) {
+		usbi_debug(NULL, 4, "stop hotplug thread");
+		g_main_loop_quit(event_loop);
+		pthread_cancel(hotplug_thread);
+	}
 	solaris_back_inited--;
 	return;
 }
@@ -2444,4 +2793,3 @@ struct usbi_backend_ops backend_ops = {
 	},
 };
 
-#endif

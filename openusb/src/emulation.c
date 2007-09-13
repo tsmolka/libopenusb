@@ -10,8 +10,11 @@
 #include <pthread.h>
 #include <errno.h>
 
-#include "libusb.h"
 #include "usbi.h"
+
+#ifdef HAVE_CONFIG_H
+#include "config.h" /* for platform specific stuff */
+#endif
 
 /*
  * Libusb1.0 to 0.1.x conversion layer
@@ -118,20 +121,34 @@ void usb_set_debug(int level)
 	libusb_set_debug(wr_handle, level, 0, NULL);
 }
 
+/*
+ * some 0.1.x applications, e.g.coldsync, can't recognize multiple buses.
+ * To make such applications still working without modification, we keep
+ * single bus
+ */
 int usb_find_busses(void)
 {
 	/* do nothing, bus already initialized in usbi_init_common() */	
 
 	/* need to map internal bus to 0.1 exported bus */
-	struct usbi_bus *ibus;
-	struct usb_bus *bus, *nbus;
-	int bus_cnt = 0;
+	struct usb_bus *bus;
 	
 	if (usb_busses != NULL) {
 	/* already initialized */
 		return 0;
 	}
-	
+
+	if ((bus = calloc(sizeof(*bus), 1)) == NULL) {
+		return(wr_error(ENOMEM));
+	}
+
+#ifdef SUNOS_API
+	strncpy(bus->dirname, "/dev/usb/", sizeof(bus->dirname));
+#endif
+	usb_busses = bus;
+
+	return 1;
+#if 0	
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
@@ -165,9 +182,9 @@ int usb_find_busses(void)
 		}
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
-
 	wr_error_str(0,"find_busses number:%d",bus_cnt);
 	return bus_cnt;
+#endif
 }
 
 int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
@@ -236,12 +253,13 @@ int usb_find_devices(void)
 
 	pthread_mutex_lock(&usbi_buses.lock);	
 	bus = usb_busses;
+
 	while(bus) {
 
 		list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
-
+#if 0
 			if(strcmp(ibus->sys_path, bus->dirname) == 0) {
-
+#endif
 				if ((ret = wr_create_devices(bus, ibus)) >= 0) {
 					dev_cnt += ret;
 				} else {
@@ -253,9 +271,11 @@ int usb_find_devices(void)
 					pthread_mutex_unlock(&usbi_buses.lock);	
 					return -1;
 				}
+#if 0
 			}
+#endif
 		}
-
+		usbi_debug(NULL, 1, "bus: %s", bus->dirname);
 		bus = bus->next;
 	}
 
@@ -399,10 +419,26 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
 	struct usb_config_descriptor *pcfg;
 	usb_config_desc_t *picfg;
 	struct usbi_config *config;
-#if 0
+
+#if 0 /* get descriptors */
 	char *buffer; /* raw configuration descriptor buffer */
 	uint16_t buflen;
+
 	int ret;
+	libusb_dev_handle_t udev;
+	struct usbi_dev_handle *hdev;
+
+	ret = libusb_open_device(wr_handle, idev->devid, 0, &udev);
+	
+	if (ret >= 0) {
+		hdev = usbi_find_dev_handle(udev);
+		usbi_fetch_and_parse_descriptors(hdev);
+
+		libusb_close_device(udev);
+	} else {
+		return -1;
+	}
+
 #endif
 
 	idev = usbi_find_device_by_id(devid);
@@ -457,7 +493,13 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
 		pcfg->iConfiguration = picfg->iConfiguration;
 		pcfg->bmAttributes = picfg->bmAttributes;
 		pcfg->MaxPower = picfg->bMaxPower;
-		
+
+#if 0
+		if (config->extralen) {
+			pcfg->extra = malloc(config->extralen);
+			if(a )
+		}
+#endif		
 		/* begin build up interfaces */
 		num_ifs = config->num_interfaces;
 		if(num_ifs == 0) {
@@ -667,7 +709,6 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 		requesttype, request, index);
 
 	memset(&ctrl, 0, sizeof(ctrl));
-	
 	ctrl.setup.bmRequestType = requesttype;
 	ctrl.setup.bRequest = request;
 	ctrl.setup.wValue = value;
@@ -868,7 +909,7 @@ int usb_get_string_simple(usb_dev_handle *dev, int index,
 }
 
 int usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
-	uchar_t type, uchar_t index, void *buf, int size)
+	uint8_t type, uint8_t index, void *buf, int size)
 {
 	int ret;
 
@@ -887,7 +928,7 @@ int usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
 	return(ret);
 }
 
-int usb_get_descriptor(usb_dev_handle *dev, uchar_t type, uchar_t index,
+int usb_get_descriptor(usb_dev_handle *dev, uint8_t type, uint8_t index,
 	void *buf, int size)
 {
 	int ret;
