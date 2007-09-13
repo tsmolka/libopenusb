@@ -80,6 +80,8 @@ struct usbi_dev_private {
 	time_t mtime; /* modify time to detect dev changes */
 	int found; /* flag to denote if we saw this dev during rescan */
 	struct usb_dev_info info; /* stored file descrs of eps */
+
+	char *udi; /* HAL udi of this device */
 };
 
 struct ep {

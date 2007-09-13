@@ -88,6 +88,14 @@ void usbi_free_io(struct usbi_io *io)
 		return;
 	}
 
+	pthread_mutex_lock(&io->dev->lock);
+	/* remove it from its original list to prevent
+	 * other threads further processing on it
+	 */
+	list_del(&io->list);
+	pthread_mutex_unlock(&io->dev->lock);
+
+
 	pthread_mutex_lock(&io->lock);
 
 	if (io->status == USBI_IO_INPROGRESS && io->flag == USBI_ASYNC) {
@@ -95,11 +103,6 @@ void usbi_free_io(struct usbi_io *io)
 		if (io->dev->idev->ops->io_cancel) 
 			io->dev->idev->ops->io_cancel(io);
 	}
-
-	/* remove it from its original list to prevent
-	 * other threads further processing on it
-	 */
-	list_del(&io->list);
 
 	write(io->dev->event_pipe[1], buf, 1); /* wakeup timeout thread */
 
@@ -134,13 +137,16 @@ void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
 	pthread_mutex_unlock(&io->lock);
 
 	list_del(&io->list);
-
+	
 	/* Add completion for later retrieval */
-	pthread_mutex_lock(&hdev->lib_hdl->complete_lock);
-	list_add(&io->list, &hdev->lib_hdl->complete_list);
-	hdev->lib_hdl->complete_count++;
-	pthread_cond_signal(&hdev->lib_hdl->complete_cv);
-	pthread_mutex_unlock(&hdev->lib_hdl->complete_lock);
+	if (io->flag == USBI_ASYNC) {
+		/* for synchronous IO, not necessary to put it on this list */
+		pthread_mutex_lock(&hdev->lib_hdl->complete_lock);
+		list_add(&io->list, &hdev->lib_hdl->complete_list);
+		hdev->lib_hdl->complete_count++;
+		pthread_cond_signal(&hdev->lib_hdl->complete_cv);
+		pthread_mutex_unlock(&hdev->lib_hdl->complete_lock);
+	}
 
 	type = io->req->type;
 
@@ -172,9 +178,8 @@ void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
 	pthread_mutex_lock(&io->lock);
 	pthread_cond_broadcast(&io->cond);
 	pthread_mutex_unlock(&io->lock);
-
-	/* FIXME: free to fast here? */
-	usbi_free_io(io);
+	
+	/* remove usbi_free_io */
 }
 
 /*

@@ -899,12 +899,21 @@ int32_t libusb_close_device(libusb_dev_handle_t dev)
 {
 	struct usbi_dev_handle *hdev;
 	int ret;
+	struct usbi_io *io, *tio;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
-
+	
 	/* FIXME: need to abort the outstanding io request first */
+	pthread_mutex_lock(&hdev->lock);
+
+	list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
+		pthread_mutex_unlock(&hdev->lock);
+		usbi_free_io(io);
+		pthread_mutex_lock(&hdev->lock);
+	}
+	pthread_mutex_unlock(&hdev->lock);
 
 	ret = hdev->idev->ops->close(hdev);
 
@@ -975,6 +984,7 @@ int libusb_abort(libusb_request_handle_t phdl)
 	 * leave it up to the backend to handle that appropriately.
 	 */
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
+		pthread_mutex_lock(&hdev->lock);
 		list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
 			if (io->req == phdl) {
 			/* Is it possible for one request to put on multiple
@@ -990,9 +1000,11 @@ int libusb_abort(libusb_request_handle_t phdl)
 
 					/*free io?*/
 				}
+				pthread_mutex_unlock(&hdev->lock);
 				return ret;
 			}
 		}
+		pthread_mutex_unlock(&hdev->lock);
 	}
 
 	return (LIBUSB_INVALID_HANDLE); /* can't find specified request */
@@ -1142,12 +1154,15 @@ void *timeout_thread(void *arg)
 		 * long to wait
 		 */  
 		pthread_mutex_lock(&devh->lock);
+
+
 		list_for_each_entry(io, &devh->io_head, list) {
 		/* safe */
 
 			/* avoid possible process on aborted io request */
 			if (io->status != USBI_IO_INPROGRESS) {
 
+				pthread_mutex_unlock(&devh->lock);
 				continue;
 			}
 
@@ -1209,6 +1224,7 @@ void *timeout_thread(void *arg)
 			}
 		}
 
+		pthread_testcancel();
 		/* now we'll process any pending io requests & timeouts */
 		pthread_mutex_lock(&devh->lock);
 

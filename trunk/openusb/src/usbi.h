@@ -48,8 +48,6 @@ struct usbi_bus {
 	struct usbi_bus_private	*priv;	/* backend specific data */
 };
 
-struct usbi_descriptors; /* temp */
-
 /* internal representation of USB device, counterpart of libusb_devid_t */
 struct usbi_device {
 	struct list_head	dev_list;
@@ -156,8 +154,8 @@ enum usbi_io_status {
 	USBI_IO_COMPLETED_FAIL,
 };
 
-#define USBI_ASYNC 0
-#define USBI_SYNC 1
+#define USBI_ASYNC 1
+#define USBI_SYNC 0
 
 /* internal representation of libusb I/O request */
 struct usbi_io {

@@ -8,9 +8,7 @@
  *
  * This library is covered by the LGPL, read LICENSE for details.
  */
-#include <sys/int_types.h>
 #include <string.h>
-#include <libusb.h>
 #include <pthread.h>
 #include "usbi.h"
 
@@ -220,6 +218,91 @@ int32_t libusb_reset(libusb_dev_handle_t dev)
 	return hdev->idev->ops->reset(hdev);
 }
 
+int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
+        int request, int value, int index, char *bytes, int size, int timeout)
+{
+	libusb_ctrl_request_t ctrl;
+	struct libusb_request_handle req;
+	int ret;
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	memset(&req, 0, sizeof(req));
+
+	ctrl.setup.bmRequestType = requesttype;
+	ctrl.setup.bRequest = request;
+	ctrl.setup.wValue = value;
+	ctrl.setup.wIndex = index;
+
+	ctrl.payload = bytes;
+	ctrl.length = size;
+	ctrl.timeout = timeout;
+
+	req.dev = devh->handle;
+	req.interface = 0;
+	req.endpoint = 0;
+	req.type  = USB_TYPE_CONTROL;
+	req.req.ctrl = &ctrl;
+
+	ret = usbi_io_sync(devh, &req);
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "control xfer fail");
+	}
+
+	return ret;
+}
+
+int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbuf,
+                int32_t *cfglen)
+{
+	char buf[8];
+	char *newbuf;
+	int ret;
+	struct usb_config_desc cfg_desc;
+	int count;
+
+	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
+			(USB_DESC_TYPE_CONFIG << 8) + cfg, 0, buf,
+			8, 100);
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "usbi_control_xfer fail");
+		return ret;
+	}
+
+	libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+
+	newbuf = malloc(cfg_desc.wTotalLength);
+	if (!newbuf) {
+		usbi_debug(NULL, 1, "no memory");
+		return LIBUSB_NO_RESOURCES;
+	}
+
+	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
+			(USB_DESC_TYPE_CONFIG << 8) + cfg, 0, newbuf,
+			cfg_desc.wTotalLength, 100);
+
+	if (ret < 0) {
+		free(newbuf);
+		usbi_debug(NULL, 1, "usbi_control_xfer fail");
+		return ret;
+	}
+
+	*cfgbuf = newbuf;
+	*cfglen = cfg_desc.wTotalLength;
+
+	usbi_debug(NULL, 4, "End");
+
+	return 0;
+}
+
+void usbi_free_cfg(char *buf)
+{
+	if (buf == NULL) {
+		return;
+	}
+
+	free(buf);
+}
+
 /*
  * Check if the interface has claimed, the endpoint address is correct,
  * transfer type matched endpoint attribute.
@@ -239,6 +322,8 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	int i;
 	usb_interface_desc_t if_desc;
 	usb_endpoint_desc_t ep_desc;
+	char *buf;
+	int  buflen;
 
 	if ((endpoint == 0) && (type == USB_TYPE_CONTROL)) {
 	/* default pipe. No need to check interface,altSetting */
@@ -269,14 +354,20 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	/*
 	 * Since we are not allowed to use cached descriptors, we have to
 	 * get descriptors from device everytime we need it. Seems very low
-	 * efficient!
+	 * efficient! Get descriptor from endpoint 0, not by get_descr_raw()
 	 */
-	
+	ret = usbi_get_config_desc(dev, cfg, &buf, &buflen);
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "get raw descriptor fail");
+		return ret;
+	}
+
 	/* this interface requires config index */
 	ret = libusb_parse_interface_desc(dev->lib_hdl->handle,
-		dev->idev->devid, NULL, 0, cfg-1, ifc, alt, &if_desc);
+		dev->idev->devid, buf, buflen, cfg-1, ifc, alt, &if_desc);
 
 	if (ret < 0) {
+		usbi_free_cfg(buf);
 		usbi_debug(dev->lib_hdl, 1, "parse interface desc error");
 		return ret;
 	}
@@ -285,9 +376,10 @@ int32_t check_req_valid(libusb_request_handle_t req,
 
 		/* this interface requires config index */
 		ret = libusb_parse_endpoint_desc(dev->lib_hdl->handle,
-			dev->idev->devid, NULL, 0, cfg-1, ifc, alt,
+			dev->idev->devid, buf, buflen, cfg-1, ifc, alt,
 			i, &ep_desc);
 		if (ret < 0) {
+			usbi_free_cfg(buf);
 			usbi_debug(dev->lib_hdl, 1,
 				"parse endpoint desc error");
 			return ret;
@@ -301,6 +393,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	if (i == if_desc.bNumEndpoints) {
 		/* not find an endpoint with EndpointAddress == endpoint */
 		usbi_debug(dev->lib_hdl, 1, "Invalid endpoint in request");
+		usbi_free_cfg(buf);
 		return(LIBUSB_INVALID_HANDLE);
 	}
 
@@ -341,6 +434,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 			break;
 	}
 
+	usbi_free_cfg(buf);
 	return ret;
 }
 
@@ -403,8 +497,7 @@ int32_t libusb_ctrl_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
 	usbi_debug(NULL, 4, "ifc=%d ept=%d bRequest=%d", ifc, ept,
 		ctrl->setup.bRequest);
 
-	reqp = usbi_alloc_request_handle();
-
+	reqp = calloc(sizeof(struct libusb_request_handle), 1);
 	if(reqp == NULL) {
 		return LIBUSB_NO_RESOURCES;
 	}
@@ -416,6 +509,8 @@ int32_t libusb_ctrl_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
 	reqp->req.ctrl = ctrl;
 
 	ret = libusb_xfer_wait(reqp);
+
+	free(reqp);
 
 	return ret;
 }
@@ -430,8 +525,7 @@ int32_t libusb_intr_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 		return LIBUSB_BADARG;
 	}
 
-	reqp = usbi_alloc_request_handle();
-
+	reqp = calloc(sizeof(struct libusb_request_handle), 1);
 	if (reqp == NULL) {
 		return LIBUSB_NO_RESOURCES;
 	}
@@ -443,6 +537,7 @@ int32_t libusb_intr_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->req.intr = intr;
 
 	ret = libusb_xfer_wait(reqp);
+	free(reqp);
 
 	return ret;
 }
@@ -457,8 +552,7 @@ int32_t libusb_bulk_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 		return LIBUSB_BADARG;
 	}
 
-	reqp = usbi_alloc_request_handle();
-
+	reqp = calloc(sizeof(struct libusb_request_handle), 1);
 	if (reqp == NULL) {
 		return LIBUSB_NO_RESOURCES;
 	}
@@ -470,6 +564,7 @@ int32_t libusb_bulk_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->req.bulk = bulk;
 
 	ret = libusb_xfer_wait(reqp);
+	free(reqp);
 
 	return ret;
 }
@@ -484,8 +579,7 @@ int32_t libusb_isoc_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 		return LIBUSB_BADARG;
 	}
 
-	reqp = usbi_alloc_request_handle();
-
+	reqp = calloc(sizeof(struct libusb_request_handle), 1);
 	if (reqp == NULL) {
 		return LIBUSB_NO_RESOURCES;
 	}
@@ -497,6 +591,7 @@ int32_t libusb_isoc_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->req.isoc = isoc;
 
 	ret = libusb_xfer_wait(reqp);
+	free(reqp);
 
 	return ret;
 }

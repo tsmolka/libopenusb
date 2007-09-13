@@ -782,6 +782,48 @@ void libusb_free_devid_list(libusb_devid_t *devids)
 	free(devids);
 }
 
+#if 0
+/* return -1, when status != 0 or ret < 0 */
+int usbi_control_msg(libusb_dev_handle_t dev, int requesttype, int request,
+	int value, int index, char *bytes, int size, int timeout)
+{
+	libusb_ctrl_request_t ctrl;
+	int ret;
+	
+	if (size < 0) {
+	/* NULL buffer is allowed for some CTRL xfer */
+		return -1;
+	}
+	usbi_debug(NULL, 1, "Begin: type = %d, request=%d, index= %d",
+		requesttype, request, index);
+
+	memset(&ctrl, 0, sizeof(ctrl));
+	
+	ctrl.setup.bmRequestType = requesttype;
+	ctrl.setup.bRequest = request;
+	ctrl.setup.wValue = value;
+	ctrl.setup.wIndex = index;
+
+	ctrl.payload = bytes;
+	ctrl.length = size;
+	ctrl.timeout = timeout;
+
+	ret = libusb_ctrl_xfer(dev, 0, 0, &ctrl);
+
+	if (ret < 0 || ctrl.result.status != 0) {
+		return -1;
+	}
+	return 0;
+}
+
+int usbi_get_descriptors(libusb_dev_handle_t dev, int type, int index,
+	char *buf, int size)
+{
+	 return(usb_control_msg(dev,
+			USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
+			(type << 8) + index, 0, buf, size, 1000));
+}
+#endif
 
 /* Descriptor operations 
  * Get raw descriptors of specified type/index 
@@ -1076,10 +1118,13 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
     size_t buflen)
 {
 	libusb_ctrl_request_t ctrl;
-
-	if ((buf == NULL) || (buflen == 0 || index == 0)) {
+	
+	/* if index == 0, then the caller wants to get STRING descript Zero
+	 * for LANGIDs
+	 */
+	if ((buf == NULL) || (buflen == 0)) {
 		usbi_debug(NULL,1,
-				"usbi_get_string(): NULL handle or data");
+			"usbi_get_string(): NULL handle or data");
 
 		return LIBUSB_BADARG;
 	}
@@ -1091,11 +1136,11 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
 	ctrl.setup.wIndex = langid;
 	ctrl.payload = buf;
 	ctrl.length = buflen;
-	ctrl.timeout = 10;
+	ctrl.timeout = 100;
 
 	usbi_debug(NULL, 4,
-			"usbi_get_string(): index=%d langid=0x%x len=%d",
-			index, langid, buflen);
+		"usbi_get_string(): index=%d langid=0x%x len=%d",
+		index, langid, buflen);
 
 
 	if(libusb_ctrl_xfer(dev, 0, 0, &ctrl) == 0) {
@@ -1139,8 +1184,8 @@ int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
 	 * in the descriptor. See USB 2.0 specification, section 9.6.7, for
 	 * more information on this.
 	 */
-	ret = usbi_get_string(dev, index, 0, tbuf, sizeof (tbuf));
-	usbi_debug(NULL, 4, "usbi_get_string() returned %d", ret);
+	ret = usbi_get_string(dev, 0, 0, tbuf, sizeof (tbuf));
+	usbi_debug(NULL, 4, "usbi_get_string() first returned %d", ret);
 
 	if (ret < 4) {
 		langid = 0x409;
@@ -1179,11 +1224,12 @@ int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
 
 	buf[di] = 0;
 
+	usbi_debug(NULL, 4 , "usbi_get_string() returned %s", buf);
 	return (di);
 }
 
 
-/* */
+/* TODO */
 int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	uint32_t flags, libusb_dev_data_t **data)
 {
@@ -1236,12 +1282,16 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		return ret;
 	}
 
-	if (pdata->dev_desc.iManufacturer == 0) {
-		usbi_debug(NULL, 4, "Don't have manufacturer strings");
+	if (pdata->dev_desc.iManufacturer == 0 && pdata->dev_desc.iProduct == 0
+		&& pdata->dev_desc.iSerialNumber == 0) {
+		usbi_debug(NULL, 4, "Don't have string descriptors");
 		goto get_raw;
 	}
 
-#if 1 /* get manufacturer, product, serialnumber strings*/
+#if 1   /* get manufacturer, product, serialnumber strings
+	 * Use 0x0409 US English as default LANGID. To get other
+	 * language strings, use libusb_get_raw_desc instead.
+	 */
 
 	/* find if we have already opened this device
 	 * We have to access an opened device to get_string
@@ -1288,46 +1338,55 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	}
 
 	/* manufacturer */
-	if ((ret = usbi_get_string_simple(hdev, pdata->dev_desc.iManufacturer,
-		strings, sizeof(strings))) != 0) {
-		free(pdata);
-		return ret;
-	}
+	if (pdata->dev_desc.iManufacturer) {
+		usbi_debug(NULL, 1, "get manufacturer");
+		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iManufacturer,
+			0x409, strings, sizeof(strings))) < 0) {
+			free(pdata);
+			return ret;
+		}
 
-	if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
-		free(pdata);
-		return LIBUSB_NO_RESOURCES;
+		if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
+			free(pdata);
+			return LIBUSB_NO_RESOURCES;
+		}
+		memcpy(pdata->manufacturer, strings, strings[0]);
 	}
-	memcpy(pdata->manufacturer, strings, strings[0]);
 
 	/* product */
-	if ((ret = usbi_get_string_simple(hdev, pdata->dev_desc.iProduct,
-		strings, sizeof(strings))) != 0) {
-		free(pdata);
-		return ret;
-	}
+	if (pdata->dev_desc.iProduct) {
+		usbi_debug(NULL, 1, "get product");
+		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iProduct,
+			0x409, strings, sizeof(strings))) < 0) {
+			free(pdata);
+			return ret;
+		}
 
-	if ((pdata->product= malloc(strings[0])) == NULL) {
-		free(pdata->manufacturer);
-		free(pdata);
-		return LIBUSB_NO_RESOURCES;
+		if ((pdata->product= malloc(strings[0])) == NULL) {
+			free(pdata->manufacturer);
+			free(pdata);
+			return LIBUSB_NO_RESOURCES;
+		}
+		memcpy(pdata->product, strings, strings[0]);
 	}
-	memcpy(pdata->product, strings, strings[0]);
 
 	/* serial Number */
-	if ((ret = usbi_get_string_simple(hdev, pdata->dev_desc.iSerialNumber,
-		strings, sizeof(strings))) != 0) {
-		free(pdata);
-		return ret;
-	}
-	if ((pdata->serialnumber = malloc(strings[0])) == NULL) {
-		free(pdata->product);
-		free(pdata->manufacturer);
-		free(pdata);
-		return LIBUSB_NO_RESOURCES;
-	}
+	if (pdata->dev_desc.iSerialNumber) {
+		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iSerialNumber,
+			0x409, strings, sizeof(strings))) < 0) {
+			free(pdata);
+			return ret;
+		}
 
-	memcpy(pdata->serialnumber, strings, strings[0]);
+		if ((pdata->serialnumber = malloc(strings[0])) == NULL) {
+			free(pdata->product);
+			free(pdata->manufacturer);
+			free(pdata);
+			return LIBUSB_NO_RESOURCES;
+		}
+
+		memcpy(pdata->serialnumber, strings, strings[0]);
+	}
 	
 	if (!dev_found) {
 		libusb_close_device(hdev);
@@ -1369,7 +1428,7 @@ get_raw:
 
 	pdata->devid = devid;
 	pdata->nports = pdev->nports;
-	pdata->pdevid = (pdev->parent)?pdev->parent->devid:0;/* 0 is root hub */
+	pdata->pdevid = (pdev->parent)?pdev->parent->devid:0;/* 0 for root hub */
 	pdata->pport = pdev->pport;
 
 	*data = pdata;
