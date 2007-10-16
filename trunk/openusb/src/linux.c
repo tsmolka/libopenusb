@@ -156,9 +156,11 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
   pthread_mutex_lock(&usbi_ios_lock);
   tio = NULL;
   list_for_each_entry(io, &hdev->io_head, list) {
+    free(io->priv);
     usbi_free_io(tio);
     tio = io;
-   }
+  }
+  free(io->priv);
   usbi_free_io(tio);
   list_del(&hdev->io_head);
   pthread_mutex_unlock(&usbi_ios_lock);
@@ -454,7 +456,12 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
   else
     usbi_debug(NULL, 1, "no USB device directory found");
 
+  /* do the first scan of devices */
+  /* TODO: do we really want this here? */
+  usbi_rescan_devices();
+
   /* Start up thread for polling events */
+  ret = 0;
   ret = pthread_create(&event_thread, NULL, poll_events, (void*)NULL);
   if (ret < 0)
     usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
@@ -571,8 +578,9 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
   FILE *f;
 
   /* Validate... */
-  if (!ibus)
-    return LIBUSB_BADARG;
+  if (!ibus) {
+    return (LIBUSB_BADARG);
+  }  
 
   /* we'll use libsysfs as our primary way of getting the device topology */
   if (sysfs_get_mnt_path(sysfsdir,PATH_MAX+1) == 0)
@@ -1007,6 +1015,13 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
   if ((!hdev) || (!io)) {
     return (LIBUSB_BADARG);
   }
+  
+  /* allocate memory for the private part */
+  io->priv = malloc(sizeof(struct usbi_io_private));
+  if (!io->priv) {
+    usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+    return (LIBUSB_NO_RESOURCES);
+  }    
 
   /* get a pointer to the request */
   ctrl = io->req->req.ctrl;
@@ -1067,7 +1082,14 @@ int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
     return (LIBUSB_BADARG);
   }
   
-  /* get a pointer to the request */  
+  /* allocate memory for the private part */
+  io->priv = malloc(sizeof(struct usbi_io_private));
+  if (!io->priv) {
+    usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+    return (LIBUSB_NO_RESOURCES);
+  }
+
+  /* get a pointer to the request */
   intr = io->req->req.intr; 
 
   /* create the urb */
@@ -1098,6 +1120,13 @@ int32_t linux_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
     return (LIBUSB_BADARG);
   }
   
+  /* allocate memory for the private part */
+  io->priv = malloc(sizeof(struct usbi_io_private));
+  if (!io->priv) {
+    usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+    return (LIBUSB_NO_RESOURCES);
+  }
+
   /* get a pointer to the request */
   bulk = io->req->req.bulk;
    
@@ -1128,6 +1157,13 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
   if((!io) || (!hdev)) {
     return LIBUSB_BADARG;
+  }
+
+  /* allocate memory for the private part */
+  io->priv = malloc(sizeof(struct usbi_io_private));
+  if (!io->priv) {
+    usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+    return (LIBUSB_NO_RESOURCES);
   }
 
   resubmit_flag = RESUBMIT;
@@ -1265,6 +1301,7 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
       if(io->req->req.isoc->isoc_results == NULL) {
         if(io->priv->urb.buffer)
           free(io->priv->urb.buffer);
+        free(io->priv);
         usbi_free_io(io);
         continue;
       }
@@ -1279,7 +1316,8 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
       }
       if(io->priv->urb.buffer)
         free(io->priv->urb.buffer);
- 
+      free(io->priv);
+      
       /*resubmit isoc io*/
       if(resubmit_flag == RESUBMIT)
       {
@@ -1550,7 +1588,7 @@ void *poll_events(void *unused)
   char sysfsmnt[PATH_MAX + 1]; 
   int  fd = -1;
   int  usingSysfs = 0;
-  
+
   /* Determine if we're using SYSFS or /proc/bus/usb/devices to check events */
   if (sysfs_get_mnt_path(sysfsmnt,PATH_MAX+1) == 0)
   {
@@ -1563,7 +1601,7 @@ void *poll_events(void *unused)
     if (fd < 0)
       usbi_debug(NULL, 0, "unable to open %s to check for topology changes", filename);
   }
-  
+
   /* Loop forever, checking for events every 0.5 second */
   while(1) {
     struct timeval tvc;
@@ -1641,9 +1679,6 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
                           uint16_t devnum, uint32_t max_children)
 {
   struct usbi_device *idev;
-  int i, ret;
-  int fd;
-  size_t count;
 
   idev = malloc(sizeof(*idev));
   if (!idev) {
@@ -1666,12 +1701,17 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
     idev->children = malloc(idev->nports * sizeof(idev->children[0]));
     if (!idev->children) {
       free(idev);
-      return LIBUSB_NO_RESOURCES;
+      return (LIBUSB_NO_RESOURCES);
     }
 
     memset(idev->children, 0, idev->nports * sizeof(idev->children[0]));
   }
 
+  *dev = idev;
+  ibus->priv->dev_by_num[devnum] = idev;
+  return (LIBUSB_SUCCESS);
+
+#if 0 
   fd = device_open(idev);
   if (fd < 0) {
     usbi_debug(NULL, 1, "couldn't open %s: %s", idev->priv->filename, strerror(errno));
@@ -1697,8 +1737,8 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
   }
 
   idev->desc.device_raw.len = USBI_DEVICE_DESC_SIZE;
-  libusb_parse_data("..wbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
-
+  //libusb_parse_data("..wbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
+  libusb_parse_data("bbwbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
   usbi_debug(NULL, 2, "found device %03d on %s", idev->devnum, ibus->priv->filename);
 
   /* Now try to fetch the rest of the descriptors */
@@ -1745,7 +1785,8 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
       goto done;
     }
 
-    libusb_parse_data("..w", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+    //libusb_parse_data("..w", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+    libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
     cfgr->len = cfg_desc.wTotalLength;
 
     cfgr->data = malloc(cfgr->len);
@@ -1792,6 +1833,8 @@ err:
   free(idev);
 
   return translate_errno(errno);
+#endif
+
 }
 
 
@@ -1828,6 +1871,11 @@ int32_t check_usb_path(const char *dirname)
 
 
 
+/*
+ * check_usb_path
+ *
+ *  Write data to the event pipe to wakeup the io thread
+ */
 int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 {
   char buf[1] = { 0x01 };
@@ -1838,6 +1886,161 @@ int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
   }
   
   return LIBUSB_SUCCESS;
+}
+
+
+
+/*
+ * linux_get_raw_desc
+ *
+ *  Get the raw descriptor specified. These are already cached by
+ *  create_new_device, so we'll just copy over the data we need
+ */
+int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
+                           uint8_t descidx, uint16_t langid,
+                           uint8_t **buffer, uint16_t *buflen)
+{
+  uint8_t               *devdescr = NULL;
+  uint8_t               *cfgdescr = NULL;
+  struct usbi_raw_desc  *configs_raw = NULL;
+  size_t                devdescrlen;
+  size_t                count;
+  usb_device_desc_t     device;
+  int32_t               sts = LIBUSB_SUCCESS; 
+  int32_t               i, fd, ret;
+  
+  /* Validate... */
+  if ((!idev) || (!buflen)) {
+    return (LIBUSB_BADARG);
+  }
+
+  /* Right now we're only setup to do device and config descriptors */
+  if ((type != USB_DESC_TYPE_DEVICE) && (type != USB_DESC_TYPE_CONFIG)) {
+    usbi_debug(NULL, 1, "unsupported descriptor type");
+    return (LIBUSB_BADARG);
+  } 
+
+  /* Open the device */
+  fd = device_open(idev);
+  if (fd < 0) {
+    usbi_debug(NULL, 1, "couldn't open %s: %s", idev->priv->filename, strerror(errno));
+    return (LIBUSB_UNKNOWN_DEVICE);
+  }
+
+  /* The way USBFS works we always have to read the data in order, so start by
+   * reading the device descriptor, no matter what descriptor we were asked for
+   */
+  devdescr = malloc(USBI_DEVICE_DESC_SIZE);
+  if (!devdescr) {
+    usbi_debug(NULL, 1, "unable to allocate memory for cached device descriptor");
+    return (LIBUSB_NO_RESOURCES);
+  }
+
+  /* read the device descriptor */ 
+  ret = read(fd, devdescr, USBI_DEVICE_DESC_SIZE);
+  if (ret < 0) {
+    usbi_debug(NULL, 1, "couldn't read descriptor: %s", strerror(errno));
+    sts = translate_errno(errno);
+    goto done;
+  }
+  devdescrlen = USBI_DEVICE_DESC_SIZE;
+
+  /* if we were asked for the device descriptor then, we're done */
+  if (type == USB_DESC_TYPE_DEVICE) {  
+    *buflen = (uint16_t)devdescrlen;
+    *buffer = devdescr;
+    goto done;
+  }
+
+  /* parse the device decriptor to get the number of configurations */ 
+  libusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen, &device, USBI_DEVICE_DESC_SIZE, &count);
+
+  /* now we'll allocated memory for all of our config descriptors */
+  configs_raw = malloc(device.bNumConfigurations * sizeof(configs_raw[0]));
+  if (!configs_raw) {
+    usbi_debug(NULL, 1, "unable to allocate memory for cached descriptors");
+    sts = LIBUSB_NO_RESOURCES;
+    goto done;
+  }
+  memset(configs_raw, 0, device.bNumConfigurations * sizeof(configs_raw[0]));
+
+  for (i = 0; i < device.bNumConfigurations; i++) {
+
+    uint8_t                 buf[8];
+    struct usb_config_desc  cfg_desc;
+    struct usbi_raw_desc    *cfgr = configs_raw + i;
+
+    /* Get the first 8 bytes so we can figure out what the total length is */
+    ret = read(fd, buf, 8);
+    if (ret < 8) {
+      if (ret < 0) {
+        usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
+      } else {
+        usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", 8, ret);
+      } 
+      sts = translate_errno(errno);
+      goto done;
+    }
+
+    libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+    cfgr->len = cfg_desc.wTotalLength;
+
+    cfgr->data = calloc(cfgr->len,1);
+    if (!cfgr->data) {
+      usbi_debug(NULL, 1, "unable to allocate memory for descriptors");
+      sts = translate_errno(errno);
+      goto done;
+    }
+
+    /* Copy over the first 8 bytes we read */
+    memcpy(cfgr->data, buf, 8);
+
+    ret = read(fd, cfgr->data + 8, cfgr->len - 8);
+    if (ret < cfgr->len - 8) {
+      if (ret < 0) {    
+        usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
+      } else {
+        usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", cfgr->len, ret);
+      }
+
+      cfgr->len = 0;
+      free(cfgr->data);
+      sts = translate_errno(errno);
+      goto done;
+    }
+
+    /* if this is the descriptor we want then we'll return it and be done */
+    if (i == descidx) {
+      *buflen = cfgr->len;
+
+      /* allocate memory for the buffer to return */
+      cfgdescr = calloc(cfgr->len,1);
+      if (!cfgdescr) {
+        usbi_debug(NULL, 1, "unable to allocate memory for the descriptor");
+        sts = LIBUSB_NO_RESOURCES;
+        goto done;
+      }
+
+      /* copy the data we read */
+      memcpy(cfgdescr, cfgr->data, cfgr->len);
+      *buffer = cfgdescr;
+    }
+
+    /* free the temporary memory */
+    free(cfgr->data);
+  }
+
+done:
+
+  /* Don't free the decdescr if that's what we got */
+  close(fd);
+  if (type != USB_DESC_TYPE_DEVICE)
+  {
+    if (devdescr) { free(devdescr); }
+  }
+  if (configs_raw) { free (configs_raw); }
+ 
+  return (sts);
 }
 
 
@@ -1932,6 +2135,6 @@ struct usbi_backend_ops backend_ops = {
     .bulk_xfer_wait     = NULL,
     .isoc_xfer_wait     = NULL,
     .io_cancel          = linux_io_cancel,
-    .get_raw_desc       = NULL,
+    .get_raw_desc       = linux_get_raw_desc,
   },
 };
