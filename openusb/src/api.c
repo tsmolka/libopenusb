@@ -661,7 +661,7 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 		usbi_debug(dev->lib_hdl, 1, "IO alloc fail");
 		return LIBUSB_NO_RESOURCES;
 	}
-	io->callback = req->cb;
+
 	io->req = req;
 	io->status = USBI_IO_INPROGRESS;
 	io->flag = USBI_ASYNC;
