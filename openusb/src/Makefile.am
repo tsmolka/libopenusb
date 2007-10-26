@@ -20,8 +20,8 @@ if LINUX_API
 usblib_LTLIBRARIES = linux.la
 
 linux_la_SOURCES = linux.c linux.h
-linux_la_LDFLAGS = -avoid-version -module
-linux_la_LIBADD = -lsysfs
+linux_la_LDFLAGS = -avoid-version -module -L.libs
+linux_la_LIBADD = -lsysfs -lusb
 endif
 
 if BSD_API
