@@ -95,7 +95,6 @@ void usbi_free_io(struct usbi_io *io)
 	list_del(&io->list);
 	pthread_mutex_unlock(&io->dev->lock);
 
-
 	pthread_mutex_lock(&io->lock);
 
 	if (io->status == USBI_IO_INPROGRESS && io->flag == USBI_ASYNC) {
@@ -122,6 +121,7 @@ void usbi_free_io(struct usbi_io *io)
 
 	pthread_mutex_destroy(&io->lock);
 
+	if (io->priv) { free(io->priv); }
 	free(io);
 }
 
@@ -171,8 +171,14 @@ void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
 	result->status = status;
 	result->transferred_bytes = transferred_bytes;
 
+  /* run the user supplied callback */
 	if(io->req->cb) {
 		io->req->cb(io->req);
+	}
+
+  /* run the internal callback, if it exists */ 
+	if(io->callback) {
+		io->callback(io,status);
 	}
 
 	pthread_mutex_lock(&io->lock);
@@ -192,7 +198,8 @@ int usbi_async_submit(struct usbi_io *io)
 	libusb_transfer_type_t type;
 	
 	type = io->req->type;
-
+	io->flag = USBI_ASYNC;
+  
 	dev = usbi_find_dev_handle(io->req->dev);
 	if (!dev)
 		return LIBUSB_UNKNOWN_DEVICE;
@@ -219,7 +226,7 @@ int usbi_async_submit(struct usbi_io *io)
 	}
 
 	if (ret < 0) {
-		usbi_free_io(io);
+		/* removed usbi_free_io(io); it will happen later */
 		return ret;
 	}
 
@@ -239,6 +246,7 @@ int usbi_sync_submit(struct usbi_io *io)
 
 	dev = io->dev;
 	type = io->req->type;
+	io->flag = USBI_SYNC;
 	switch (type) {
 		case USB_TYPE_CONTROL:
 			ret = dev->idev->ops->ctrl_xfer_wait(dev, io);
@@ -316,7 +324,7 @@ static void simple_io_complete(struct simple_io *io, int status)
 }
 
 /* backend is responsible to provide status of this io */
-static void async_callback(struct usbi_io *io, int status)
+static void async_callback(struct usbi_io *io, int32_t status)
 {
 	simple_io_complete(io->arg, status);
 }
@@ -371,7 +379,6 @@ int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req)
 		io = usbi_alloc_io(dev, req, timeout);
 
 		ret = usbi_sync_submit(io);
-
 		usbi_free_io(io);
 
 		return ret;
