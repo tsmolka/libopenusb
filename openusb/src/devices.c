@@ -567,6 +567,7 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 			*tdevid = idev->devid;
 			tdevid++;
 		}
+		*num_devids = devcnts;
 		pthread_mutex_unlock(&usbi_devices.lock);
 
 		return LIBUSB_SUCCESS;
@@ -846,14 +847,14 @@ int32_t libusb_get_raw_desc(libusb_handle_t handle,
 		return LIBUSB_UNKNOWN_DEVICE;
 
 	if(idev->ops->get_raw_desc) {
-	/* Solaris is a little complex for non-ugen devices, this interface is
-	 * for Solaris to get descriptors from hub nodes
-	 */	
+		/* Solaris is a little complex for non-ugen devices, this interface is
+		 * for Solaris to get descriptors from hub nodes
+		 */
 		ret = idev->ops->get_raw_desc(idev, type, descidx, langid,
 				buffer, buflen);
 		return ret;
 	} else {
-	/* FIXME: maybe we should get descriptors by ctrl xfer */
+		/* FIXME: maybe we should get descriptors by ctrl xfer */
 		return LIBUSB_PARSE_ERROR;
 	}
 }
@@ -899,7 +900,7 @@ int32_t libusb_parse_device_desc(libusb_handle_t handle,
 	}
 
 	ret = libusb_parse_data("bbwbbbbwwwbbbb", tmpbuf, tmplen, devdesc,
-		sizeof (usb_device_desc_t), &count);
+													sizeof (usb_device_desc_t), &count);
 
 	if ((ret == 0) && (count < USBI_DEVICE_DESC_SIZE))
 		ret = LIBUSB_PARSE_ERROR;
@@ -1288,7 +1289,8 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		goto get_raw;
 	}
 
-#if 1   /* get manufacturer, product, serialnumber strings
+#if 1
+	/* get manufacturer, product, serialnumber strings
 	 * Use 0x0409 US English as default LANGID. To get other
 	 * language strings, use libusb_get_raw_desc instead.
 	 */
@@ -1343,11 +1345,13 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iManufacturer,
 			0x409, strings, sizeof(strings))) < 0) {
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return ret;
 		}
 
 		if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return LIBUSB_NO_RESOURCES;
 		}
 		memcpy(pdata->manufacturer, strings, strings[0]);
@@ -1359,12 +1363,14 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iProduct,
 			0x409, strings, sizeof(strings))) < 0) {
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return ret;
 		}
 
 		if ((pdata->product= malloc(strings[0])) == NULL) {
 			free(pdata->manufacturer);
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return LIBUSB_NO_RESOURCES;
 		}
 		memcpy(pdata->product, strings, strings[0]);
@@ -1375,6 +1381,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iSerialNumber,
 			0x409, strings, sizeof(strings))) < 0) {
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return ret;
 		}
 
@@ -1382,6 +1389,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 			free(pdata->product);
 			free(pdata->manufacturer);
 			free(pdata);
+			if (!dev_found) { libusb_close_device(hdev); }
 			return LIBUSB_NO_RESOURCES;
 		}
 
