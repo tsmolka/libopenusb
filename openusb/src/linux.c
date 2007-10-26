@@ -1,8 +1,6 @@
 /*
  * Linux USB support
  *
- * Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
- *
  * This library is covered by the LGPL, read LICENSE for details.
  */
 
@@ -24,9 +22,6 @@
 
 static pthread_t  event_thread;
 static int        resubmit_flag = RESUBMIT;
-
-static pthread_mutex_t usbi_ios_lock = PTHREAD_MUTEX_INITIALIZER;
-static struct list_head usbi_ios = { .prev = &usbi_ios, .next = &usbi_ios };
 
 static char device_dir[PATH_MAX + 1] = "";
 
@@ -114,15 +109,12 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 
   /* open the device */
   hdev->priv->fd = device_open(hdev->idev);
-  if (hdev->priv->fd != LIBUSB_SUCCESS) {
+  if (hdev->priv->fd < 0) {
     return (hdev->priv->fd);
   }
 
   /* setup the event pipe for this device */ 
-  pipe(hdev->event_pipe);
-
-  /* initialize the io list */
-  list_init(&hdev->io_head);
+  pipe(hdev->priv->event_pipe);
 
   /* Start up thread for polling io */
   ret = pthread_create(&hdev->priv->io_thread, NULL, poll_io, (void*)hdev);
@@ -153,17 +145,14 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
   resubmit_flag = NO_RESUBMIT;     /*stop isoc resubmit, it is a method, but not a good method. And it will be improved in near future*/
 
-  pthread_mutex_lock(&usbi_ios_lock);
   tio = NULL;
   list_for_each_entry(io, &hdev->io_head, list) {
+    pthread_mutex_lock(&io->lock);
     free(io->priv);
     usbi_free_io(tio);
     tio = io;
+    pthread_mutex_unlock(&io->lock);
   }
-  free(io->priv);
-  usbi_free_io(tio);
-  list_del(&hdev->io_head);
-  pthread_mutex_unlock(&usbi_ios_lock);
 
   pthread_mutex_lock(&hdev->lock);
   hdev->state = USBI_DEVICE_CLOSING;
@@ -246,13 +235,47 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
   int32_t ret;
 
   /* Validate... */
-  if (!hdev)
-    return LIBUSB_BADARG;
+	if (!hdev) {
+		return (LIBUSB_BADARG);
+	}
 
+	usbi_debug(hdev->lib_hdl, 4, "claiming interface %d", ifc);
+	
   ret = ioctl(hdev->priv->fd, IOCTL_USB_CLAIMINTF, &ifc);
   if (ret < 0) {
     usbi_debug(hdev->lib_hdl, 1, "could not claim interface %d: %s", ifc, strerror(errno));
-    return translate_errno(errno);
+
+		/* there may be another kernel driver attached to this interface, if the
+		 * user requested it try and detach the kernel driver, we'll reattach
+		 * it when we release the interface */
+		if ((flags == USB_INIT_REVERSIBLE) || (flags = USB_INIT_NON_REVERSIBLE))
+		{
+			ret = linux_detach_kernel_driver(hdev,ifc);
+			if (ret > 0) {
+				hdev->priv->reattachdrv = 1;
+
+				/* try to claim the interface again */
+				ret = ioctl(hdev->priv->fd, IOCTL_USB_CLAIMINTF, &ifc);
+				if (ret < 0) {
+					hdev->priv->reattachdrv = 0;
+					usbi_debug(hdev->lib_hdl, 1,
+										 "could not claim interface %d, after detaching kernel driver: %s",
+										 ifc, libusb_strerror(ret));
+					ret = linux_attach_kernel_driver(hdev,ifc);
+					if (ret < 0) {
+						usbi_debug(hdev->lib_hdl, 1, "could not reattach kernel driver: %s",
+											 libusb_strerror(ret));
+						return (ret);
+					}
+				}
+			} else {
+				usbi_debug(hdev->lib_hdl, 1, "could not detach kernel driver: %s",
+									 libusb_strerror(ret));
+			}
+			return (ret);
+		}
+
+		return translate_errno(errno);
   }
 
   /* keep track of the fact that this interface was claimed */ 
@@ -260,8 +283,7 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
   hdev->claimed_ifs[ifc].altsetting = 0;
 
   /* There's no usbfs IOCTL for querying the current alternate setting, we'll
-  * leave it up to the user to set later.
-  */
+   * leave it up to the user to set later. */
   return (LIBUSB_SUCCESS);
 }
 
@@ -299,6 +321,15 @@ int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
   hdev->claimed_ifs[ifc].clm = -1;
   hdev->claimed_ifs[ifc].altsetting = -1;
 
+	/* if necessary reattach the kernel driver */
+	if (hdev->priv->reattachdrv) {
+		ret = linux_attach_kernel_driver(hdev, ifc);
+		if (ret < 0) {
+			usbi_debug(hdev->lib_hdl, 1, "could not reattach the kernel driver");
+			return (ret);
+		}
+	}
+	
   return (LIBUSB_SUCCESS);
 }
 
@@ -433,7 +464,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
       strncpy(device_dir, getenv("USB_PATH"), sizeof(device_dir) - 1);
       device_dir[sizeof(device_dir) - 1] = 0;
     } else
-      usbi_debug(NULL, 1, "couldn't find USB devices in USB_PATH");
+      usbi_debug(hdl, 1, "couldn't find USB devices in USB_PATH");
   }
 
   if (!device_dir[0]) {
@@ -452,19 +483,15 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
   }
 
   if (device_dir[0])
-    usbi_debug(NULL, 1, "found USB device directory at %s", device_dir);
+    usbi_debug(hdl, 1, "found USB device directory at %s", device_dir);
   else
-    usbi_debug(NULL, 1, "no USB device directory found");
-
-  /* do the first scan of devices */
-  /* TODO: do we really want this here? */
-  usbi_rescan_devices();
+    usbi_debug(hdl, 1, "no USB device directory found");
 
   /* Start up thread for polling events */
   ret = 0;
   ret = pthread_create(&event_thread, NULL, poll_events, (void*)NULL);
   if (ret < 0)
-    usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
+    usbi_debug(hdl, 1, "unable to create event polling thread (ret = %d)", ret);
 
   return LIBUSB_SUCCESS;
 }
@@ -543,6 +570,11 @@ int32_t linux_find_buses(struct list_head *buses)
       return (LIBUSB_NO_RESOURCES);
     }
 
+    /* setup the maximum transfer sizes */
+    ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4088;
+    ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = 16384;
+    ibus->max_xfer_size[USB_TYPE_BULK]        = 16384;
+    
     pthread_mutex_init(&ibus->lock, NULL);
     pthread_mutex_init(&ibus->devices.lock, NULL);
     
@@ -617,10 +649,10 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
     /* loop through the list of class devices */
     dlist_for_each_data(devlist,classdev,struct sysfs_class_device) {
       
-        /* the class name is usbdevBUS.DEV (where BUS is the bus number and DEV
-      * is the device number, e.g usbdev8.1). We'll parse our number from 
-      * this name.
-        */
+      /* the class name is usbdevBUS.DEV (where BUS is the bus number and DEV
+       * is the device number, e.g usbdev8.1). We'll parse our number from 
+       * this name.
+       */
          
       p = classdev->name;
       while (!isdigit(*p))
@@ -928,7 +960,14 @@ int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
   int ret;
 
-  io->priv->urb.endpoint = io->req->endpoint;
+	/* Validate ... */
+	if ((!hdev) || (!io)) {
+		return (LIBUSB_BADARG);
+	}
+
+	usbi_debug(hdev->lib_hdl, 4, "Submit URB");
+	
+	io->priv->urb.endpoint = io->req->endpoint;
   io->priv->urb.status   = 0;
 
   io->priv->urb.signr = 0;
@@ -936,68 +975,27 @@ int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
   io->status = USBI_IO_INPROGRESS;
 
-  pthread_mutex_lock(&usbi_ios_lock);
-  if (list_empty(&hdev->io_head)) {
-    list_add(&hdev->io_head, &usbi_ios);
-    /* since this is the only io in the list make it our next soonest timeout */  
-    memcpy(&hdev->priv->tvo, &io->tvo, sizeof(hdev->priv->tvo));
-  } else if (   (usbi_timeval_compare(&io->tvo, &hdev->priv->tvo) < 0)
-             && (io->req->type == USB_TYPE_ISOCHRONOUS)) {
-    /* if this io's timeout is less than our next soonest, make this one our
-     * next soonest timeout */
+  /* calculate the next soonest timeout */
+  if (   (usbi_timeval_compare(&io->tvo, &hdev->priv->tvo) < 0)
+      || (!hdev->priv->tvo.tv_sec)) {
     memcpy(&hdev->priv->tvo, &io->tvo, sizeof(hdev->priv->tvo));
   }
 
-  /* add this io to the list of requests */
-  list_add(&io->list, &hdev->io_head);
-  pthread_mutex_unlock(&usbi_ios_lock);
-   
   /* submit this request to the usbfs kernel driver */
   ret = ioctl(hdev->priv->fd, IOCTL_USB_SUBMITURB, &io->priv->urb);
   if (ret < 0) {
     usbi_debug(hdev->lib_hdl, 1, "error submitting URB: %s", strerror(errno));
-    
-    /* remove this IO from the list */
-    pthread_mutex_lock(&usbi_ios_lock);
+    pthread_mutex_lock(&io->lock);
     io->status = USBI_IO_COMPLETED_FAIL;
-    list_del(&io->list);
-    if(list_empty(&hdev->io_head)) {
-      list_del(&hdev->io_head);
-    }
-    pthread_mutex_unlock(&usbi_ios_lock);
-    
+    pthread_mutex_unlock(&io->lock);
     return translate_errno(errno);
   }    
    
-#if 0
-  pthread_mutex_lock(&usbi_ios_lock);
-  if (list_empty(&hdev->priv->ios)) {
-    list_add(&hdev->priv->io_list, &usbi_ios);
-    memcpy(&hdev->priv->tvo, &io->tvo, sizeof(hdev->priv->tvo));
-  } else if (usbi_timeval_compare(&io->tvo, &hdev->priv->tvo) < 0)
-    memcpy(&hdev->priv->tvo, &io->tvo, sizeof(hdev->priv->tvo));
+	/* Always do this to avoid race conditions */
+	usbi_debug(hdev->lib_hdl,4,"URB Submitted. Waking Polling Thread");
+	wakeup_io_thread(hdev);
 
-    list_add(&io->list, &hdev->priv->ios);
-    pthread_mutex_unlock(&usbi_ios_lock);
-
-    ret = ioctl(hdev->priv->fd, IOCTL_USB_SUBMITURB, &io->priv->urb);
-    if (ret < 0) {
-      usbi_debug(hdev->lib_hdl, 1, "error submitting URB: %s", strerror(errno));
-
-      pthread_mutex_lock(&usbi_ios_lock);
-      io->inprogress = 0;
-      list_del(&hdev->priv->io_list);
-      list_del(&io->list);
-      pthread_mutex_unlock(&usbi_ios_lock);
-
-      return translate_errno(errno);
-    }
-#endif
-
-    /* Always do this to avoid race conditions */
-    wakeup_io_thread(hdev);
-
-    return 0;
+  return 0;
 }
 
 
@@ -1010,60 +1008,54 @@ int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
 int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
   libusb_ctrl_request_t *ctrl;
+	uint8_t 							setup[USBI_CONTROL_SETUP_LEN];
 
   /* Validate... */
   if ((!hdev) || (!io)) {
     return (LIBUSB_BADARG);
   }
-  
+
   /* allocate memory for the private part */
   io->priv = malloc(sizeof(struct usbi_io_private));
   if (!io->priv) {
     usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
     return (LIBUSB_NO_RESOURCES);
-  }    
-
+  }
+  memset(io->priv, 0, sizeof(*io->priv));
+  
   /* get a pointer to the request */
   ctrl = io->req->req.ctrl;
-
+	
+	/* fill in the setup packet */
+	setup[0] = ctrl->setup.bmRequestType;
+	setup[1] = ctrl->setup.bRequest;
+	*(uint16_t *)(setup + 2) = libusb_cpu_to_le16(ctrl->setup.wValue);
+	*(uint16_t *)(setup + 4) = libusb_cpu_to_le16(ctrl->setup.wIndex);
+	*(uint16_t *)(setup + 6) = libusb_cpu_to_le16(ctrl->length);
+	
   /* setup the URB */
   io->priv->urb.type = USBK_URB_TYPE_CONTROL;
-
+	
   /* allocate a temporary buffer for the payload */
   io->priv->urb.buffer = malloc(USBI_CONTROL_SETUP_LEN + ctrl->length);
   if (!io->priv->urb.buffer) {
     return (LIBUSB_NO_RESOURCES);
   }
+	memset(io->priv->urb.buffer,0,USBI_CONTROL_SETUP_LEN + ctrl->length);
   
   /* fill in the temporary buffer */
-  memcpy(io->priv->urb.buffer, &ctrl->setup, USBI_CONTROL_SETUP_LEN);
+  memcpy(io->priv->urb.buffer, setup, USBI_CONTROL_SETUP_LEN);
   io->priv->urb.buffer_length = USBI_CONTROL_SETUP_LEN + ctrl->length;
   
-  /* FIXME: Only do this on writes? */
-  memcpy(io->priv->urb.buffer + USBI_CONTROL_SETUP_LEN, ctrl->payload, ctrl->length);
-    
+  /* copy the data if we're writing */
+  if ((ctrl->setup.bmRequestType & USB_REQ_DIR_MASK) == USB_REQ_HOST_TO_DEV) {
+    memcpy(io->priv->urb.buffer + USBI_CONTROL_SETUP_LEN, ctrl->payload, ctrl->length);
+  }
+
   io->priv->urb.actual_length = 0;
   io->priv->urb.number_of_packets = 0;  
-#if 0
-  io->priv->urb.type = USBK_URB_TYPE_CONTROL;
 
-  io->priv->tempbuf = malloc(USBI_CONTROL_SETUP_LEN + io->ctrl.buflen);
-  if (!io->priv->tempbuf)
-    return LIBUSB_NO_RESOURCES;
-
-  memcpy(io->priv->tempbuf, io->ctrl.setup, USBI_CONTROL_SETUP_LEN);
-
-  /* FIXME: Only do this on writes? */
-  memcpy(io->priv->tempbuf + USBI_CONTROL_SETUP_LEN, io->ctrl.buf, io->ctrl.buflen);
-
-  io->priv->urb.buffer = io->tempbuf;
-  io->priv->urb.buffer_length = USBI_CONTROL_SETUP_LEN + io->ctrl.buflen;
-
-  io->priv->urb.actual_length = 0;
-  io->priv->urb.number_of_packets = 0;
-#endif
-  
-  return urb_submit(hdev, io);
+	return urb_submit(hdev, io);
 }
 
 
@@ -1088,7 +1080,8 @@ int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
     usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
     return (LIBUSB_NO_RESOURCES);
   }
-
+  memset(io->priv, 0, sizeof(*io->priv));
+  
   /* get a pointer to the request */
   intr = io->req->req.intr; 
 
@@ -1126,7 +1119,8 @@ int32_t linux_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
     usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
     return (LIBUSB_NO_RESOURCES);
   }
-
+  memset(io->priv, 0, sizeof(*io->priv));
+  
   /* get a pointer to the request */
   bulk = io->req->req.bulk;
    
@@ -1165,6 +1159,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
     usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
     return (LIBUSB_NO_RESOURCES);
   }
+  memset(io->priv, 0, sizeof(*io->priv)); 
 
   resubmit_flag = RESUBMIT;
   for(n = 0; n < ISOC_URB_MAX_NUM; n++) {
@@ -1208,12 +1203,21 @@ struct usbi_io* isoc_io_clone(struct usbi_io *io)
   if(!new_io) {
     usbi_debug(io->dev->lib_hdl, 1, "error malloc new_io: %s\n", strerror(errno));
     return NULL;
-  }
+  } 
     
   new_iolen =   sizeof(*io) + io->req->req.isoc->pkts.num_packets
               * sizeof(struct usbk_iso_packet_desc);
   memset(new_io, 0, new_iolen);
   memcpy(new_io, io, sizeof(*io));
+
+  new_io->priv = malloc(sizeof(*new_io->priv));
+  
+  if(!new_io) {
+    usbi_debug(io->dev->lib_hdl, 1, "error malloc new_io: %s\n", strerror(errno));
+    return NULL;
+  }
+  memset(new_io->priv, 0, sizeof(*new_io->priv)); 
+  memcpy(new_io->priv, io->priv, sizeof(*io->priv)); 
   
   /*initialize new io structure*/
   pthread_mutex_init(&new_io->lock, NULL);
@@ -1271,26 +1275,23 @@ struct usbi_io* isoc_io_clone(struct usbi_io *io)
 int32_t io_complete(struct usbi_dev_handle *hdev)
 {
   struct usbk_urb *urb;
-  struct usbi_io  *io, *tio;
+	struct usbi_io  *io, *tio;
   struct usbi_io  *new_io;
   struct timeval  tvo = {.tv_sec = 0, .tv_usec = 0};
   struct libusb_isoc_packet *packets;
   int ret, i, offset = 0;
 
+	usbi_debug(hdev->lib_hdl, 4, "Process Completed URB");
+			
   while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb)) >= 0) {
     io = urb->usercontext;
-    list_del(&io->list);  /* lock obtained by caller */
-    if(list_empty(&hdev->io_head)) {
-      list_del(&hdev->io_head);
-    }
+    pthread_mutex_lock(&io->lock);
 
     /* if this was a control request copy the payload */
     if (io->req->type == USB_TYPE_CONTROL) {
-      memcpy(io->req->req.ctrl->payload,
-             io->priv->urb.buffer + USBI_CONTROL_SETUP_LEN,
-             io->req->req.ctrl->length);
-      if(io->priv->urb.buffer)
-        free(io->priv->urb.buffer);
+      memcpy(io->req->req.ctrl->payload, urb->buffer + USBI_CONTROL_SETUP_LEN, io->req->req.ctrl->length);
+      if(urb->buffer)
+        free(urb->buffer);
     }
 
     /*complete handle for isochronous transfer*/
@@ -1299,8 +1300,8 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
       packets = io->req->req.isoc->pkts.packets;
       io->req->req.isoc->isoc_results = (libusb_request_result_t *)malloc(io->req->req.isoc->pkts.num_packets * sizeof(libusb_request_result_t));
       if(io->req->req.isoc->isoc_results == NULL) {
-        if(io->priv->urb.buffer)
-          free(io->priv->urb.buffer);
+        if(urb->buffer)
+          free(urb->buffer);
         free(io->priv);
         usbi_free_io(io);
         continue;
@@ -1309,13 +1310,13 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
       /*copy the result of each packet*/
       offset = 0;
       for(i = 0; i < io->req->req.isoc->pkts.num_packets; i++) {
-        memcpy(packets[i].payload, io->priv->urb.buffer + offset, packets[i].length);
+        memcpy(packets[i].payload, urb->buffer + offset, packets[i].length);
         offset += packets[i].length;
         io->req->req.isoc->isoc_results[i].status = urb->iso_frame_desc[i].status;
         io->req->req.isoc->isoc_results[i].transferred_bytes = urb->iso_frame_desc[i].actual_length;
       }
-      if(io->priv->urb.buffer)
-        free(io->priv->urb.buffer);
+      if(urb->buffer)
+        free(urb->buffer);
       free(io->priv);
       
       /*resubmit isoc io*/
@@ -1323,24 +1324,23 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
       {
         new_io = isoc_io_clone(io);
         if(new_io != NULL) {
-          pthread_mutex_unlock(&usbi_ios_lock);
           urb_submit(hdev, new_io);
-          pthread_mutex_lock(&usbi_ios_lock);
         }
       }
     }
 
+		io->status = USBI_IO_COMPLETED;
+		pthread_mutex_unlock(&io->lock);
+
     /* urb->status == -2, indicates that the URB was discarded, aka canceled */
     if (urb->status == -2) {
-      urb->status = LIBUSB_IO_CANCELED;
-    }
-
-    pthread_mutex_unlock(&usbi_ios_lock);
-    usbi_io_complete(io, urb->status, urb->actual_length);
-    pthread_mutex_lock(&usbi_ios_lock);
+			usbi_io_complete(io, USBI_IO_CANCEL, urb->actual_length);
+		} else {
+			usbi_io_complete(io, USBI_IO_COMPLETED, urb->actual_length);
+		}
   }
 
-  list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
+	list_for_each_entry_safe(io, tio, &io->list, list) {
     if(io->req->type == USB_TYPE_ISOCHRONOUS) {
       continue;
     }
@@ -1372,23 +1372,22 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
   /* check each entry in the io list to find out if it's timed out */ 
   list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
     
+    pthread_mutex_lock(&io->lock);
+      
     /*currently, isochronous io doesn't consider timeout issue*/
     if(io->req->type == USB_TYPE_ISOCHRONOUS) {
-      continue;
+			pthread_mutex_unlock(&io->lock);
+			continue;
     }
 
     if (usbi_timeval_compare(&hdev->priv->tvo, tvc) <= 0) {
       int ret;
 
-      list_del(&io->list);
-      if(list_empty(&hdev->io_head)) {
-        list_del(&hdev->io_head);
-      }
-      
       /* this request has timed out, tell usbfs to discard it */
       ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
       if (ret < 0) {
         usbi_debug(hdev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
+				pthread_mutex_unlock(&io->lock);
         return translate_errno(errno);
       }
       
@@ -1401,11 +1400,13 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
       /* New soonest timeout */
       memcpy(&tvo, &io->tvo, sizeof(tvo));
     }
+    
+    pthread_mutex_unlock(&io->lock);
   }
 
   memcpy(&hdev->priv->tvo, &tvo, sizeof(hdev->priv->tvo));
 
-  return LIBUSB_SUCCESS;
+  return (LIBUSB_SUCCESS);
 }
 
 
@@ -1454,12 +1455,13 @@ int32_t linux_io_cancel(struct usbi_io *io)
  */
 void *poll_io(void *devhdl)
 {
-  /* 
+	struct usbi_dev_handle  *hdev = (struct usbi_dev_handle*)devhdl;
+	usbi_debug(hdev->lib_hdl, 4, "Begin IO Polling");
+	/*
    * Loop forever checking to see if we have io requests that need to be
    * processed and process them.
    */ 
-  while (1) {
-    struct usbi_dev_handle  *hdev = (struct usbi_dev_handle*)devhdl;
+	while (1) {
     struct timeval          tvc, tvo;
     fd_set                  readfds, writefds;
     int                     ret, maxfd;  
@@ -1469,12 +1471,12 @@ void *poll_io(void *devhdl)
     FD_ZERO(&writefds);
 
     /* Always check the event_pipe and our device file descriptor */
-    FD_SET(hdev->event_pipe[0], &readfds);
+    FD_SET(hdev->priv->event_pipe[0], &readfds);
     FD_SET(hdev->priv->fd, &writefds);
     
     /* get the max file descriptor for select() */
-    if (hdev->event_pipe[0] > hdev->priv->fd) {
-      maxfd = hdev->event_pipe[0];
+    if (hdev->priv->event_pipe[0] > hdev->priv->fd) {
+      maxfd = hdev->priv->event_pipe[0];
     } else {
       maxfd = hdev->priv->fd;
     }
@@ -1482,24 +1484,6 @@ void *poll_io(void *devhdl)
     /* get the time so that we can determine if any timeouts have passed */
     gettimeofday(&tvc, NULL);
     memset(&tvo, 0, sizeof(tvo));
-
-#if 0
-    /* determine if we have any file descriptors to check for writes and find
-    * the next soonest timeout so select() knows how long to wait */
-    pthread_mutex_lock(&usbi_ios_lock);
-    list_for_each_entry(dev, &usbi_ios, io_list) {
-      FD_SET(dev->priv->fd, &writefds);
-
-      if (dev->priv->fd > maxfd)
-        maxfd = dev->priv->fd;
-
-      if (dev->tvo.tv_sec &&
-          (!tvo.tv_sec || usbi_timeval_compare(&dev->tvo, &tvo)))
-        /* New soonest timeout */
-        memcpy(&tvo, &dev->tvo, sizeof(tvo));
-  }
-    pthread_mutex_unlock(&usbi_ios_lock);
-#endif
 
     /* our next soonest timeout is given by hdev->priv->tvo */
     memcpy(&tvo, &hdev->priv->tvo, sizeof(hdev->priv->tvo));
@@ -1522,9 +1506,9 @@ void *poll_io(void *devhdl)
       tvo.tv_usec -= tvc.tv_usec;
 
     /* determine if we have file descriptors reading for reading/writing */
-    /*printf("select(%d, { tv_sec = %d, tv_usec = %d })\n", maxfd + 1, (int)tvo.tv_sec, (int)tvo.tv_usec);*/
+    printf("select(%d, { tv_sec = %d, tv_usec = %d })\n", maxfd + 1, (int)tvo.tv_sec, (int)tvo.tv_usec);
     ret = select(maxfd + 1, &readfds, &writefds, NULL, &tvo);
-    /*printf("select() = %d\n", ret);*/
+    printf("select() = %d\n", ret);
     if (ret < 0) {
       usbi_debug(hdev->lib_hdl, 1, "select() call failed: %s", strerror(errno));
       continue;
@@ -1533,10 +1517,10 @@ void *poll_io(void *devhdl)
     gettimeofday(&tvc, NULL);
 
     /* if there is data to be read on the event pipe read it and discard*/
-    if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
+    if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
       char buf[16];
 
-      read(hdev->event_pipe[0], buf, sizeof(buf));
+      read(hdev->priv->event_pipe[0], buf, sizeof(buf));
     }
 
     /* now that we've waited for select, determine what action to take */
@@ -1549,23 +1533,6 @@ void *poll_io(void *devhdl)
     if (usbi_timeval_compare(&hdev->priv->tvo, &tvc) <= 0) {
       io_timeout(hdev, &tvc);
     }
-    
-#if 0
-    /* now we'll process any pending io requests & timeouts */
-    pthread_mutex_lock(&usbi_ios_lock);
-    list_for_each_entry_safe(dev, tdev, &usbi_ios, io_list) {
-      if (FD_ISSET(dev->priv->fd, &writefds))
-        io_complete(dev);
-
-      if (usbi_timeval_compare(&dev->priv->tvo, &tvc) <= 0)
-        io_timeout(dev, &tvc);
-
-      if (list_empty(&dev->ios))
-        list_del(&dev->io_list);
-    }
-    pthread_mutex_unlock(&usbi_ios_lock);
-#endif
-  
   }
 
   return (NULL);
@@ -1584,11 +1551,18 @@ void *poll_io(void *devhdl)
  */
 void *poll_events(void *unused)
 {
-  char filename[PATH_MAX + 1];
-  char sysfsmnt[PATH_MAX + 1]; 
-  int  fd = -1;
-  int  usingSysfs = 0;
+  char            filename[PATH_MAX + 1];
+  char            sysfsmnt[PATH_MAX + 1];
+  int             fd = -1;
+  int             usingSysfs = 0;
+  struct timeval  tvc;
+  struct timeval  tvLastRescan;
 
+  /* initialize our time values -- these inits will prevent a rescan there
+  * first time the function is called */
+  gettimeofday(&tvc, NULL);
+  gettimeofday(&tvLastRescan, NULL);
+  
   /* Determine if we're using SYSFS or /proc/bus/usb/devices to check events */
   if (sysfs_get_mnt_path(sysfsmnt,PATH_MAX+1) == 0)
   {
@@ -1602,31 +1576,21 @@ void *poll_events(void *unused)
       usbi_debug(NULL, 0, "unable to open %s to check for topology changes", filename);
   }
 
-  /* Loop forever, checking for events every 0.5 second */
+  /* Loop forever, checking for events every 1 second */
   while(1) {
-    struct timeval tvc;
-    struct timeval tvLastRescan;
-    int doRescan = 1;
-
-    /* We'll only do a rescan if it's been at least 500ms since our
+    /* We'll only do a rescan if it's been at least 1 sec since our
      * last rescan */
     gettimeofday(&tvc, NULL);
-    if ( tvc.tv_sec - tvLastRescan.tv_sec > 1) {
-      doRescan = 1;
-    } else if (tvc.tv_usec - tvLastRescan.tv_usec > 500000) {
-      doRescan = 1;
-    } else {
-      doRescan = 0;
-    }
-    if (doRescan) {
+    if ( tvc.tv_sec - tvLastRescan.tv_sec >= 1) {
+      /* do the rescan */
       if ( (fd >= 0) || usingSysfs ) {
-        /* FIXME: We need to handle new/removed busses as well */
         usbi_rescan_devices();
         gettimeofday(&tvLastRescan, NULL);
       }
+    } else {
+      usleep(1000000);
     }
   }
-
 }
 
 
@@ -1711,130 +1675,6 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
   ibus->priv->dev_by_num[devnum] = idev;
   return (LIBUSB_SUCCESS);
 
-#if 0 
-  fd = device_open(idev);
-  if (fd < 0) {
-    usbi_debug(NULL, 1, "couldn't open %s: %s", idev->priv->filename, strerror(errno));
-
-    free(idev);
-    return LIBUSB_UNKNOWN_DEVICE;
-  }
-
-  /* FIXME: Better error messages (with filename for instance) */
-
-  /* FIXME: Fetch the size of the descriptor first, then the rest. This is needed for forward compatibility */
-
-  idev->desc.device_raw.data = malloc(USBI_DEVICE_DESC_SIZE);
-  if (!idev->desc.device_raw.data) {
-    usbi_debug(NULL, 1, "unable to allocate memory for cached device descriptor");
-    goto done;
-  }
-
-  ret = read(fd, idev->desc.device_raw.data, USBI_DEVICE_DESC_SIZE);
-  if (ret < 0) {
-    usbi_debug(NULL, 1, "couldn't read descriptor: %s", strerror(errno));
-    goto done;
-  }
-
-  idev->desc.device_raw.len = USBI_DEVICE_DESC_SIZE;
-  //libusb_parse_data("..wbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
-  libusb_parse_data("bbwbbbbwwwbbbb", idev->desc.device_raw.data, idev->desc.device_raw.len, &idev->desc.device, USBI_DEVICE_DESC_SIZE, &count);
-  usbi_debug(NULL, 2, "found device %03d on %s", idev->devnum, ibus->priv->filename);
-
-  /* Now try to fetch the rest of the descriptors */
-  if (idev->desc.device.bNumConfigurations > USBI_MAXCONFIG)
-    /* Silent since we'll try again later */
-    goto done;
-
-  if (idev->desc.device.bNumConfigurations < 1)
-    /* Silent since we'll try again later */
-    goto done;
-
-  idev->desc.configs_raw = malloc(idev->desc.device.bNumConfigurations * sizeof(idev->desc.configs_raw[0]));
-  if (!idev->desc.configs_raw) {
-    usbi_debug(NULL, 1, "unable to allocate memory for cached descriptors");
-
-    goto done;
-  }
-
-  memset(idev->desc.configs_raw, 0, idev->desc.device.bNumConfigurations * sizeof(idev->desc.configs_raw[0]));
-
-  idev->desc.configs = malloc(idev->desc.device.bNumConfigurations * sizeof(idev->desc.configs[0]));
-  if (!idev->desc.configs)
-    /* Silent since we'll try again later */
-    goto done;
-
-  idev->desc.num_configs = idev->desc.device.bNumConfigurations;
-
-  memset(idev->desc.configs, 0, idev->desc.num_configs * sizeof(idev->desc.configs[0]));
-
-  for (i = 0; i < idev->desc.num_configs; i++) {
-    unsigned char buf[8];
-    struct usb_config_desc cfg_desc;
-    struct usbi_raw_desc *cfgr = idev->desc.configs_raw + i;
-    /*size_t count; */
-
-    /* Get the first 8 bytes so we can figure out what the total length is */
-    ret = read(fd, buf, 8);
-    if (ret < 8) {
-      if (ret < 0)
-        usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
-      else
-        usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", 8, ret);
-
-      goto done;
-    }
-
-    //libusb_parse_data("..w", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
-    libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
-    cfgr->len = cfg_desc.wTotalLength;
-
-    cfgr->data = malloc(cfgr->len);
-    if (!cfgr->data) {
-      usbi_debug(NULL, 1, "unable to allocate memory for descriptors");
-      ret = LIBUSB_NO_RESOURCES;
-      goto err;
-    }
-
-    /* Copy over the first 8 bytes we read */
-    memcpy(cfgr->data, buf, 8);
-
-    ret = read(fd, cfgr->data + 8, cfgr->len - 8);
-    if (ret < cfgr->len - 8) {
-      if (ret < 0)
-        usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
-      else
-        usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", cfgr->len, ret);
-
-      cfgr->len = 0;
-      free(cfgr->data);
-
-      goto done;
-    }
-
-    ret = usbi_parse_configuration(idev->desc.configs + i, cfgr->data, cfgr->len);
-    if (ret > 0)
-      usbi_debug(NULL, 2, "%d bytes of descriptor data still left", ret);
-    else if (ret < 0)
-      usbi_debug(NULL, 1, "unable to parse descriptors");
-  }
-
-done:
-  *dev = idev;
-
-  ibus->priv->dev_by_num[devnum] = idev;
-
-  close(fd);
-
-  return 0;
-
-err:
-  close(fd);
-  free(idev);
-
-  return translate_errno(errno);
-#endif
-
 }
 
 
@@ -1880,7 +1720,7 @@ int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 {
   char buf[1] = { 0x01 };
 
-  if (write(hdev->event_pipe[1], buf, 1) < 1) {
+  if (write(hdev->priv->event_pipe[1], buf, 1) < 1) {
     usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s", strerror(errno));
     return translate_errno(errno);
   }
@@ -1933,7 +1773,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
   devdescr = malloc(USBI_DEVICE_DESC_SIZE);
   if (!devdescr) {
     usbi_debug(NULL, 1, "unable to allocate memory for cached device descriptor");
-    return (LIBUSB_NO_RESOURCES);
+		sts = LIBUSB_NO_RESOURCES;
+		goto done;
   }
 
   /* read the device descriptor */ 
@@ -2045,20 +1886,23 @@ done:
 
 
 
-#if 0
-/* we'll need these functions for handling the open flags, but I've decided to ignore that for right now */
-/* TODO: Make this work with the open flags */
-
-static int linux_get_driver(struct usbi_dev_handle *hdev, int interface,
-	char *name, size_t namelen)
+/*
+ *	linux_get_driver
+ *
+ *		Gets the name of the kernel driver currently attached to the interface
+ */
+int32_t linux_get_driver(struct usbi_dev_handle *hdev, uint8_t interface,
+												 char *name, size_t namelen)
 {
   struct usbk_getdriver getdrv;
   int ret;
 
   getdrv.interface = interface;
-  ret = ioctl(hdev->fd, IOCTL_USB_GETDRIVER, &getdrv);
+  ret = ioctl(hdev->priv->fd, IOCTL_USB_GETDRIVER, &getdrv);
   if (ret) {
-    usbi_debug(1, "could not get bound driver: %s", strerror(errno));
+    usbi_debug(hdev->lib_hdl, 1,
+							 "could not get bound driver: %s",
+							 strerror(errno));
     return translate_errno(errno);
   }
 
@@ -2068,8 +1912,15 @@ static int linux_get_driver(struct usbi_dev_handle *hdev, int interface,
   return LIBUSB_SUCCESS;
 }
 
-static int linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
-	int interface)
+
+
+/*
+ *	linux_attach_kernel_driver
+ *
+ *		Attachs the appropriate kernel driver to the interface
+ */
+int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
+																	 uint8_t interface)
 {
   struct usbk_ioctl command;
   int ret;
@@ -2078,34 +1929,45 @@ static int linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
   command.ioctl_code = IOCTL_USB_CONNECT;
   command.data = NULL;
 
-  ret = ioctl(hdev->fd, IOCTL_USB_IOCTL, &command);
+  ret = ioctl(hdev->priv->fd, IOCTL_USB_IOCTL, &command);
   if (ret) {
-    usbi_debug(1, "could not attach kernel driver to interface %d: %s", strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1,
+							 "could not attach kernel driver to interface %d: %s",
+							 strerror(errno));
     return translate_errno(errno);
   }
 
-  return LIBUSB_SUCCESS;
+	return (LIBUSB_SUCCESS);
 }
 
-static int linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
-	int interface)
+
+
+/*
+ *	linux_detach_kernal_driver
+ *
+ *		Detachs the kernel driver currently attached to the specified interface
+ */
+int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
+																	 uint8_t interface)
 {
   struct usbk_ioctl command;
   int ret;
 
-  command.ifno = interface;
-  command.ioctl_code = IOCTL_USB_DISCONNECT;
-  command.data = NULL;
+	command.ifno = interface;
+	command.ioctl_code = IOCTL_USB_DISCONNECT;
+	command.data = NULL;
 
-  ret = ioctl(hdev->fd, IOCTL_USB_IOCTL, &command);
-  if (ret) {
-    usbi_debug(1, "could not detach kernel driver to interface %d: %s", strerror(errno));
-    return translate_errno(errno);
-  }
+	ret = ioctl(hdev->priv->fd, IOCTL_USB_IOCTL, &command);
+	if (ret) {
+		usbi_debug(hdev->lib_hdl, 1,
+							 "could not detach kernel driver to interface %d: %s",
+							 strerror(errno));
+		return translate_errno(errno);
+	}
 
-  return LIBUSB_SUCCESS;
+	return (LIBUSB_SUCCESS);
 }
-#endif
+
 
 
 struct usbi_backend_ops backend_ops = {

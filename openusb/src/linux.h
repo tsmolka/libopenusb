@@ -146,27 +146,22 @@ int32_t device_is_new(struct usbi_device *idev, uint16_t devnum);
 int32_t check_usb_path(const char *dirname);
 int32_t translate_errno(int errnum);
 int32_t wakeup_io_thread(struct usbi_dev_handle *hdev);
+int32_t linux_get_driver(struct usbi_dev_handle *hdev, uint8_t interface,
+												 char *name, size_t namelen);
+int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
+																	 uint8_t interface);
+int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
+																	 uint8_t interface);
+
 
 
 /* Linux specific members for various internal structures */
-#if 0
-#define USBI_BUS_PRIVATE \
-	char filename[PATH_MAX + 1]; \
-	struct usbi_device *dev_by_num[USB_MAX_DEVICES_PER_BUS];
-#endif
-
 struct usbi_bus_private
 {
 	char                filename[PATH_MAX + 1];
 	struct usbi_device  *dev_by_num[USB_MAX_DEVICES_PER_BUS];
 };
 
-#if 0
-#define USBI_DEVICE_PRIVATE \
-	char filename[PATH_MAX + 1]; /* full path to usbfs file */	\
-	time_t mtime; /* modify time to detect dev changes */		\
-	int found; /* flag to denote if we saw this dev during rescan */
-#endif 
 
 struct usbi_dev_private
 {
@@ -176,29 +171,20 @@ struct usbi_dev_private
 };
 
 
-#if 0
-#define USBI_DEV_HANDLE_PRIVATE \
-	int fd;		/* file descriptor for usbdevfs entry */	\
-	struct list_head io_list; /* list for devs with pending IO */	\
-	struct list_head ios; /* list of IOs for this devices */	\
-	struct timeval tvo; /* next timeout for IOs on this dev */
-#endif
-
 struct usbi_dev_hdl_private
 {
-	int             fd;        /* file descriptor for usbdevfs entry */
-  pthread_t       io_thread; /* thread for processing io requests */
-  struct timeval  tvo;       /* the next soonest timeout */ 
+	int             fd;            /* file descriptor for usbdevfs entry */
+  int             event_pipe[2]; /* let's us know when things are happening */
+	int16_t					reattachdrv;	 /* do we need to reattach the kernel driver */
+	pthread_t       io_thread;     /* thread for processing io requests */
+  struct timeval  tvo;           /* the next soonest timeout */ 
 };
 
-#if 0
-#define USBI_IO_HANDLE_PRIVATE \
-	struct usbk_urb urb;
-#endif 
 
 struct usbi_io_private
 {
 	struct usbk_urb urb;        /* URB for IOCTLs */
+	void *tempbuf;							/* temporary data storage */
 };
 
 
