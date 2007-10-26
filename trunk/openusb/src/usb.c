@@ -437,9 +437,6 @@ static int usbi_init_common(void)
 		return LIBUSB_PLATFORM_FAILURE;
 	}
 
-	/*set up device tree */
-	usbi_rescan_devices();
-
 	usbi_debug(NULL, 4, "End");
 
 	return LIBUSB_SUCCESS;
@@ -613,6 +610,9 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 		free(hdl);
 		return LIBUSB_PLATFORM_FAILURE;
 	}
+
+	/*set up device tree */
+	usbi_rescan_devices();
 
 	*handle = hdl->handle;
 	usbi_debug(hdl, 4, "End");
