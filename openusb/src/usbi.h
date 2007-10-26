@@ -123,7 +123,7 @@ struct usbi_dev_handle {
 	struct list_head	list;
 
 	/* keep track of this device's outstanding io requests */
-	struct list_head io_head; 
+	struct list_head io_head;
 
 	struct list_head m_head; /* multi-xfer request list */
 
@@ -168,7 +168,7 @@ struct usbi_io {
 
 	uint32_t flag; /* SYNC/ASYNC */
 
-	void *callback; /* maybe internal callback, libusb_request_callback */
+  void (*callback)(struct usbi_io *io, int32_t status); /* internal callback */
 	void *arg;	/* additional arguments the callback may use */
 
 	struct timeval		tvo;
