@@ -18,10 +18,87 @@
 #include <fcntl.h>
 #include <config_admin.h>
 #include <pthread.h>
+#include <sys/usb/usba.h>
 #include <sys/usb/clients/ugen/usb_ugen.h>
 
 #include "usbi.h"
 #include "sunos.h"
+
+static int busnum = 0;
+static di_devlink_handle_t devlink_hdl;
+
+static pthread_t cb_thread;
+static pthread_mutex_t cb_io_lock;
+static pthread_cond_t cb_io_cond;
+static struct list_head cb_ios = {.prev = &cb_ios, .next = &cb_ios};
+static int32_t solaris_back_inited;
+
+/* fake root hub descriptors */
+static usb_device_desc_t fs_root_hub_dev_descr = {
+	0x12,   /* Length */
+	1,      /* Type */
+	0x110,  /* BCD - v1.1 */
+	9,      /* Class */
+	0,      /* Sub class */
+	0,      /* Protocol */
+	8,      /* Max pkt size */
+	0,      /* Vendor */
+	0,      /* Product id */
+	0,      /* Device release */
+	0,      /* Manufacturer */
+	0,      /* Product */
+	0,      /* Sn */
+	1       /* No of configs */
+};
+
+static usb_device_desc_t hs_root_hub_dev_descr = {
+	0x12,           /* bLength */
+	0x01,           /* bDescriptorType, Device */
+	0x200,          /* bcdUSB, v2.0 */
+	0x09,           /* bDeviceClass */
+	0x00,           /* bDeviceSubClass */
+	0x01,           /* bDeviceProtocol */
+	0x40,           /* bMaxPacketSize0 */
+	0x00,           /* idVendor */
+	0x00,           /* idProduct */
+	0x00,           /* bcdDevice */
+	0x00,           /* iManufacturer */
+	0x00,           /* iProduct */
+	0x00,           /* iSerialNumber */
+	0x01            /* bNumConfigurations */
+};
+
+static uchar_t root_hub_config_descriptor[] = {
+	/* One configuartion */
+	0x09,           /* bLength */
+	0x02,           /* bDescriptorType, Configuartion */
+	0x19, 0x00,     /* wTotalLength */
+	0x01,           /* bNumInterfaces */
+	0x01,           /* bConfigurationValue */
+	0x00,           /* iConfiguration */
+	0x40,           /* bmAttributes */
+	0x00,           /* MaxPower */
+
+	/* One Interface */
+	0x09,           /* bLength */
+	0x04,           /* bDescriptorType, Interface */
+	0x00,           /* bInterfaceNumber */
+	0x00,           /* bAlternateSetting */
+	0x01,           /* bNumEndpoints */
+	0x09,           /* bInterfaceClass */
+	0x01,           /* bInterfaceSubClass */
+	0x00,           /* bInterfaceProtocol */
+	0x00,           /* iInterface */
+
+	/* One Endpoint (status change endpoint) */
+	0x07,           /* bLength */
+	0x05,           /* bDescriptorType, Endpoint */
+	0x81,           /* bEndpointAddress */
+	0x03,           /* bmAttributes */
+	0x01, 0x00,     /* wMaxPacketSize, 1 +  (EHCI_MAX_RH_PORTS / 8) */
+	0xff            /* bInterval */
+};
+
 
 #if 1 /* hal */
 
@@ -36,6 +113,8 @@ GMainLoop *event_loop;
 
 pthread_t hotplug_thread;
 
+static int solaris_refresh_devices(struct usbi_bus *ibus);
+
 struct usbi_device *find_device_by_syspath(char *path)
 {
 	struct usbi_device *idev;
@@ -44,9 +123,10 @@ struct usbi_device *find_device_by_syspath(char *path)
 
 	snprintf(newpath, PATH_MAX, "/devices%s", path);
 
-//	usbi_debug(NULL, 4, "searching %s  newpath %s", path, newpath);
-
 	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
+		if (!idev)
+			break;
+
 		if ((strcmp(path, idev->sys_path) == 0) ||
 			strcmp(newpath, idev->sys_path) == 0) {
 			return idev;
@@ -66,17 +146,11 @@ struct usbi_device *find_device_by_udi(const char *udi)
 	pthread_mutex_lock(&usbi_devices.lock);
 
 	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
-#if 0
-	usbi_debug(NULL, 4, "priv = %p", idev->priv);
-
-	usbi_debug(NULL, 4, "udi=%s\n priv->udi=%p", udi, idev->priv->udi);
-#endif
 		if (!idev->priv->udi) {
 			continue;
 		}
 
 		if (strcmp(udi, idev->priv->udi) == 0) {
-	usbi_debug(NULL, 4, "device: %s", idev->sys_path);
 			pthread_mutex_unlock(&usbi_devices.lock);
 			return idev;
 		}
@@ -97,7 +171,6 @@ set_device_udi(void)
 	char *devpath;
 	struct usbi_device *idev;
 
-//	usbi_debug(NULL, 4, "Begin");
 
 	dbus_error_init (&error);
 
@@ -109,7 +182,6 @@ set_device_udi(void)
 		return;
 	}
 
-//	usbi_debug(NULL, 1, "devices number:%d", num_devices);
 
 	for (i = 0;i < num_devices;i++) {
 
@@ -140,7 +212,6 @@ set_device_udi(void)
 		libhal_free_string(devpath);
 	}
 
-//	usbi_debug(NULL, 4, "End");
 
 	libhal_free_string_array (device_names);
 }
@@ -195,27 +266,6 @@ void process_new_device(const char *udi)
 
 	solaris_refresh_devices(pidev->bus);
 
-#if 0
-	idev = calloc(sizeof(struct usbi_device), 1);
-	if (!idev) {
-		goto add_fail;
-	}
-
-	idev->priv = calloc(sizeof(struct usbi_dev_private), 1);
-	if (!idev->priv) {
-		free(idev);
-		goto add_fail;
-	}
-	idev->priv->info.ep0_fd = -1;
-        idev->priv->info.ep0_fd_stat = -1;
-
-	snprintf(idev->sys_path, PATH_MAX, "%s", devpath); 
-	
-	idev->priv->udi = strdup(udi);
-	idev->parent = pidev;
-
-	usbi_add_device(pidev->bus, idev);
-#endif
 
 add_fail:
 	libhal_free_string(parent);
@@ -366,16 +416,6 @@ hal_hotplug_event_thread(void)
 	return 0;
 }
 #endif
-
-static int busnum = 0;
-//static di_node_t root_node;
-static di_devlink_handle_t devlink_hdl;
-
-static pthread_t cb_thread;
-static pthread_mutex_t cb_io_lock;
-static pthread_cond_t cb_io_cond;
-static struct list_head cb_ios = {.prev = &cb_ios, .next = &cb_ios};
-static int32_t solaris_back_inited;
 
 
 /*
@@ -649,72 +689,6 @@ err2:
 err1:
 	return (-1);
 }
-
-/* fake root hub descriptors */
-static usb_device_desc_t fs_root_hub_dev_descr = {
-	0x12,   /* Length */
-	1,      /* Type */
-	0x110,  /* BCD - v1.1 */
-	9,      /* Class */
-	0,      /* Sub class */
-	0,      /* Protocol */
-	8,      /* Max pkt size */
-	0,      /* Vendor */
-	0,      /* Product id */
-	0,      /* Device release */
-	0,      /* Manufacturer */
-	0,      /* Product */
-	0,      /* Sn */
-	1       /* No of configs */
-};
-
-static usb_device_desc_t hs_root_hub_dev_descr = {
-	0x12,           /* bLength */
-	0x01,           /* bDescriptorType, Device */
-	0x200,          /* bcdUSB, v2.0 */
-	0x09,           /* bDeviceClass */
-	0x00,           /* bDeviceSubClass */
-	0x01,           /* bDeviceProtocol */
-	0x40,           /* bMaxPacketSize0 */
-	0x00,           /* idVendor */
-	0x00,           /* idProduct */
-	0x00,           /* bcdDevice */
-	0x00,           /* iManufacturer */
-	0x00,           /* iProduct */
-	0x00,           /* iSerialNumber */
-	0x01            /* bNumConfigurations */
-};
-
-static uchar_t root_hub_config_descriptor[] = {
-	/* One configuartion */
-	0x09,           /* bLength */
-	0x02,           /* bDescriptorType, Configuartion */
-	0x19, 0x00,     /* wTotalLength */
-	0x01,           /* bNumInterfaces */
-	0x01,           /* bConfigurationValue */
-	0x00,           /* iConfiguration */
-	0x40,           /* bmAttributes */
-	0x00,           /* MaxPower */
-
-	/* One Interface */
-	0x09,           /* bLength */
-	0x04,           /* bDescriptorType, Interface */
-	0x00,           /* bInterfaceNumber */
-	0x00,           /* bAlternateSetting */
-	0x01,           /* bNumEndpoints */
-	0x09,           /* bInterfaceClass */
-	0x01,           /* bInterfaceSubClass */
-	0x00,           /* bInterfaceProtocol */
-	0x00,           /* iInterface */
-
-	/* One Endpoint (status change endpoint) */
-	0x07,           /* bLength */
-	0x05,           /* bDescriptorType, Endpoint */
-	0x81,           /* bEndpointAddress */
-	0x03,           /* bmAttributes */
-	0x01, 0x00,     /* wMaxPacketSize, 1 +  (EHCI_MAX_RH_PORTS / 8) */
-	0xff            /* bInterval */
-};
 
 int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
                 uint16_t langid,uint8_t **buffer, uint16_t *buflen)
@@ -1103,20 +1077,10 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 	} else {
 		idev->nports = 0;
 	}
-/*
-	phys_path = di_devfs_path(node);
-*/
+
 	snprintf(idev->sys_path, sizeof (idev->sys_path), "/devices%s",
 	    phys_path);
 
-#if 0 //chenl
-	usbi_debug(NULL, 4, "chenl: %s", phys_path);
-	tmpdev = find_device_by_syspath(phys_path);
-	if (tmpdev) {
-		/* this device was already there */
-		usbi_debug(NULL, 4, "chenl already there");
-	}
-#endif
 	di_devfs_path_free(phys_path);
 
 	get_minor_node_link(node, idev);
@@ -1444,11 +1408,8 @@ solaris_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 		return (LIBUSB_NOT_SUPPORTED);
 	}
 
-	/*configuration index start from 1 */
-	if(cfg < 1 || cfg > hdev->idev->desc.num_configs) {
-		return LIBUSB_BADARG;
-	}
 	hdev->config_value = cfg;
+	hdev->priv->config_index = hdev->config_value - 1;
 
 	return LIBUSB_SUCCESS;
 }
@@ -1515,44 +1476,7 @@ solaris_claim_interface(struct usbi_dev_handle *hdev, uint8_t interface,
 	struct usbi_device *idev = hdev->idev;
 	int index;
 
-	if ((idev->desc.device_raw.len == 0) || (idev->desc.configs == NULL)) {
-		usbi_debug(hdev->lib_hdl, 1, "device access not supported");
-
-		return (LIBUSB_NOACCESS);
-	}
-
-	if (hdev->config_value == -1) {
-		index = 0;
-	} else {
-		for (index = 0; index < idev->desc.num_configs; index++) {
-			if (hdev->config_value ==
-			    idev->desc.configs[index].desc.bConfigurationValue){
-				break;
-			}
-		}
-		if (index == idev->desc.num_configs) {
-			usbi_debug(hdev->lib_hdl, 1, "invalid config_value %d",
-			    hdev->config_value);
-
-			return (LIBUSB_PLATFORM_FAILURE);
-		}
-	}
-
-	hdev->config_value =
-	    idev->desc.configs[index].desc.bConfigurationValue;
-	hdev->priv->config_index = index;
-
-	usbi_debug(hdev->lib_hdl, 4, "config_value = %d, config_index = %d",
-		hdev->config_value, hdev->priv->config_index);
-
-	/* check if this is a valid interface */
-	if ((interface >= USBI_MAXINTERFACES) ||
-	    (interface >= idev->desc.configs[index].num_interfaces)) {
-		usbi_debug(hdev->lib_hdl, 1, "interface %d not valid",
-			interface);
-
-		return (LIBUSB_BADARG);
-	}
+	index = hdev->config_value - 1;
 
 	/* already claimed this interface */
 	if (idev->priv->info.claimed_interfaces[interface] == hdev) {
@@ -1650,7 +1574,8 @@ usb_close_ep0(struct usbi_dev_handle *hdev)
 		}
 
 		if ((hdev->priv->eps[0].datafd != idev->priv->info.ep0_fd) ||
-		    (hdev->priv->eps[0].statfd != idev->priv->info.ep0_fd_stat)) {
+			(hdev->priv->eps[0].statfd !=
+		    	idev->priv->info.ep0_fd_stat)) {
 			usbi_debug(hdev->lib_hdl, 1,
 				"unexpected error closing ep0 of dev %s",
 				idev->sys_path);
@@ -1709,7 +1634,7 @@ solaris_close(struct usbi_dev_handle *hdev)
 static void
 usb_dump_data(char *data, size_t size)
 {
-#if 1
+#if 0
 	int i;
 
 	(void) fprintf(stderr, "data dump:");
@@ -1724,17 +1649,17 @@ usb_dump_data(char *data, size_t size)
 }
 
 /*
- * usb_get_status:
+ * sunos_usb_get_status:
  *	gets status of endpoint
  *
  * Returns: ugen's last cmd status
  */
 static int
-usb_get_status(int fd)
+sunos_usb_get_status(int fd)
 {
 	int status, ret;
 
-	usbi_debug(NULL, 4, "usb_get_status(): fd=%d\n", fd);
+	usbi_debug(NULL, 4, "sunos_usb_get_status(): fd=%d\n", fd);
 
 	ret = read(fd, &status, sizeof (status));
 	if (ret == sizeof (status)) {
@@ -1857,8 +1782,8 @@ usb_do_io(int fd, int stat_fd, char *data, size_t size, int flag, int *status)
 	if (ret < 0) {
 		int save_errno = errno;
 
-		/* usb_get_status will do a read and overwrite errno */
-		error = usb_get_status(stat_fd);
+		/* sunos_usb_get_status will do a read and overwrite errno */
+		error = sunos_usb_get_status(stat_fd);
 		usbi_debug(NULL, 1, "io status=%d errno=%d(%s)",error,
 			save_errno,strerror(save_errno));
 
@@ -1894,7 +1819,8 @@ solaris_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	data[6] = ctrl->length & 0xFF;
 	data[7] = (ctrl->length >> 8) & 0xFF;
 
-	usbi_debug(hdev->lib_hdl, 4, "ep0:data%d ,stat%d",hdev->priv->eps[0].datafd,
+	usbi_debug(hdev->lib_hdl, 4, "ep0:data%d ,stat%d",
+		hdev->priv->eps[0].datafd,
 		hdev->priv->eps[0].statfd);
 
 	if (hdev->priv->eps[0].datafd == -1) {
@@ -1904,8 +1830,9 @@ solaris_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	}
 
 	if ((data[0] & USB_REQ_DIR_MASK) == USB_REQ_DEV_TO_HOST) {
-		ret = usb_do_io(hdev->priv->eps[0].datafd, hdev->priv->eps[0].statfd,
-		    (char *)data, USBI_CONTROL_SETUP_LEN, WRITE,
+		ret = usb_do_io(hdev->priv->eps[0].datafd,
+		    hdev->priv->eps[0].statfd, (char *)data,
+		    USBI_CONTROL_SETUP_LEN, WRITE,
 		    &ctrl->result.status);
 	} else {
 		char *buf;
@@ -1970,14 +1897,11 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 
 	ep_index = usb_ep_index(ep_addr);
 	
-	//	pthread_mutex_lock(&hdev->lock);
 	if ((hdev->config_value == -1) || 
 		(hdev->claimed_ifs[ifc].clm == -1) ||
 		(hdev->claimed_ifs[ifc].altsetting == -1)) {
 
 		usbi_debug(hdev->lib_hdl, 1, "interface not claimed");
-
-	//	pthread_mutex_unlock(&hdev->lock);
 
 		return (EACCES);
 	}
@@ -1994,7 +1918,6 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 			"ep %d not belong to the claimed interface",
 			ep_addr);
 
-	//	pthread_mutex_unlock(&hdev->lock);
 		return (EACCES);
 	}
 
@@ -2006,7 +1929,6 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 			"ep %d already opened,return success",
 			ep_addr);
 
-	//		pthread_mutex_unlock(&hdev->lock);
 		return (0);
 	}
 	
@@ -2035,7 +1957,6 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 
 	(void) snprintf(statfilename, PATH_MAX, "%sstat", filename);
 
-	//	pthread_mutex_unlock(&hdev->lock);
 
 	/*
 	 * for interrupt IN endpoints, we need to enable one xfer
@@ -2061,7 +1982,6 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 					statfilename, errno);
 				(void) close(fdstat);
 
-	//			pthread_mutex_unlock(&hdev->lock);
 
 				return (errno);
 			}
@@ -2069,19 +1989,7 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 			close (fdstat);
 		}
 	}
-#if 0
-	else {
-		/* open the status node for non-INTR-IN endpoint */
-		if ((fdstat = open(statfilename, O_RDONLY)) == -1) {
-			usbi_debug(NULL,1, "can't open %s: %d", statfilename,
-				errno);
-			//(void) close(fd);
 
-			return (errno);
-		}
-
-	}
-#endif
 	/* open the xfer node first in case alt needs to be changed */
 	if (ep_type == USB_ENDPOINT_TYPE_ISOCHRONOUS) {
 		usbi_debug(hdev->lib_hdl, 4, "Open ISOC endpoint");
@@ -2101,7 +2009,6 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 		usbi_debug(hdev->lib_hdl, 1, "can't open %s: %d(%s) TID=%x",
 			filename, errno, strerror(errno),pthread_self());
 
-	//	pthread_mutex_unlock(&hdev->lock);
 		return (errno);
 	}
 
@@ -2112,15 +2019,12 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 
 		(void) close(fd);
 
-//		pthread_mutex_unlock(&hdev->lock);
 		return (errno);
 	}
 
-	/*pthread_mutex_lock(&hdev->lock);*/
 	hdev->priv->eps[ep_index].datafd = fd;
 	hdev->priv->eps[ep_index].statfd = fdstat;
 	usbi_debug(hdev->lib_hdl, 4, "datafd=%d, statfd=%d", fd, fdstat);
-	/*pthread_mutex_unlock(&hdev->lock);*/
 
 	return (0);	
 }
@@ -2355,7 +2259,6 @@ static int
 solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
 	int ret;
-#if 1
 	uint8_t ep_addr, ep_index;
 	struct libusb_isoc_packet *packet;
 	struct usbk_isoc_pkt_header *header;
@@ -2407,6 +2310,7 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	if (pkts_len == 0) {
 		usbi_debug(hdev->lib_hdl, 1, "pkt length invalid");
 
+		pthread_mutex_unlock(&hdev->lock);
 		return (LIBUSB_BADARG);
 	}
 
@@ -2425,6 +2329,7 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 			"malloc isoc out buf of length %d failed",
 			len);
 
+		pthread_mutex_unlock(&hdev->lock);
 		return (LIBUSB_NO_RESOURCES);
 	}
 
@@ -2463,14 +2368,12 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	 * simutaneously, or some thread close the device while another is 
 	 * accessing it? 
 	 */
-	/*pthread_mutex_lock(&hdev->lock);*/
 
 	/* do isoc OUT xfer or init polling for isoc IN xfer */
 	ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
 		hdev->priv->eps[ep_index].statfd, (char *)buf, len, WRITE,
 		&isoc->isoc_status);
 
-	/*pthread_mutex_unlock(&hdev->lock);*/
 
 	free(buf);
 
@@ -2478,10 +2381,10 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		usbi_debug(hdev->lib_hdl, 1, "write isoc ep failed %d TID=%d",
 			ret, pthread_self());
 
+		pthread_mutex_unlock(&hdev->lock);
 		return (LIBUSB_PLATFORM_FAILURE);
 	}
 
-#if 1
 	if (ep_addr & USB_ENDPOINT_DIR_MASK) {
 
 		len = pkts_len + n_pkt*sizeof(struct usbk_isoc_pkt_descr);
@@ -2511,6 +2414,7 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 			free(buf);
 
+			pthread_mutex_unlock(&hdev->lock);
 			return (LIBUSB_PLATFORM_FAILURE);
 		}
 		
@@ -2565,9 +2469,6 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		}
 #endif
 	}
-#endif
-
-#endif
 
 	pthread_mutex_unlock(&hdev->lock);
 	io->status = USBI_IO_COMPLETED;
@@ -2582,8 +2483,6 @@ solaris_set_altinterface(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t alt)
 {
 	struct usbi_device *idev = hdev->idev;
 	int index, iface;
-	//struct usbi_config *pcfg=&idev->desc.configs[hdev->config_index];
-
 
 	if (idev->priv->info.claimed_interfaces[ifc] != hdev) {
 		usbi_debug(hdev->lib_hdl, 1, "handle dismatch");
@@ -2593,16 +2492,7 @@ solaris_set_altinterface(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t alt)
 
 	usb_close_all_eps(hdev);
 	iface = ifc;
-	index = hdev->priv->config_index;
-#if 0
-	if ((alt < 0) || (alt >=
-		idev->desc.configs[index].interfaces[iface].num_altsettings)) {
-
-		usbi_debug(NULL,1, "invalid alt");
-
-		return (LIBUSB_BADARG);
-	}
-#endif
+	index = hdev->config_value - 1;
 
 	/* set alt interface is implicitly done when endpoint is opened */
 	hdev->claimed_ifs[ifc].altsetting = alt;
