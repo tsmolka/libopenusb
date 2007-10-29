@@ -567,7 +567,9 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 			*tdevid = idev->devid;
 			tdevid++;
 		}
+
 		*num_devids = devcnts;
+
 		pthread_mutex_unlock(&usbi_devices.lock);
 
 		return LIBUSB_SUCCESS;
@@ -845,16 +847,18 @@ int32_t libusb_get_raw_desc(libusb_handle_t handle,
 	idev = usbi_find_device_by_id(devid);
 	if (!idev)
 		return LIBUSB_UNKNOWN_DEVICE;
-
+	
+	/*
+	 * backends should implement get_raw_desc interface. The get_raw_desc
+	 * method is OS dependent. On some OS, it's not easy to get  device's
+	 * descriptor through CTRL endpoint.
+	 */
 	if(idev->ops->get_raw_desc) {
-		/* Solaris is a little complex for non-ugen devices, this interface is
-		 * for Solaris to get descriptors from hub nodes
-		 */
+
 		ret = idev->ops->get_raw_desc(idev, type, descidx, langid,
 				buffer, buflen);
 		return ret;
 	} else {
-		/* FIXME: maybe we should get descriptors by ctrl xfer */
 		return LIBUSB_PARSE_ERROR;
 	}
 }
@@ -900,7 +904,7 @@ int32_t libusb_parse_device_desc(libusb_handle_t handle,
 	}
 
 	ret = libusb_parse_data("bbwbbbbwwwbbbb", tmpbuf, tmplen, devdesc,
-													sizeof (usb_device_desc_t), &count);
+		sizeof (usb_device_desc_t), &count);
 
 	if ((ret == 0) && (count < USBI_DEVICE_DESC_SIZE))
 		ret = LIBUSB_PARSE_ERROR;
