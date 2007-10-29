@@ -28,9 +28,10 @@
  */
 libusb_handle_t wr_handle = 0;
 
-static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid);
-
 struct usb_bus *usb_busses = NULL;
+
+static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
+	libusb_dev_handle_t);
 
 /* process libusb0.1.x error strings */
 typedef enum {
@@ -148,43 +149,6 @@ int usb_find_busses(void)
 	usb_busses = bus;
 
 	return 1;
-#if 0	
-	pthread_mutex_lock(&usbi_buses.lock);
-	list_for_each_entry(ibus, &usbi_buses.head, list) {
-	/* safe */
-		bus_cnt++;
-		
-		/* never freed */
-		bus = malloc(sizeof(*bus));
-		if (!bus) {
-			wr_error_str(errno,"find_busses: No memory");
-			pthread_mutex_unlock(&usbi_buses.lock);
-			return -1;
-		}
-		memset(bus, 0, sizeof(*bus));
-		memcpy(bus->dirname, ibus->sys_path, PATH_MAX);
-		
-		/* the following bus elements not implemented yet:
-		 * 	bus->location 
-		 *	bus->devices
-		 *	bus->root_dev
-		 */
-	
-		/* add this bus to global buses list */
-		if (usb_busses == NULL) {
-			usb_busses = bus;
-		} else {
-			nbus = usb_busses;
-			while(nbus->next) {
-				nbus = nbus->next;
-			}
-			nbus->next = bus;
-		}
-	}
-	pthread_mutex_unlock(&usbi_buses.lock);
-	wr_error_str(0,"find_busses number:%d",bus_cnt);
-	return bus_cnt;
-#endif
 }
 
 int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
@@ -192,6 +156,7 @@ int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 	struct usbi_device *idev, *tdev;
 	struct usb_device *dev, *ndev;
 	int dev_cnt = 0;
+	struct usb_dev_handle *tmph;
 
 	pthread_mutex_lock(&ibus->lock);
 	list_for_each_entry_safe(idev, tdev, &ibus->devices.head, bus_list) {
@@ -207,17 +172,15 @@ int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 			sizeof(struct usb_device_desc));
 
 		dev->config = NULL; 
-		dev->dev = NULL; /* FIXME */
-		/* the following 3 elements only appear in Solaris libusb 0.1.x
-		 * header file and with comment "not support"
-		 *
-		 * dev->devnum = idev->devnum;
-		 * dev->num_children = idev->nports;
-		 * dev->children = NULL;
-		 */
+		dev->dev = NULL;
 
-		wr_setup_dev_config(dev, idev->devid);
-
+		tmph = usb_open(dev); /* device descriptors will be filled */
+		if (!tmph) {
+		/* if it can't be opened, don't add it to device list */
+			continue;
+		}
+		usb_close(tmph); /* descriptors get set up */
+		
 		/* add this device to the bus's device list */
 		if(bus->devices == NULL) {
 			bus->devices = dev;
@@ -235,6 +198,7 @@ int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 			/* don't account for root hubs */
 			dev_cnt++;
 		}
+
 	}
 
 	pthread_mutex_unlock(&ibus->lock);
@@ -248,8 +212,6 @@ int usb_find_devices(void)
 	struct usbi_bus *ibus, *tbus;
 	int dev_cnt=0;
 	int ret;
-	
-	/*usbi_rescan_devices(); already scanned in usb_init*/
 
 	pthread_mutex_lock(&usbi_buses.lock);	
 	bus = usb_busses;
@@ -257,24 +219,20 @@ int usb_find_devices(void)
 	while(bus) {
 
 		list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
-#if 0
-			if(strcmp(ibus->sys_path, bus->dirname) == 0) {
-#endif
-				if ((ret = wr_create_devices(bus, ibus)) >= 0) {
-					dev_cnt += ret;
-				} else {
-					usbi_debug(NULL, 1,
+
+			if ((ret = wr_create_devices(bus, ibus)) >= 0) {
+				dev_cnt += ret;
+			} else {
+				usbi_debug(NULL, 1,
 						"create_device error");
-					wr_error_str(1,
+				wr_error_str(1,
 						"wr_create_device error");
 
-					pthread_mutex_unlock(&usbi_buses.lock);	
-					return -1;
-				}
-#if 0
+				pthread_mutex_unlock(&usbi_buses.lock);	
+				return -1;
 			}
-#endif
 		}
+
 		usbi_debug(NULL, 1, "bus: %s", bus->dirname);
 		bus = bus->next;
 	}
@@ -283,7 +241,8 @@ int usb_find_devices(void)
 	return(dev_cnt);
 }
 
-/* given a usb_device, find a corresponding device in libusb1.0
+/*
+ * given a usb_device, find a corresponding device in libusb1.0
  * return the devid of libusb1.0
  */
 libusb_devid_t wr_find_device(struct usb_device *dev)
@@ -356,6 +315,15 @@ int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 		ep01->bInterval = ep10->desc.bInterval;
 		ep01->bRefresh = ep10->desc.bRefresh;
 		ep01->bSynchAddress = ep10->desc.bSynchAddress;
+
+		if (ep10->extra) {
+			ep01->extra = malloc(ep10->extralen);
+			if (!ep01->extra) {
+				return -1;
+			}
+			memcpy(ep01->extra, ep10->extra, ep10->extralen);
+			ep01->extralen = ep10->extralen;
+		}
 	}
 
 	return 0;
@@ -394,6 +362,15 @@ int wr_parse_interface(struct usb_interface * ifc01,
 		ifdesc->bInterfaceSubClass = alt->desc.bInterfaceSubClass;
 		ifdesc->bInterfaceProtocol = alt->desc.bInterfaceProtocol;
 		ifdesc->iInterface = alt->desc.iInterface;
+
+		if (alt->extra) {
+			ifdesc->extra = malloc(alt->extralen);
+			if (!ifdesc->extra) {
+				return -1;
+			}
+			memcpy(ifdesc->extra, alt->extra, alt->extralen);
+			ifdesc->extralen = alt->extralen;
+		}
 		
 		if (wr_parse_endpoint(ifdesc, alt) != 0) {
 			free(ifc01->altsetting);
@@ -410,7 +387,8 @@ int wr_parse_interface(struct usb_interface * ifc01,
  * the 0.1 extra of config,interface,endpoint is NULL. usbi_parse_configuration
  * should be enhanced to support extra data parsing.
  */
-static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
+static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
+	libusb_dev_handle_t devh)
 {
 	struct usbi_device *idev;
 	struct usbi_descriptors *desc;
@@ -419,36 +397,31 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
 	struct usb_config_descriptor *pcfg;
 	usb_config_desc_t *picfg;
 	struct usbi_config *config;
-
-#if 0 /* get descriptors */
-	char *buffer; /* raw configuration descriptor buffer */
-	uint16_t buflen;
-
 	int ret;
-	libusb_dev_handle_t udev;
 	struct usbi_dev_handle *hdev;
 
-	ret = libusb_open_device(wr_handle, idev->devid, 0, &udev);
-	
-	if (ret >= 0) {
-		hdev = usbi_find_dev_handle(udev);
-		usbi_fetch_and_parse_descriptors(hdev);
-
-		libusb_close_device(udev);
-	} else {
+	hdev = usbi_find_dev_handle(devh);
+	if (!hdev) {
 		return -1;
 	}
-
-#endif
+	
+	/* get descriptors on the fly */
+	ret = usbi_fetch_and_parse_descriptors(hdev);
+	if (ret != 0) {
+		usbi_debug(NULL, 1, "fail to get descriptor");
+		return -1;
+	}
 
 	idev = usbi_find_device_by_id(devid);
 	if (!idev) {
 		usbi_debug(NULL, 1, "Can't find device %d",(int)devid);
 		return -1;
 	}
-
-
+	
 	desc = (struct usbi_descriptors*)&idev->desc;
+
+	memcpy(&dev->descriptor, &desc->device, sizeof(usb_device_desc_t));
+
 	num_configs = desc->device.bNumConfigurations;
 
 	if (num_configs == 0) {
@@ -470,16 +443,6 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
 		struct usb_interface *ifc01;
 		int j;
 
-#if 0  /* FIXME: In order to get Vendor/Class specific data, we should 
-	* use raw descriptor to parse
-	*/
-	ret =libusb_get_raw_desc(wr_handle, devid, USB_DT_CONFIG,
-		idev->cur_config, 0, &buffer, &buflen);
-	if (!ret) {
-		usbi_debug(NULL, 1, "Get descriptor error");
-		return LIBUSB_PARSE_ERROR;
-	}
-#endif
 		pcfg = (struct usb_config_descriptor *)&dev->config[i];	
 		config = &idev->desc.configs[i];
 
@@ -494,12 +457,15 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid)
 		pcfg->bmAttributes = picfg->bmAttributes;
 		pcfg->MaxPower = picfg->bMaxPower;
 
-#if 0
 		if (config->extralen) {
 			pcfg->extra = malloc(config->extralen);
-			if(a )
+			if (!pcfg->extra) {
+				return -1;
+			}
+			memcpy(pcfg->extra, config->extra, config->extralen);
+			pcfg->extralen = config->extralen;
 		}
-#endif		
+
 		/* begin build up interfaces */
 		num_ifs = config->num_interfaces;
 		if(num_ifs == 0) {
@@ -557,13 +523,13 @@ struct usb_dev_handle *usb_open(struct usb_device *dev)
 		return NULL;
 	}
 
-	/* shall we build up device descriptors on open ?
-	ret = wr_setup_dev_config(dev, devid);
+	/* shall we build up device descriptors on open ? */
+	ret = wr_setup_dev_config(dev, devid, usb1_devh);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Fail to set device config");
 		return NULL;
 	}
-	*/
+
 
 	devh = calloc(sizeof(struct usb_dev_handle_internal), 1);
 	if (!devh) {
@@ -631,7 +597,7 @@ int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 		return -1;
 	}
 
-	/* I'm not sure what 0.1 expect of this return value */
+	/* not sure what 0.1 expect of this return value */
 	return(bulk.result.transferred_bytes);
 }
 
@@ -675,7 +641,7 @@ int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 		return -1;
 	}
 
-	return(ret);
+	return(intr.result.transferred_bytes);
 }
 
 int usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, int size,
@@ -725,7 +691,7 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 		return -1;
 	}
 
-	return 0;
+	return (ctrl.result.transferred_bytes);
 }
 
 
@@ -821,7 +787,7 @@ int usb_set_altinterface(usb_dev_handle *dev, int alternate)
 	return(ret);
 }
 
-/*dev is checked in usb_control_msg */
+/* dev is checked in usb_control_msg */
 int usb_resetep(usb_dev_handle *dev, unsigned int ep)
 {
 	return (usb_clear_halt(dev,ep));
