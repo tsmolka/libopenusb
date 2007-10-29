@@ -6,348 +6,2144 @@
       <para>These functions compromise the core of libusb. They are used by all applications that utilize libusb.</para>
     </partintro>
 
-    <refentry id="function.usbinit">
+    <refentry id="function.libusbinit">
       <refnamediv>
-        <refname>usb_init</refname>
-        <refpurpose>Initialize libusb</refpurpose>
+        <refname><function>libusb_init, libusb_fini</function></refname>
+        <refpurpose>Initialize or destroy a libusb instance</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>void <function>usb_init</function></funcdef>
-            <void/>
+            <funcdef>int32_t <function>libusb_init</function></funcdef>
+	    <paramdef>uint32_t <parameter>flags </parameter> </paramdef>
+	    <paramdef>libusb_handle_t *<parameter>handle</parameter> </paramdef>
+	  </funcprototype>
+
+          <funcprototype>
+            <funcdef>void <function>libusb_fini</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle </parameter> </paramdef>
           </funcprototype>
         </funcsynopsis>
-        <para>Just like the name implies, this function sets up some internal structures. This function <emphasis>must</emphasis> be called before any other libusb functions. Part of the initialization will scan for busses and devices on the system. The rescan, use the <function>usb_rescan_devices</function> function.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>    flags</parameter>   -     Not used in this release. Reserved.</para>
+
+    <para> <parameter>   handle</parameter>  -    Application should pass a valid address and upon successful
+                initialization of libusb_init, a libusb_handle will be returned
+                in it. This hanlde will be used by all operations related with
+                libusb instances.
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Just like the name implies, the <function>libusb_init()</function>
+      initialize a libusb instance and sets up some internal structures for that
+      libusb instance.  This function <emphasis>MUST</emphasis> be called before
+    any other libusb functions. It will load OS dependent backend and call
+    initialization function of that backend. It also scans for busses and
+    devices on the system.
+
+    Application should call <function>libusb_fini()</function> to destroy a libusb
+    instance when it finishes. <function>libusb_fini()</function> will destroy internal
+    structures associated with this instance. All  handles associated with this
+    instance become invalid after the  call to <function>libusb_fini()</function>.
+    </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para>Upon successful initialization of a libusb instance, the <function>libusb_init()
+    </function> function will return LIBUSB_SUCCESS. Otherwise, a failure will be returned.
+    </para>
+    <para>LIBUSB_PLATFORM_FAILURE  --    Unspecified kernel/driver failure. </para>
+
+    <para>LIBUSB_BADARG            --   An invalid argument is passed in. handle is invalid</para>
+
+    <para>LIBUSB_NO_RESOURCES       --  Memory allocation failure. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbrescandevices">
+    <refentry id="function.libusbsetdebug">
       <refnamediv>
-        <refname>usb_rescan_devices</refname>
-        <refpurpose>Rescans system for new or removed USB devices</refpurpose>
+        <refname><function>libusb_set_debug</function></refname>
+        <refpurpose>Set debug information</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_rescan_devices</function></funcdef>
-            <void/>
-          </funcprototype>
+            <funcdef>void <function>libusb_set_debug</function></funcdef>
+	    <paramdef>libusb_handle_t *<parameter>handle</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>level</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>libusb_debug_callback_t <parameter>callback</parameter> </paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para>This function will rescan the system finding all new or removed busses and new or removed devices on each bus. <function>usb_init</function> will implictily find all busses and devices, so this is only required to find changes since initialization or the last call to this function.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An libusb instance handle, obtained in <function>libusb_init</function>.
+    </para>
+
+    <para><parameter>    level</parameter> -     Not used. Reserved.</para>
+    <para> <parameter>   flags </parameter>  -     Not used in this release. Reserved.</para>
+    <para><parameter>callback</parameter> - Application supplied debug routine.</para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>libusb_set_debug()</function> to enable tracing
+      of libusb with increasing level of detail. callback is application defined debug function.
+      If it is NULL, the library embedded debug function is used and debug messages, if any and
+      debug level set properly, will go to stderr. </para>
+      <para>This operation will override the <envar>USB_DEBUG</envar> environment variable, if set.
+    </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> None   </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry>
+
+    <refentry id="function.libusbseteventcallback">
       <refnamediv>
-        <refname>usb_set_debug</refname>
-        <refpurpose>Explictly sets the debugging level</refpurpose>
+        <refname><function>libusb_set_event_callback, libusb_coldplug_callbacks_done</function></refname>
+        <refpurpose>Set event callbacks or Waiting for coldplug events completion</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>void <function>usb_set_debug</function></funcdef>
-            <paramdef>int <parameter>level</parameter></paramdef>
-          </funcprototype>
+            <funcdef>int32_t <function>libusb_set_event_callback</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_event_t <parameter>type</parameter> </paramdef>
+	    <paramdef>libusb_event_callback_t <parameter>callback</parameter> </paramdef>
+	    <paramdef>void *<parameter>arg</parameter> </paramdef>
+	  </funcprototype>
+
+	  <funcprototype>
+	    <funcdef>void <function>libusb_coldplug_callbacks_done</function></funcdef>
+	    <paramdef>libusb_handle_t<parameter> handle</parameter></paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para>This function wil explictly set the debugging level. It can be called before <function>usb_init</function> and will override the <!-- FIXME: Tag for environment variables? -->USB_DEBUG environment variable, if set.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An libusb instance handle, obtained in <function>libusb_init</function>.
+    </para>
+
+    <para><parameter>    type</parameter> -     Event type.</para>
+    <para> <parameter>   callback</parameter>  -     Pointer to callback function.</para>
+    <para><parameter>arg</parameter> - Arguments passed to <parameter>callback</parameter></para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>libusb_set_event_callback()</function> to register with
+      libusb for events and corresponding callbacks. When these events occur, the <parameter>callback
+      </parameter> will be called with <parameter>arg</parameter>, if any, as the parameter.
+      </para>
+      <para> The supported events type: </para>
+      <programlisting>
+      typedef enum libusb_event {
+            USB_ATTACH = 0,     /* attachment of device */
+            USB_REMOVE,         /* detachment of device */
+            USB_SUSPEND,        /* device suspend */
+            USB_RESUME,         /* device resume */
+            USB_HC_ATTACH,      /* host controller attachment */
+            USB_HC_REMOVE,      /* host controller detachment */
+            USB_COLDPLUG_COMPLETED, /* first scan of device completed */
+      } libusb_event_t;
+      </programlisting>
+
+      <para>libusb_event_callback_t has this prototype:</para>
+      <programlisting>
+      typedef void    (*libusb_event_callback_t)(libusb_handle_t handle,
+          libusb_devid_t devid, libusb_event_t event, void *arg);
+      </programlisting>
+
+      <para>
+      Application can call libusb_coldplug_callbacks_done() to block execution
+    until end of coldplug events.
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> <function>libusb_set_event_callback</function> returns 0 if succeed. Otherwise, a libusb
+    error will be returned.</para>
+    <para> LIBUSB_SUCCESS    -  Callback was successfully set. </para>
+
+    <para>LIBUSB_BADARG      - Invalid arguments, either invalid type or callback. </para>
+
+    <para> LIBUSB_INVALID_HANDLE  -     Invalid handle. </para>
+
+    <para> LIBUSB_NO_RESOURCES - Memory allocation failure. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
-  </reference>
+
+
+    <refentry id="function.libusbsetdefaulttimeout">
+      <refnamediv>
+        <refname><function>libusb_set_default_timeout</function></refname>
+        <refpurpose>Set default timeout for USB transfer</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>libusb_set_default_timeout</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_transfer_type_t <parameter>type</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>timeout</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An libusb instance handle, obtained in
+    <function>libusb_init</function>.
+    </para>
+
+    <para><parameter>    type </parameter> -     Transfer type.</para>
+    <para> <parameter>   timeout </parameter>  -     Timeout value, in millisecond unit.</para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>libusb_set_default_timeout()</function>
+      to set default timeout for individual transfer type. <parameter>timeout</parameter> = 0
+      represents infinite timeout value.
+      OpenUSB supported transfer types are:
+      <programlisting>
+      typedef enum libusb_transfer_type {
+        USB_TYPE_ALL = 0,
+        USB_TYPE_CONTROL,
+        USB_TYPE_INTERRUPT,
+        USB_TYPE_BULK,
+        USB_TYPE_ISOCHRONOUS,
+      } libusb_transfer_type_t;
+      </programlisting>
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> LIBUSB_SUCCESS     -  New timeout was successfully set. </para>
+
+    <para> LIBUSB_INVALID_HANDLE  -     Invalid libusb handle. </para>
+
+    <para>LIBUSB_BADARG     -  Invalid argument. Type is not a valid transfer type. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+</reference>
+
 
   <reference id="ref.deviceops">
-    <title>Device operations</title>
+    <title>Bus and Device Operations</title>
     <partintro>
-      <para>This group of functions deal with the device. It allows you to open and close the device as well standard USB operations like setting the configuration, alternate settings, clearing halts and resetting the device. It also provides OS level operations such as claiming and releasing interfaces.</para>
+      <para>This group of functions deal with the bus and device. Bus operations allows application
+      to scan busses on a system. Device operations allows application to search for specific device, open and close those devices as well standard USB operations like setting the configuration, alternate settings, clearing halts and resetting the device. It also provides OS level operations such as claiming and releasing interfaces.</para>
     </partintro>
 
-    <refentry id="function.usbopen">
+
+    <refentry id="function.libusbgetbusidlist">
       <refnamediv>
-        <refname>usb_open</refname>
-        <refpurpose>Opens a USB device</refpurpose>
+        <refname><function>libusb_get_busid_list, libusb_free_busid_list</function></refname>
+        <refpurpose>Return all busids in the system, Free returned busids</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_open</function></funcdef>
-            <paramdef>struct *usb_device <parameter>dev</parameter></paramdef>
-            <paramdef>usb_dev_handle **<parameter>handle</parameter></paramdef>
-          </funcprototype>
+            <funcdef>uint32_t <function>libusb_get_busid_list</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_busid_t **<parameter>busids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_busids</parameter> </paramdef>
+	  </funcprototype>
+
+	  <funcprototype>
+	    <funcdef>void <function>libusb_free_busid_list</function></funcdef>
+	    <paramdef>libusb_busid_t *<parameter> busids</parameter></paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_open</function> is to be used to open up a device for use. <function>usb_open</function> must be called before attempting to perform and operations on the device.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An libusb instance handle, obtained in <function>libusb_init</function>.
+    </para>
+
+    <para><parameter>    busids</parameter> -     Pointer to address of the busid list.</para>
+    <para> <parameter>   num_busids</parameter>  -     Number of bus ids in the list.</para>
+
+     </refsect1>
+     <refsect1>
+     <title>Description</title>
+     <para><function>libusb_get_busid_list()</function> returns all the ids of busses in a system. The
+    busids are used by other libusb functions to search and match specific
+    devices that an application will operate on.
+
+    <function>libusb_free_busid_list()</function> frees the busids returned in
+    <function>libusb_get_busid_list()</function>.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> <function>libusb_get_busid_list</function> may have the following return values, </para>
+    <para> LIBUSB_SUCCESS    -  Callback was successfully set. </para>
+
+    <para>LIBUSB_BADARG      - Invalid argument. busids or num_busids is NULL. Or,
+                        (*busids) is NOT null, otherwise it will cause memory
+                        leak.. </para>
+
+    <para> LIBUSB_INVALID_HANDLE  -     Invalid handle. </para>
+    <para> LIBUSB_NULL_LIST   - The busids list is empty. </para>
+
+    <para> LIBUSB_NO_RESOURCES - Memory allocation failure. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbclose">
+
+
+
+    <refentry id="function.libusbgetdevidsbybus">
       <refnamediv>
-        <refname>usb_close</refname>
-        <refpurpose>Closes a USB device</refpurpose>
+        <refname><function>libusb_get_devids_by_bus, libusb_get_devids_by_vendor,
+	libusb_get_devids_by_class, libusb_free_devid_list</function></refname>
+        <refpurpose>Return all devids matching a pattern, Free returned devids</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_close</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-          </funcprototype>
+            <funcdef>uint32_t <function>libusb_get_devids_by_bus</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_busid_t <parameter>busid</parameter> </paramdef>
+	    <paramdef>libusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+   <funcprototype>
+            <funcdef>uint32_t <function>libusb_get_devids_by_vendor</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>int32_t <parameter>vendor </parameter> </paramdef>
+	    <paramdef>int32_t <parameter>product </parameter> </paramdef>
+	    <paramdef>libusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+
+   <funcprototype>
+            <funcdef>uint32_t <function>libusb_get_devids_by_class</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>int16_t <parameter>devclass</parameter></paramdef>
+	    <paramdef>int16_t <parameter>subclass</parameter></paramdef>
+	    <paramdef>int16_t <parameter>protocol</parameter></paramdef>
+	    <paramdef>libusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>void <function>libusb_free_devid_list</function></funcdef>
+	    <paramdef>libusb_devid_t *<parameter> devids</parameter></paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_close</function> closes a device opened with <xref linkend="function.usbopen" />. No further operations may be performed on the handle after <function>usb_close</function> is called.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+        <para><parameter>handle</parameter>  -    Libusb handle returned in libusb_init(). </para>
+
+        <para><parameter> busid</parameter>  -     Which bus (0 for all busses). </para>
+
+	<para><parameter>    devids </parameter> -    Pointer to address of the devid list, allocated by libusb. </para>
+
+	<para><parameter>    num_devids </parameter>- Number of device ids by this search/match. </para>
+
+	<para><parameter>    vendor </parameter>    - Vendor ID (0 - 0xFFFF, -1 for all). </para>
+
+	<para><parameter>    product  </parameter>  - Product ID (0 - 0xFFFF, -1 for all). </para>
+
+	<para><parameter>    class  </parameter>    - Class (0 - 0xFF, -1 for all). </para>
+
+	<para><parameter>    subclass </parameter>  - Subclass (0 - 0xFF, -1 for all). </para>
+
+	<para><parameter>    protocol</parameter>   - Protocol (0 - 0xFF, -1 for all). </para>
+
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+     <para> These functions are used to get/free device IDs of those devices that an
+    application is interested in. Application depends on these devids to do
+    any other operation on a device. For example, when application wants to
+    transfer data to a device, it has to specify the devid got here to call
+    corresponding libusb functions to open. </para>
+
+    <para><function>libusb_get_devids_by_bus()</function> returns all the ids of devices on a bus. If
+    <parameter>busid</parameter> is 0, it will return all <parameter>devids</parameter> in the system.
+    The returned devids are stored in <parameter>devids</parameter>.  The number of devids is in
+    <parameter>num_devids </parameter>.</para>
+
+    <para><function>libusb_get_devids_by_vendor()</function> returns all devids of devices that match
+    specific VID and PID. If <parameter>vendor</parameter> = -1, it will match any vendor's device.
+    If <parameter>product</parameter> = -1, it will match any devices of a vendor. If both are -1,
+    it will match any devices of any vendor.</para>
+
+    <para><function>libusb_get_devids_by_class()</function> returns all devids of devices that match
+    specific <parameter>class, subclass or protocol</parameter>. This function first uses application
+    supplied class, subclass and protocol to match their counterpart in Device
+    Descriptor of a device. If they don't match, then this function will try
+    to match class, subclass and protocol to their counterparts in invidual
+    Interface Descriptors of a device. If an argument is -1, it means to match
+    any class, subclass or protocol.</para>
+
+
+    <para><function>libusb_free_devid_list()</function> frees <parameter>devids</parameter> returned
+    in above interfaces.</para>
+
+     </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para>
+        libusb_get_devids_by_bus(), libusb_get_devids_by_vendor(),
+    libusb_get_devids_by_class() may have the following return values:
+    </para>
+
+     <para>
+    LIBUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    LIBUSB_BADARG      - Invalid argument. devids or num_devids is NULL;
+                        busid is invalid; vendor or product is out of range;
+                        class, subclass or product is out of range.
+     </para>
+    <para>
+    LIBUSB_NULL_LIST   - The devids list is empty.
+    </para>
+
+    <para>
+    LIBUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbsetconfiguration">
+
+
+    <refentry id="function.libusbgetdevicedata">
       <refnamediv>
-        <refname>usb_set_configuration</refname>
-        <refpurpose>Sets the active configuration of a device</refpurpose>
+        <refname><function>libusb_get_device_data,libusb_free_device_data </function></refname>
+        <refpurpose>Get a device's data, Free the device data</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_set_configuration</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>configuration</parameter></paramdef>
-          </funcprototype>
+            <funcdef>int32_t <function>libusb_get_device_data</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_devid_t <parameter>devid</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>libusb_dev_data_t **<parameter>data</parameter></paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>void <function>libusb_free_device_data</function></funcdef>
+	    <paramdef>libusb_dev_data_t *<parameter>data</parameter></paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_set_configuration</function> sets the active configuration of a device. The <varname>configuration</varname> parameter is the value as specified in the descriptor field bConfigurationValue.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>handle</parameter> -     Libusb handle. </para>
+
+    <para><parameter>   devid</parameter> -      Device's devid. </para>
+
+    <para><parameter>    flags</parameter> -       Reserved. </para>
+
+    <para><parameter>    data</parameter>  -      Data returned by libusb of type libusb_dev_data_t </para>
+    </refsect1>
+
+
+
+     <refsect1>
+     <title>Description</title>
+    <para><function>libusb_get_device_data()</function> will return data of the specified device.
+    Application doesn't have to open the device before calling this function.The data
+    is stored in the libusb_dev_data_t structure, which has such members: </para>
+    <programlisting>
+        libusb_busid_t          busid; /* busid of the bus this device is on */
+        libusb_devid_t          devid; /* devid of this device */
+
+        /* bus address of the bus the device is on */
+        uint8_t                 bus_address;
+
+        /* parent device id, 0 for root-hub */
+        libusb_devid_t          pdevid;
+
+        /* parent port the device is connected to */
+        uint8_t                 pport;
+
+        /* number of ports on the device, 0 for non-hub device */
+        uint8_t                 nports;
+
+        /* descriptive path such as /dev/bus/usb/xxx */
+        char                    *sys_path;
+
+        /* topological path such as 1.2.1 */
+        char                    *bus_path;
+
+        usb_device_desc_t       dev_desc; /* device descriptor */
+        usb_config_desc_t       cfg_desc; /* configuration descriptors */
+
+        /* raw configuration desc cloud */
+        uint8_t                 *raw_cfg_desc;
+
+        /* string descriptors with the first langid */
+        usb_string_desc_t       *manufacturer;
+        usb_string_desc_t       *product;
+        usb_string_desc_t       *serialnumber;
+
+        /* max transfer size for each request, 0 if not supported */
+        uint32_t                ctrl_max_xfer_size;
+        uint32_t                intr_max_xfer_size;
+        uint32_t                bulk_max_xfer_size;
+        uint32_t                isoc_max_xfer_size;
+	</programlisting>
+
+
+     <para>Application should call <function>libusb_free_device_data</function> to
+     free memory space allocated in <function>libusb_get_device_data</function>.
+     </para>
+     </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> 
+    <function>libusb_get_device_data()</function> may have such return values:
+    </para>
+
+     <para>
+    LIBUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    LIBUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+     </para>
+    <para>
+    LIBUSB_PARSE_ERROR - Libusb fails to get device, configuration or
+                                string descriptors of this device.
+    </para>
+
+    <para>
+    LIBUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbsetaltsetting">
+
+    <refentry id="function.libusbopendevice">
       <refnamediv>
-        <refname>usb_set_altsetting</refname>
-        <refpurpose>Sets the active alternate setting of the current interface</refpurpose>
+        <refname><function>libusb_open_device,libusb_close_device</function></refname>
+        <refpurpose>Open/Close a device</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_set_altsetting</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>alternate</parameter></paramdef>
-          </funcprototype>
+            <funcdef>int32_t <function>libusb_open_device</function></funcdef>
+	    <paramdef>libusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>libusb_devid_t <parameter>devid</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>libusb_dev_handle_t *<parameter>dev</parameter></paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>int32_t <function>libusb_close_device</function></funcdef>
+	    <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_set_altsetting</function> sets the active alternate setting of the current interface. The <varname>alternate</varname> parameter is the value as specified in the descriptor field bAlternateSetting.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>handle</parameter> -     Libusb handle. </para>
+
+    <para><parameter>   devid</parameter> -      Device's devid. </para>
+
+    <para><parameter>    flags</parameter> -       Initialization flag. </para>
+
+    <para><parameter>    dev</parameter>  -      Device handle</para>
+    </refsect1>
+
+
+
+     <refsect1>
+     <title>Description</title>
+     <para><function>libusb_open_device</function> prepares a device and sets up internal
+     data structures for use by libusb. <function>libusb_close_device</function> returns the
+     opened device to its original state. </para>
+
+    <para>Application <emphasis>must</emphasis> call <function>libusb_open_device()</function>
+    to open a device before it can do any USB transfers on that device. The open <parameter>
+    flags</parameter> can be: </para>
+    <programlisting>
+       USB_INIT_DEFAULT		default behavior 
+
+       USB_INIT_FAIL_FAST		fail if not immediately available 
+
+       USB_INIT_REVERSIBLE	try platform dependent things that are
+                                guaranteed to be reversed on close 
+
+       USB_INIT_NON_REVERSIBLE	try advanced platform dependent things that may
+                                not be guaranteed to be reversible on close
+
+     </programlisting>
+     <para>Upon successful open of a device, the device handle is returned in <parameter>dev</parameter>.
+     All device associated operations will use this handle.</para>
+
+    <para><function>libusb_close_device()</function> will destroy some internal data structures associated
+    with the device handle <parameter>dev</parameter>.</para>
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> 
+    </para>
+
+     <para>
+    LIBUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    LIBUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+     </para>
+    <para>
+    LIBUSB_SYS_FUNC_FAILURE - System function fails.
+    </para>
+
+    <para>
+    LIBUSB_INVALID_HANDLE  -     Libusb <parameter>handle</parameter> is invalid.
+    </para>
+
+    <para>
+    LIBUSB_PLATFORM_FAILURE -    Unspecified kernel/driver failure. 
+    </para>
+
+    <para>
+    LIBUSB_IO_* -    USB host controller errors
+    </para>
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.libusbinit">
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+
     </refentry>
 
-    <refentry id="function.usbresetep">
+
+
+
+<refentry id="libusbgetdevid">
+
+  <refnamediv>
+    <refname><function>libusb_get_devid</function></refname>
+
+    <refpurpose>Extract device ID from a device handle</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_devid</function></funcdef>
+
+        <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+        <paramdef>libusb_devid_t * <parameter> devid</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> devid</parameter> - Address stored the returned devid
+    value.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>libusb_get_devid()</function> gets the device ID of which
+    the device handle is dev.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_devid()</function> returns 0 on success.
+    Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS - No errors.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter> is not valid</para>
+
+    <para>LIBUSB_BADARG - <parameter>Devid</parameter> address is not
+    valid</para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+<refentry id="libusbgetlibhandle">
+
+  <refnamediv>
+    <refname><function>libusb_get_lib_handle</function></refname>
+
+    <refpurpose>Extract libusb handle from a device handle</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_lib_handle</function></funcdef>
+
+        <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+        <paramdef>libusb_handle_t *<parameter> lib_handle</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+
+    <para><parameter> lib_handle</parameter> - Address to store returned libusb handle </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>libusb_get_lib_handle()</function> gets the libusb handle of the device whose
+    device handle is <parameter>dev</parameter>.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_devid()</function> returns 0 on success.
+    Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS - No errors.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter>is not valid.</para>
+
+    <para>LIBUSB_BADARG - <parameter>lib_handle</parameter> is an invalid address</para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbgetconfiguration">
+
+  <refnamediv>
+    <refname><function>libusb_get_configuration, libusb_set_configuration</function></refname>
+
+    <refpurpose>Get the current bConfigurationValue of a device,
+    Set a device's bConfigurationValue</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_configuration</function></funcdef>
+        <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+        <paramdef>uint8_t* <parameter>cfg</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t<function>libusb_set_configuration</function></funcdef>
+        <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+        <paramdef>uint8_t <parameter>cfg</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> cfg</parameter> - Configuration value.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>libusb_get_configuration()</function> gets the current active configuration
+    value of the device specified by dev. The bConfigurationValue is returned in
+    <parameter>cfg</parameter>.</para>
+
+    <para><function>libusb_set_configuration</function>() sets a device's bConfigurationValue
+    to <parameter>cfg</parameter>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_configuration</function>() or <function>libusb_set_configuration</function>() returns 0 on success.  Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_BADARG         <parameter>cfg</parameter> is an invalid address for libusb_get_configuration(), or not a valid bConfigurationValue for libusb_set_configuration()</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbclaiminterface">
+
+  <refnamediv>
+    <refname><function>libusb_claim_interface, libusb_release_interface,
+    libusb_is_interface_claimed</function></refname>
+
+    <refpurpose>Claim interface exclusively, Release an interface,
+    Check if an interface has been claimed</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_claim_interface</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>libusb_init_flag_t <parameter>flags</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_release_interface</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_is_interface_claimed</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> ifc</parameter> - Interface number.</para>
+
+    <para><parameter> flags</parameter> - Claiming flags.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>libusb_claim_interface()</function> claims an interface of device <parameter>dev</parameter>.
+    See <function>libusb_open_device</function> for the meaning of <parameter>flags</parameter>. Application
+    <emphasis>must</emphasis> call <function>libusb_claim_interface</function>() before it further operates
+    on an interface. </para>
+    <para><function>libusb_release_interface</function>() releases a claimed interface <parameter>ifc</parameter>.
+    </para>
+    <para><function>libusb_is_interface_claimed</function> returns if the interface <parameter>ifc</parameter> has been claimed.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_claim_interface</function>() or <function>libusb_release_interface</function>() returns 0 on success. <function>libusb_is_interface_claimed</function> returns 0 if not claimed and 1 if already claimed. Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_BADARG         <parameter>ifc</parameter> is not valid.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+    <para>LIBUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="function.libusbopendevice"></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbgetaltsetting">
+
+  <refnamediv>
+    <refname><function>libusb_get_altsetting,libusb_set_altsetting</function></refname>
+
+    <refpurpose>Get alternate setting number, Set alternate setting</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_altsetting</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>libusb_init_flag_t* <parameter>alt</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_set_altsetting</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> ifc</parameter> - Interface number.</para>
+
+    <para><parameter> alt</parameter> - Alternate setting number</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>libusb_get_altsetting()</function> get the current alternate setting number of interface
+    <parameter>ifc</parameter>. The alternate number is returned in <parameter>alt</parameter>. 
+    </para>
+
+    <para>
+    <function>libusb_set_altsetting()</function> sets the active alternate setting of the interface
+    <parameter>ifc</parameter>.
+    Application should call this function to set proper alternate setting of an
+    interface before doing data transfer on endpoints in that setting.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_altsetting</function>(),  <function>libusb_set_altsetting</function>() returns 0 on success.
+    Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_BADARG         <parameter>ifc</parameter> or <parameter>alt</parameter> is not valid.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>LIBUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="libusbclaiminterface"></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbreset">
+
+  <refnamediv>
+    <refname><function>libusb_reset</function></refname>
+
+    <refpurpose>Reset device</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_reset</function></funcdef>
+
+        <paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>libusb_reset()</function> resets a device by resetting
+    its port. The full reset of a device is not guaranteed.  </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_devid()</function> returns 0 on success.
+    Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS No errors.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE Device handle is not valid</para>
+
+    <para>LIBUSB_NOT_SUPPORTED  Device reset is not supported.  </para>
+
+    <para>LIBUSB_IO_*	USB host controller errors </para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+</reference>
+
+<reference id ="ref.parsers">
+  <title> Device Descriptor Parsers </title>
+  <partintro>
+  <para> This group of functions are helpers to get and parse kinds of USB descriptors.  </para>
+  </partintro>
+
+  <refentry id="libusbgetrawdesc">
+
+  <refnamediv>
+    <refname>libusb_get_raw_desc, libusb_free_raw_desc, libusb_parse_device_desc, libusb_parse_config_desc,
+    libusb_parse_interface_desc, libusb_parse_endpoint_desc</refname>
+    
+    <refpurpose>Get/Free raw device descriptors; Get cooked Device, Configuration, Interface,
+    Endpoint descriptors  </refpurpose>
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_raw_desc</function></funcdef>
+	<paramdef>libusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>libusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t <parameter>type</parameter></paramdef>
+	<paramdef>uint8_t <parameter>descidx</parameter></paramdef>
+	<paramdef>uint16_t <parameter>langid</parameter></paramdef>
+	<paramdef>uint8_t **<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t *<parameter>buflen</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_parse_device_desc</function></funcdef>
+	<paramdef>libusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>libusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>usb_device_desc_t *<parameter>devdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_parse_config_desc</function></funcdef>
+	<paramdef>libusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>libusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>usb_config_desc_t *<parameter>cfgdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_parse_interface_desc</function></funcdef>
+	<paramdef>libusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>libusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifcidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+	<paramdef>usb_interface_desc_t *<parameter>ifcdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_parse_endpoint_desc</function></funcdef>
+	<paramdef>libusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>libusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifcidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+	<paramdef>uint8_t <parameter>eptidx</parameter></paramdef>
+	<paramdef>usb_endpoint_desc_t *<parameter>eptdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>void <function>libusb_free_raw_desc</function></funcdef>
+	<paramdef>uint8_t <parameter>*buffer</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+ <refsect1>
+ <title> Parameters </title>
+
+   <para><parameter> handle</parameter>	Libusb handle. </para>
+
+<para><parameter>    devid</parameter>	Device's devid. </para>
+
+<para><parameter>    type</parameter>	Descriptor type. </para>
+
+<para><parameter>    descidx</parameter>	Index for config/string descriptor, zero for others </para>
+
+<para><parameter>    langid</parameter>	Language ID for string descriptor, zero for others </para>
+
+<para><parameter>    buffer</parameter>	Data buffer of raw descriptors data. </para>
+
+<para><parameter>    buflen</parameter>	Length of raw descriptors. </para>
+
+<para><parameter>    devdesc</parameter>	Pointer to device descriptor. </para>
+
+<para><parameter>    cfgidx</parameter>	Configuration descriptor index. </para>
+
+<para><parameter>    cfgdesc</parameter>	Pointer to configuration descriptor. </para>
+
+<para><parameter>    ifcidx</parameter>	Interface index. </para>
+
+<para><parameter>    alt	</parameter>	Alternate setting number. </para>
+
+<para><parameter>    ifcdesc</parameter>	Pointer to interface descriptor. </para>
+
+<para><parameter>    eptidx</parameter>	Endpoint index. </para>
+
+<para><parameter>    eptdesc</parameter>	Pointer to endpoint descriptor. </para>
+   </refsect1>
+
+  <refsect1>
+  <title> Description </title>
+
+    <para><function>libusb_get_raw_desc()</function> will return raw descriptors of <parameter>type, descidx and
+    langid</parameter> which an application specifies on calling this function. The raw
+    descriptor is returned in <parameter>buffer</parameter> and length of it is in
+    <parameter>buflen</parameter>.  </para>
+    
+    <para>Application should call <function>libusb_free_raw_desc()</function> to free descriptor memory
+    if it has called <function>libusb_get_raw_desc()</function>. </para>
+
+   <para><function> libusb_parse_device_desc()</function> returns the cooked device descriptors of the
+    specified <parameter>devid</parameter>.  </para>
+
+    <para><function>libusb_parse_config_desc()</function> returns the cooked configuration descriptor of
+    specified <parameter>devid</parameter> and <parameter>cfgidx</parameter>.  </para>
+
+   <para><function> libusb_parse_interface_desc()</function> returns the cooked interface descriptor of
+    number alt alternate setting of interface <parameter>ifcidx</parameter> in configuration
+    <parameter>cfgidx</parameter>. </para>
+
+   <para><function> libusb_parse_endpoint_desc()</function> returns an endpoint's descriptor of which is
+    in alternate setting <parameter>alt</parameter> of interface <parameter>ifcidx</parameter> in
+    configuration <parameter>cfgidx</parameter>. </para>
+
+
+    <para>For <function>libusb_parse_device_desc(), libusb_parse_config_desc(),
+    libusb_parse_interface_desc() and libusb_parse_endpoint_desc()</function>, application
+    can use the raw descriptor buffer got through <function>libusb_get_raw_desc()</function>. If
+    application pass a NULL buffer pointer, these four libusb functions will
+    call <function>libusb_get_raw_desc()</function> internally and return the cooked descriptors. </para>
+
+  </refsect1>
+  <refsect1>
+  <title> Return Values </title>
+
+   <para> LIBUSB_SUCCESS	Success. </para>
+
+<para>    LIBUSB_UNKNOWN_DEVICE	Can't find the device specified by devid. </para>
+
+   <para> LIBUSB_INVALID_HANDLE	Invalid libusb handle. </para>
+
+   <para> LIBUSB_NO_RESOURCES		Memory allocation failure. </para>
+
+   <para> LIBUSB_PARSE_ERROR		Fail to parse descriptors. </para>
+
+   <para> LIBUSB_PLATFORM_FAILURE	Kernel/driver failure. </para>
+
+   <para> LIBUSB_BADARG		Invalid arguments. devdesc, cfgdesc, ifcdesc or
+    				eptdesc is NULL. buflen is invalid if buffer is
+				not NULL. </para>
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para></para>
+    </refsect1>
+</refentry>
+
+
+
+<refentry id="libusbparsedata">
+
+  <refnamediv>
+    <refname><function>libusb_parse_data</function></refname>
+
+    <refpurpose>Unpack arbitrary little endian raw data</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>void <function>libusb_parse_data</function></funcdef>
+
+        <paramdef>char *<parameter>format</parameter></paramdef>
+        <paramdef>uint8_t *<parameter>data</parameter></paramdef>
+        <paramdef>uint32_t <parameter>datalen</parameter></paramdef>
+        <paramdef>void *<parameter>structure</parameter></paramdef>
+        <paramdef>uint32_t <parameter>structlen</parameter></paramdef>
+        <paramdef>uint32_t *<parameter>count</parameter></paramdef>
+
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter>    format </parameter>	A character string indicating the format that application
+    		requires. Character 'b' represents one byte, 'w' for word and
+		'd' for dword(4 bytes). Specially, character '.' indicates
+		skipping one byte of source data. </para>
+
+   <para><parameter> data </parameter>	Little endian raw data that will be parsed.  </para>
+
+   <para><parameter> datalen </parameter>	Length of data. </para>
+
+   <para><parameter> structure </parameter>	Address of the returned structure where the unpacked data will
+    		be stored  </para>
+    
+   <para><parameter> structlen </parameter>	Length of structure. </para>
+
+   <para><parameter> count </parameter>	Number of bytes parsed. </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+   <para><function>libusb_parse_data()</function> can parse little endian raw data and convert it to
+    structured data. It's basically used to parse USB descriptors. </para>
+
+    <para>For exampe, to parse a descriptor such as: </para>
+    <programlisting>
+
+	struct test_descr {
+		uint8_t		a;
+		uint16_t	b;
+		uint8_t		c;
+		uint32_t	d;
+	};
+
+    </programlisting>
+    <para>
+    The application would call:
+    </para>
+    <informalexample>
+    <programlisting>
+    	rv = libusb_parse_data("bwbd", buffer, sizeof (buffer), (void *)&amp;descr,
+		sizeof (descr), &amp;count);
+    </programlisting>
+    </informalexample>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para>LIBUSB_SUCCESS -	Parse data successfully.</para>
+
+    <para>LIBUSB_PARSE_ERROR -	Error happened during parsing.</para>
+
+    <para>LIBUSB_BADARG -	Invalid argument. <parameter>Format, data, structure or count</parameter> is
+    			NULL pointer.</para>
+
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+</reference>
+
+
+
+<reference id ="ref.transfer">
+  <title> USB Data Transfer </title>
+  <partintro><para>Functions in this group are used to transfer USB data. OpenUSB implements transfer APIs,
+  including synchronous and asynchronous, defined in libusb 1.0 interface. The synchronous means when such
+  API is used, it will block until a transfer request is accomplished or timeout. The asynchronous means
+  such interface will returns immediately no matter success or failure. Application can use callback
+  mechanism or other libusb 1.0 interface to check asynchronous request.
+  </para>
+  </partintro>
+
+  <refentry id="libusbxferwait">
+
+  <refnamediv>
+    <refname><function>libusb_xfer_wait, libusb_xfer_aio</function></refname>
+
+    <refpurpose>Issue synchronous I/O request, Issue asynchronous I/O request </refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_xfer_wait</function></funcdef>
+	<paramdef>libusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_xfer_aio</function></funcdef>
+	<paramdef>libusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> - Pointer to request handle.</para>
+    <para>Elements in libusb_request_handle structure:</para>
+   <programlisting>
+	   libusb_dev_handle_t     dev; /* device handle */
+	   uint8_t                 interface;      /* ignored for ep0 */
+	   uint8_t                 endpoint; 
+	   libusb_transfer_type_t  type; /* transfer type */
+
+	   union libusb_request {
+	       libusb_ctrl_request_t   *ctrl;
+	       libusb_intr_request_t   *intr;
+	       libusb_bulk_request_t   *bulk;
+	       libusb_isoc_request_t   *isoc;
+	   } req;
+
+	   int32_t (*cb)(struct libusb_request_handle *handle); /* callback of this request */
+	   void    *arg;   /* additional arg for callback */
+   </programlisting>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>libusb_xfer_wait()</function> can be called by application to do <emphasis>synchronous</emphasis>
+    USB transfers.  Alternately, application can call <function>libusb_xfer_aio()</function> to do
+    <emphasis>asynchronous</emphasis> USB transfer.
+    </para>
+
+    <para>
+    For both functions, application should allocate a
+    request handle and fill required parameters in it. When application calls <function>libusb_xfer_wait()</function>,
+    they don't have to set request callback. For <function>libusb_xfer_aio()</function>, if application wants to use
+    <function>libusb_wait()</function> or <function>libusb_poll()</function> to get completed request,
+    it must <emphasis>not</emphasis> set callback <parameter>cb</parameter> in the request handle. (In implementation
+    of OpenUSB, if <parameter>cb</parameter> is not NULL, it will be called immediately after this request is accomplished.
+    Otherwise, the completed request is put on a list for application to retrieve by using <function>libusb_wait/libusb_poll
+    </function>)
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_xfer_wait</function>(),  <function>libusb_xfer_aio</function>() returns 0 on success.
+    Otherwise, a libusb error is returned. NOTE, when an error happens, it just means submission of this request
+    fails. The data status should be checked in <parameter>result</parameter> of individual request type.</para>
+
+    <para></para>
+
+    <para><errorname>LIBUSB_SUCCESS</errorname>  - No errors.</para>
+
+    <para><errorname>LIBUSB_BADARG </errorname>  - <varname>handle</varname> or elements
+    				in <varname>handle</varname> is not valid.</para>
+
+    <para><errorname>LIBUSB_UNKNOWN_DEVICE</errorname>  -   Device handle
+    			<varname>dev </varname>is not valid.</para>
+
+    <para><errorname>LIBUSB_PLATFORM_FAILURE</errorname> -  Unspecified kernel/driver
+    			failure.</para>
+
+    <para><errorname>LIBUSB_NO_RESOURCES</errorname> -  Memory allocation failure.</para>
+
+    <para><errorname>LIBUSB_IO_* </errorname>  -    USB host controller errors.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="libusbwait"></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbctrlxfer">
+
+  <refnamediv>
+    <refname><function>libusb_ctrl_xfer, libusb_intr_xfer, libusb_bulk_xfer, libusb_isoc_xfer</function></refname>
+    <refpurpose>Issue synchronous Control, Interrupt, Bulk, Isochronous request </refpurpose>
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_ctrl_xfer</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>libusb_ctrl_request_t *<parameter>ctrl</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_intr_xfer</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>libusb_intr_request_t *<parameter>intr</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_bulk_xfer</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>libusb_bulk_request_t *<parameter>bulk</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_isoc_xfer</function></funcdef>
+	<paramdef>libusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>libusb_isoc_request_t *<parameter>isoc</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+    <para><parameter> ifc </parameter> - Interface number.</para>
+    <para><parameter> ept </parameter> - Endpoint number.</para>
+    <para><parameter> ctrl </parameter> - Control request set by application.</para>
+    <para><parameter> intr </parameter> - Interrupt request set by application.</para>
+    <para><parameter> bulk </parameter> - Bulk request set by application.</para>
+    <para><parameter> isoc </parameter> - Isochronous request set by application.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>libusb_ctrl_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    CONTROL transfers. Application should allocate and fill a libusb_ctrl_request:
+    <programlisting>
+
+    struct libusb_ctrl_request {
+	    struct libusb_ctrl_setup {                                                                                           
+		    uint8_t         bmRequestType;                                                                               
+		    uint8_t         bRequest;                                                                                    
+		    uint16_t        wValue;                                                                                      
+		    uint16_t        wIndex;                                                                                      
+
+		    /* wLength set automatically based on length */                                                              
+	    } setup;                                                                                                             
+
+	    uint8_t                 *payload;                                                                                    
+	    uint32_t                length; /* platform endian */                                                                
+	    uint32_t                timeout;                                                                                     
+	    uint32_t                flags;                                                                                       
+	    libusb_request_result_t result;                                                                                      
+	    struct libusb_ctrl_request      *next;    
+    }
+    </programlisting>
+
+    <function>libusb_intr_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    INTERRUPT transfers. Application should allocate and fill a libusb_intr_request:
+    <programlisting>
+
+    struct libusb_intr_request {
+    	uint16_t                interval;       /* may not work on some OS */
+    	uint8_t                 *payload;
+    	uint32_t                length;
+    	uint32_t                timeout;
+    	uint32_t                flags;
+    	libusb_request_result_t result;
+    	struct libusb_intr_request      *next;
+    }
+    </programlisting>
+    </para>
+
+   <para>
+    <function>libusb_bulk_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    BULK transfers. Application should allocate and fill a libusb_bulk_request:
+    <programlisting>
+
+    struct libusb_isoc_request {
+	    uint8_t                 *payload;                                                                                    
+	    uint32_t                length;                                                                                      
+	    uint32_t                timeout;                                                                                     
+	    uint32_t                flags;                                                                                       
+	    libusb_request_result_t result;                                                                                      
+	    struct libusb_bulk_request      *next;    
+    }
+    </programlisting>
+    </para>
+
+    <para>
+    <function>libusb_isoc_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    ISOCHRONOUS transfers. Application should allocate and fill a libusb_isoc_request:
+    <programlisting>
+    typedef struct libusb_isoc_pkts {                                                                                            
+	    uint32_t                num_packets;                                                                                 
+	    struct libusb_isoc_packet {                                                                                          
+		    uint8_t         *payload;                                                                                    
+		    uint32_t        length;                                                                                      
+	    } *packets;                                                                                                          
+    } libusb_isoc_pkts_t;  
+
+    struct libusb_isoc_request {
+	    uint32_t                start_frame;                                                                                 
+	    uint32_t                flags;                                                                                       
+	    libusb_isoc_pkts_t      pkts;                                                                                        
+
+	    /* pointer to isoc result array */                                                                                   
+	    libusb_request_result_t *isoc_results;                                                                               
+
+	    /* overall isoc transfer completion status */                                                                        
+	    int32_t                 isoc_status;                                                                                 
+
+	    struct libusb_isoc_request      *next;  
+    }
+    </programlisting>
+    </para>
+
+
+    <para>
+    For <function>libusb_ctrl_xfer, libusb_intr_xfer and libusb_bulk_xfer</function>, the request status
+    is returned in <parameter>libusb_request_result</parameter>. Application may get transfer status and
+    length of its last request. For <function>libusb_isoc_xfer()</function>, every packet in the isoc request
+    has a corresponding <parameter>result</parameter>, application can check individual packet status 
+    from the <parameter>isoc_results</parameter>. Application <emphasis>must</emphasis> allocate enough
+    number of <parameter>isoc_results</parameter> for libusb to fill the status.
+    </para>
+    <para>
+    libusb_request_result_t has the following elements:
+    <programlisting>
+	   int32_t                 status;
+	   uint32_t                transferred_bytes;
+    </programlisting>
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_ctrl_xfer</function>,  <function>libusb_intr_xfer, libusb_bulk_xfer and libusb_isoc_xfer
+    </function>() returns 0 on success.
+    Otherwise, a libusb error is returned. NOTE, when there's no error, it just means submission of this request
+    succeed. Even if these functions didn't return failure, the data transfer may still have error and such kind of failure
+    is reflected in in <parameter>result</parameter> of individual request.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_BADARG         <parameter>handle</parameter> or elements in <parameter>handle</parameter>
+    				is not valid.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE     Device handle <parameter>dev </parameter>is not valid</para>
+
+    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>LIBUSB_NO_RESOURCES       Memory allocation failure</para>
+
+    <para>LIBUSB_IO_*               USB host controller errors</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+<refentry id="libusbabort">
+
+  <refnamediv>
+    <refname><function>libusb_abort</function></refname>
+
+    <refpurpose>Abort previous I/O request</refpurpose>
+
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_abort</function></funcdef>
+	<paramdef>libusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> - Request handle.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>libusb_abort()</function> is used to abort an I/O request submitted previously by
+    <function>libusb_xfer_wait/libusb_xfer_aio</function>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_abort</function> returns 0 on success.  Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_INVALID_HANDLE         <parameter>handle</parameter> is not valid.</para>
+
+    <para>LIBUSB_NO_RESOURCES           Memory allocation failure. </para>
+    
+    <para>LIBUSB_IO_*                   USB host controller errors. </para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+
+
+<refentry id="libusbwait">
+
+  <refnamediv>
+    <refname><function>libusb_wait, libusb_poll</function></refname>
+
+    <refpurpose>Wait for I/O request completion, Poll completion status of I/O request</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_wait</function></funcdef>
+	<paramdef>uint32_t <parameter>num_reqs</parameter></paramdef>
+	<paramdef>libusb_request_handle_t* <parameter>handles</parameter></paramdef>
+	<paramdef>libusb_request_handle_t* <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_poll</function></funcdef>
+	<paramdef>uint32_t <parameter>num_reqs</parameter></paramdef>
+	<paramdef>libusb_request_handle_t* <parameter>handles</parameter></paramdef>
+	<paramdef>libusb_request_handle_t* <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> num_reqs </parameter> Number of requests to wait/poll.</para>
+    <para><parameter> handles </parameter>  Array of request handles to wait/poll.</para>
+    <para><parameter> handle </parameter>  Completed request handle.</para>
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>libusb_wait()</function> can be called to wait for completion on <parameter>num_reqs
+    </parameter> of request handles. If one request was completed, <function>libusb_wait</function>
+    will return its handle in <parameter>handle</parameter>. Otherwise, <function>libusb_wait</function>
+    will block until one request gets completed.  
+    </para>
+    <para>
+    <function>libusb_poll()</function> is different from <function>libusb_wait</function>. It
+    checks if any request in <parameter>handles</parameter> has been completed. If there's one,
+    <function>libusb_poll</function> will return this request's handle in <parameter>handle</parameter>.
+    Otherwise, it returns immediately with <parameter>handle</parameter> set to NULL. No block at all.
+    </para>
+
+    <para>
+    For both functions, caller should allocate an array of <parameter>num_reqs</parameter> elements
+    for <parameter>handles</parameter> and set every element to the request handles to be checked.
+    </para>
+
+    <para>If application has set callback in request when submitting it in <function>libusb_xfer_aio
+    </function>, it should <emphasis>NOT</emphasis> call the above functions to wait/poll that request.
+
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_wait</function>(),  <function>libusb_poll</function>() returns 0 on success.
+    Otherwise, a libusb error is returned. </para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS     No errors.</para>
+
+    <para>LIBUSB_BADARG         <parameter>handles</parameter> or <parameter>handle</parameter>
+    				is not valid. Either they are NULL or some member of request is
+				invalid.
+    </para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE     Can't find the device specified in request.</para>
+
+    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>LIBUSB_NO_RESOURCES       Memory allocation failure</para>
+
+    <para>LIBUSB_IO_*               USB host controller errors</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="libusbstart">
+
+
+  <refnamediv>
+    <refname><function>libusb_start, libusb_stop</function></refname>
+
+    <refpurpose> Start multi-xfer mode I/O; Stop multi-xfer mode I/O</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_start</function></funcdef>
+	<paramdef>libusb_multi_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>libusb_stop</function></funcdef>
+	<paramdef>libusb_multi_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> Pointer to multi-xfer request handle.</para>
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para> These two functions are to be implemented by OpenUSB. 
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+    <para>TBD</para>
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+</reference>
+
+
+
+<reference>
+<title>Helper Utilities</title>
+<partintro>
+<para>Some handy functions. </para>
+</partintro>
+    <refentry id="function.libusbstrerror">
       <refnamediv>
-        <refname>usb_resetep</refname>
-        <refpurpose>Resets state for an endpoint</refpurpose>
+        <refname><function>libusb_strerror</function></refname>
+        <refpurpose>Return english text corresponding to an error code</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_resetep</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>unsigned int <parameter>ep</parameter></paramdef>
-          </funcprototype>
+            <funcdef>const char *<function>libusb_strerror</function></funcdef>
+	    <paramdef>int32_t <parameter>error</parameter> </paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_resetep</function> resets all state (like toggles) for the specified endpoint. The <varname>ep</varname> parameter is the value specified in the descriptor field bEndpointAddress.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> error</parameter> -   Error code. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>libusb_strerror()</function> returns a string of English text representing
+      an error code <parameter>error</parameter>
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> A none NULL pointer to string </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbclearhalt">
+    <refentry id="function.libusbcputole">
       <refnamediv>
-        <refname>usb_clear_halt</refname>
-        <refpurpose>Clears any halt status on an endpoint</refpurpose>
+        <refname><function>libusb_cpu_to_le16,libusb_cpu_to_le32</function></refname>
+        <refpurpose>Convert data from CPU endianess to Little Endian</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_clear_halt</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>unsigned int <parameter>ep</parameter></paramdef>
-          </funcprototype>
+            <funcdef>uint16_t <function>libusb_cpu_to_le16</function></funcdef>
+	    <paramdef>uint16_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
+
+          <funcprototype>
+            <funcdef>uint32_t <function>libusb_cpu_to_le32</function></funcdef>
+	    <paramdef>uint32_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_clear_halt</function> clears any halt status on the specified endpoint. The <varname>ep</varname> parameter is the value specified in the descriptor field bEndpointAddress.</para>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> data </parameter> -   To be converted data. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>libusb_cpu_to_le16()</function> converts one word (2bytes) of data from
+      byte order in CPU endian to Little Endian.
+      </para>
+      <para><function>libusb_cpu_to_le32</function> converts a Dword(4bytes) data from CPU byte
+      order to little endian order.</para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> The return value is converted data. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbreset">
+    <refentry id="function.libusbletocpu">
       <refnamediv>
-        <refname>usb_reset</refname>
-        <refpurpose>Resets a device</refpurpose>
+        <refname><function>libusb_le16_to_cpu,libusb_le32_to_cpu</function></refname>
+        <refpurpose>Convert data from little endian to CPU byte order.</refpurpose>
       </refnamediv>
-      <refsect1>
-        <title>Description</title>
+
+     <refsynopsisdiv>	
         <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_reset</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-        <para><function>usb_reset</function> resets the specified device by sending a RESET down the port it is connected to.</para>
-        <note>
-          <title>Causes re-enumeration</title>
-          <para>After calling <function>usb_reset</function>, the device will need to reenumerate and thusly, requires you to find the new device and open a new handle. The handle used to call <function>usb_reset</function> will no longer work.</para>
-        </note>
-      </refsect1>
-    </refentry>
+            <funcdef>uint16_t <function>libusb_le16_to_cpu</function></funcdef>
+	    <paramdef>uint16_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
 
-    <refentry id="function.usbclaiminterface">
-      <refnamediv>
-        <refname>usb_claim_interface</refname>
-        <refpurpose>Claim an interface of a device</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
           <funcprototype>
-            <funcdef>int <function>usb_claim_interface</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>interface</parameter></paramdef>
-          </funcprototype>
+            <funcdef>uint32_t <function>libusb_le32_to_cpu</function></funcdef>
+	    <paramdef>uint32_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
         </funcsynopsis>
-        <para><function>usb_claim_interface</function> claims the interface with the Operating System. The interface parameter is the value as specified in the descriptor field bInterfaceNumber.</para>
-        <important>
-          <title>Must be called!</title>
-          <para><function>usb_claim_interface</function> <emphasis>must</emphasis> be called before you perform any operations related to this interface (like <xref linkend="function.usbsetaltsetting" />, <xref linkend="function.usbbulkwrite" />, etc).</para>
-        </important>
-      </refsect1>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> data </parameter> -   To be converted data. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>libusb_le16_to_cpu()</function> converts one Word (2bytes) of data from
+      little endian order to CPU byte order.
+      </para>
+      <para><function>libusb_cpu_to_le32</function> converts a Dword(4bytes) data from little 
+      endian order to CPU order.</para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> The return value is converted data. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
     </refentry>
 
-    <refentry id="function.usbreleaseinterface">
-      <refnamediv>
-        <refname>usb_release_interface</refname>
-        <refpurpose>Releases a previously claimed interface</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_release_interface</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>interface</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-        <para><function>usb_release_interface</function> releases an interface previously claimed with <xref linkend="function.usbclaiminterface" />. The interface parameter is the value as specified in the descriptor field bInterfaceNumber.</para>
-      </refsect1>
-    </refentry>
-  </reference>
+</reference>
 
-  <reference id="ref.control">
-    <title>Control Transfers</title>
-    <partintro>
-      <para>This group of functions allow applications to send messages to the default control pipe. This function is synchronous, meaning it blocks and waits for the transfer to finish or timeout.</para>
-    </partintro>
 
-    <refentry id="function.usbcontrolmsg">
-      <refnamediv>
-        <refname>usb_control_msg</refname>
-        <refpurpose>Send a control message to a device</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_control_msg</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>uint8_t <parameter>bRequestType</parameter></paramdef>
-            <paramdef>uint8_t <parameter>bRequest</parameter></paramdef>
-            <paramdef>uint16_t <parameter>wValue</parameter></paramdef>
-            <paramdef>uint16_t <parameter>wIndex</parameter></paramdef>
-            <paramdef>unsigned char *<parameter>data</parameter></paramdef>
-            <paramdef>unsigned int <parameter>size</parameter></paramdef>
-            <paramdef>unsigned int <parameter>timeout</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-      </refsect1>
-    </refentry>
-
-    <refentry id="function.usbgetstring">
-      <refnamediv>
-        <refname>usb_get_string</refname>
-        <refpurpose>Retrieves a string descriptor from a device</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_get_string</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>index</parameter></paramdef>
-            <paramdef>int <parameter>langid</parameter></paramdef>
-            <paramdef>char *<parameter>buf</parameter></paramdef>
-            <paramdef>size_t <parameter>buflen</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-        <para><function>usb_get_string</function> retrieves the string descriptor specified by index and langid from a device. The string will be returned in Unicode as specified by the USB specification.</para>
-      </refsect1>
-    </refentry>
-
-    <refentry id="function.usbgetstringsimple">
-      <refnamediv>
-        <refname>usb_get_string_simple</refname>
-        <refpurpose>Retrieves a string descriptor from a device using the first language</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_get_string_simple</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>index</parameter></paramdef>
-            <paramdef>char *<parameter>buf</parameter></paramdef>
-            <paramdef>size_t <parameter>buflen</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-        <para><function>usb_get_string_simple</function> is a wrapper around <function>usb_get_string</function> that retrieves the string description specified by index in the first language for the descriptor and converts it into C style ASCII.</para>
-      </refsect1>
-    </refentry>
-  </reference>
-
-  <reference id="ref.bulk">
-    <title>Bulk Transfers</title>
-    <partintro>
-      <para>This group of functions allow applications to send and receive data via bulk pipes. These functions are synchronous, meaning it blocks and waits for the transfer to finish or timeout.</para>
-    </partintro>
-
-    <refentry id="function.usbbulkwrite">
-      <refnamediv>
-        <refname>usb_bulk_write</refname>
-        <refpurpose>Write data to a bulk endpoint.</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_bulk_write</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>ep</parameter></paramdef>
-            <paramdef>unsigned char *<parameter>data</parameter></paramdef>
-            <paramdef>unsigned int <parameter>size</parameter></paramdef>
-            <paramdef>unsigned int <parameter>timeout</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-      </refsect1>
-    </refentry>
-
-    <refentry id="function.usbbulkread">
-      <refnamediv>
-        <refname>usb_bulk_read</refname>
-        <refpurpose>Read data from a bulk endpoint.</refpurpose>
-      </refnamediv>
-      <refsect1>
-        <title>Description</title>
-        <funcsynopsis>
-          <funcprototype>
-            <funcdef>int <function>usb_bulk_read</function></funcdef>
-            <paramdef>usb_dev_handle *<parameter>dev</parameter></paramdef>
-            <paramdef>int <parameter>ep</parameter></paramdef>
-            <paramdef>unsigned char *<parameter>data</parameter></paramdef>
-            <paramdef>unsigned int <parameter>size</parameter></paramdef>
-            <paramdef>unsigned int <parameter>timeout</parameter></paramdef>
-          </funcprototype>
-        </funcsynopsis>
-      </refsect1>
-    </refentry>
-  </reference>
 
