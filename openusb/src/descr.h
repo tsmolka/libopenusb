@@ -22,6 +22,9 @@
 
 struct usbi_endpoint {
   struct usb_endpoint_desc desc;
+
+  char *extra;
+  uint16_t extralen;
 };
 
 #define USBI_MAXENDPOINTS		32
@@ -30,6 +33,9 @@ struct usbi_altsetting {
 
   size_t num_endpoints;
   struct usbi_endpoint *endpoints;
+
+  char *extra;
+  size_t extralen;
 };
 
 #define USBI_MAXALTSETTING		128	/* Hard limit */
@@ -44,6 +50,9 @@ struct usbi_config {
 
   size_t num_interfaces;
   struct usbi_interface *interfaces;
+
+  char *extra;
+  size_t extralen;
 };
 
 struct usbi_raw_desc {
