@@ -38,10 +38,21 @@ void libusb_coldplug_callbacks_done(libusb_handle_t handle)
 int32_t libusb_set_configuration(libusb_dev_handle_t dev, uint8_t cfg)
 {
 	struct usbi_dev_handle *hdev;
+	usb_device_desc_t desc;
+	int ret;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
+	
+	if ((ret = libusb_parse_device_desc(hdev->lib_hdl->handle,
+		hdev->idev->devid, NULL, 0, &desc)) != 0) {
+		return ret;
+	}
+
+	if(cfg < 1 || cfg > desc.bNumConfigurations) {
+		return LIBUSB_BADARG;
+	}
 
 	return hdev->idev->ops->set_configuration(hdev, cfg);
 }
@@ -68,9 +79,26 @@ int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
 	if (ifc > USBI_MAXINTERFACES) {
 		return(LIBUSB_BADARG);
 	}
+
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
+	
+	/* refresh descriptors before we use it */
+	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
+		return LIBUSB_BADARG;
+	}
+
+	/* check if this is a valid interface */
+	if ((ifc>= USBI_MAXINTERFACES) ||
+	    (ifc >= hdev->idev->desc.configs[hdev->config_value-1].
+	    		num_interfaces)) {
+
+		usbi_debug(hdev->lib_hdl, 1, "interface %d not valid",
+			ifc);
+
+		return (LIBUSB_BADARG);
+	}
 
 	ret = hdev->idev->ops->claim_interface(hdev, ifc, flags);
 
@@ -127,12 +155,6 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	struct usbi_dev_handle *hdev;
 	struct usbi_device *idev;
 	struct usbi_config *pcfg;
-	//usb_config_desc_t *pcfg;
-
-#if 0
-	uint8_t config_value;
-	usb_config_desc_t config_desc;
-#endif
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
@@ -143,21 +165,14 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	}
 
 	idev = hdev->idev;
-
-#if 0
-	if (libusb_get_configuration(dev, &config_value) != 0) {
-		return LIBUSB_BADARG;
-	}
-
-	if (libusb_parse_config_desc(hdev->lib_hdl->handle, idev->devid,
-		NULL, 0, config_value - 1, &config_desc) != 0) {
-		return LIBUSB_BADARG;
-	}
 	
-	libusb_parse_interface_desc();
-	pcfg = &config_desc;
-#endif
+	/* refresh descriptors */
+	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
+		return LIBUSB_PARSE_ERROR;
+	}
+
 	pcfg=&idev->desc.configs[hdev->config_value - 1];
+
 	/* not valid interface, or not claimed, or not valid alt */
 	if (ifc > pcfg->num_interfaces || ifc > USBI_MAXINTERFACES
 		|| hdev->claimed_ifs[ifc].clm != USBI_IFC_CLAIMED 
@@ -174,7 +189,6 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 		return (0);
 	}
 
-	/* maybe we should move validity check from backend to here */
 	return hdev->idev->ops->set_altsetting(hdev, ifc, alt);
 }
 
@@ -188,13 +202,11 @@ int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 		return LIBUSB_BADARG;
 	}
 
-	/* FIXME: check if this interface is claimed */
-
 	hdev=usbi_find_dev_handle(dev);
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
-	/*not claimed */
+	/* not claimed */
 	if (hdev->claimed_ifs[ifc].clm != USBI_IFC_CLAIMED) {
 		return LIBUSB_BADARG;
 	}
@@ -661,7 +673,6 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 		usbi_debug(dev->lib_hdl, 1, "IO alloc fail");
 		return LIBUSB_NO_RESOURCES;
 	}
-
 	io->req = req;
 	io->status = USBI_IO_INPROGRESS;
 	io->flag = USBI_ASYNC;
