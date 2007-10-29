@@ -72,10 +72,20 @@ extern "C" {
 #define	USB_CLASS_CONT_SECURITY		13
 #define	USB_CLASS_VIDEO			14
 #define	USB_CLASS_DIAGNOSTIC		0xdc
+
+#ifndef USB_CLASS_WIRELESS
 #define	USB_CLASS_WIRELESS		0xe0
+#endif
+
+#ifndef USB_CLASS_MISC
 #define	USB_CLASS_MISC			0xef
+#endif
+
 #define	USB_CLASS_APP_SPEC		0xfe
+
+#ifndef USB_CLASS_VENDOR_SPEC
 #define	USB_CLASS_VENDOR_SPEC		0xff
+#endif
 
 /*
  * Descriptor types
