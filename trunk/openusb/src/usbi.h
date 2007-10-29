@@ -370,7 +370,7 @@ int usbi_async_submit(struct usbi_io *io);
 int usbi_sync_submit(struct usbi_io *io);
 
 /* descriptors.c */
-void usb_fetch_descriptors(libusb_dev_handle_t dev);
+int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev);
 void usbi_destroy_configuration(struct usbi_device *odev);
 int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 	size_t buflen);
