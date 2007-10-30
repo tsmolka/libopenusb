@@ -1139,7 +1139,7 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
 	ctrl.setup.bRequest = USB_REQ_GET_DESCRIPTOR;
 	ctrl.setup.wValue = (USB_DESC_TYPE_STRING << 8) + index;
 	ctrl.setup.wIndex = langid;
-	ctrl.payload = buf;
+	ctrl.payload = (uint8_t *)buf;
 	ctrl.length = buflen;
 	ctrl.timeout = 100;
 

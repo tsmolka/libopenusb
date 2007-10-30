@@ -245,7 +245,7 @@ int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
 	ctrl.setup.wValue = value;
 	ctrl.setup.wIndex = index;
 
-	ctrl.payload = bytes;
+	ctrl.payload = (uint8_t *)bytes;
 	ctrl.length = size;
 	ctrl.timeout = timeout;
 
@@ -280,7 +280,8 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 		return ret;
 	}
 
-	libusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
+	libusb_parse_data("bbw", (unsigned char *)buf, 8, &cfg_desc,
+			sizeof(cfg_desc), (size_t *)&count);
 
 	newbuf = malloc(cfg_desc.wTotalLength);
 	if (!newbuf) {
@@ -376,7 +377,8 @@ int32_t check_req_valid(libusb_request_handle_t req,
 
 	/* this interface requires config index */
 	ret = libusb_parse_interface_desc(dev->lib_hdl->handle,
-		dev->idev->devid, buf, buflen, cfg-1, ifc, alt, &if_desc);
+		dev->idev->devid, (uint8_t *)buf, buflen, cfg-1, ifc, alt,
+		&if_desc);
 
 	if (ret < 0) {
 		usbi_free_cfg(buf);
@@ -388,7 +390,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 
 		/* this interface requires config index */
 		ret = libusb_parse_endpoint_desc(dev->lib_hdl->handle,
-			dev->idev->devid, buf, buflen, cfg-1, ifc, alt,
+			dev->idev->devid, (uint8_t *)buf, buflen, cfg-1, ifc, alt,
 			i, &ep_desc);
 		if (ret < 0) {
 			usbi_free_cfg(buf);
@@ -1004,7 +1006,7 @@ int process_multi_request(void *arg)
 	usbi_debug(NULL, 4, "Begin");
 
 	if(!mi_req) {
-		return NULL;
+		return LIBUSB_BADARG;
 	}
 
 	mh = mi_req->mreq;
