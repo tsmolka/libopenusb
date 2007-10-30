@@ -192,7 +192,7 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 	/* Skip over the rest of the Class Specific or
 	 * Vendor Specific descriptors
 	 */
-	extra = buf;	
+	extra = (char *)buf;	
 	extra_len = 0;
 	while (buflen >= USBI_DESC_HEADER_SIZE) {
 		libusb_parse_data("bb", buf, buflen, &header,
@@ -293,7 +293,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 
 	usbi_debug(NULL, 4, "parse alt buflen = %d, buf = %p", buflen, buf);
 
-	alt_num = usbi_get_intf_altno(buf,buflen);
+	alt_num = usbi_get_intf_altno((char *)buf,buflen);
 
 	intf->altsettings = calloc(sizeof(intf->altsettings[0]) * alt_num, 1);
 	if (!intf->altsettings) {
@@ -328,7 +328,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		buflen -= header.bLength;
 
 		numskipped = 0;
-		extra = buf;
+		extra = (char *)buf;
 		extra_len = 0;
 		/* Skip over any interface, class or vendor descriptors */
 		while (buflen >= USBI_DESC_HEADER_SIZE) {
@@ -521,7 +521,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 	/* Skip over the rest of the Class specific or Vendor
 	 * specific descriptors
 	 */
-	extra = buf;
+	extra = (char *)buf;
 	extra_len = 0;
 	while (buflen >= USBI_DESC_HEADER_SIZE) {
 		uint8_t type;
@@ -690,8 +690,9 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 	ret = usbi_get_descriptor(hdev->handle, USB_DESC_TYPE_DEVICE,
 		0, devbuf, USBI_DEVICE_DESC_SIZE);
 
-	ret = libusb_parse_data("bbwbbbbwwwbbbb", devbuf, USBI_DEVICE_DESC_SIZE,
-		&dev->desc.device, sizeof(dev->desc.device), &count);
+	ret = libusb_parse_data("bbwbbbbwwwbbbb", (uint8_t *)devbuf,
+		USBI_DEVICE_DESC_SIZE, &dev->desc.device,
+		sizeof(dev->desc.device), &count);
 
 	if (ret < 0 || count < USBI_DEVICE_DESC_SIZE) {
 		usbi_debug(NULL, 4, "fail to parse device descr");

@@ -586,7 +586,7 @@ int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	}
 
 	memset(&bulk, 0, sizeof(bulk));
-	bulk.payload = bytes;
+	bulk.payload = (unsigned char *)bytes;
 	bulk.length = size;
 	bulk.timeout = timeout;
 
@@ -631,7 +631,7 @@ int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	}
 
 	memset(&intr, 0, sizeof(intr));
-	intr.payload = bytes;
+	intr.payload = (unsigned char *)bytes;
 	intr.length = size;
 	intr.timeout = timeout;
 
@@ -680,7 +680,7 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 	ctrl.setup.wValue = value;
 	ctrl.setup.wIndex = index;
 
-	ctrl.payload = bytes;
+	ctrl.payload = (unsigned char *)bytes;
 	ctrl.length = size;
 	ctrl.timeout = timeout;
 
