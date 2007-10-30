@@ -12,7 +12,8 @@
 #include <stdlib.h>	/* getenv */
 #include <stdio.h>	/* stderr */
 #include <stdarg.h>	/* vsnprintf */
-#include <strings.h>	/* memset */
+#include <string.h>	/* memset,strncpy */
+#include <sys/time.h>	/* gettimeofday */
 #include <dirent.h>	/* readdir */
 #include <dlfcn.h>	/* dlopen */
 #include <pthread.h>
