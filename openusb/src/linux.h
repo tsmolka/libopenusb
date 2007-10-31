@@ -99,10 +99,12 @@ struct usbk_hub_portinfo {
 };
 
 
-#define USB_MAX_DEVICES_PER_BUS 128
-#define ISOC_URB_MAX_NUM        10
-#define RESUBMIT                1
-#define NO_RESUBMIT             0
+#define USB_MAX_DEVICES_PER_BUS	128
+#define ISOC_URB_MAX_NUM				10
+#define RESUBMIT								1
+#define NO_RESUBMIT							0
+#define WAKEUP									0x00	/* wakeup the io thread */
+#define WAKEUPANDEXIT						0xFF	/* wakeup and exit the io thread */
 
 /*
  * IOCTL Definitions
@@ -145,7 +147,7 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
 int32_t device_is_new(struct usbi_device *idev, uint16_t devnum);
 int32_t check_usb_path(const char *dirname);
 int32_t translate_errno(int errnum);
-int32_t wakeup_io_thread(struct usbi_dev_handle *hdev);
+int32_t wakeup_io_thread(struct usbi_dev_handle *hdev, uint8_t command);
 int32_t linux_get_driver(struct usbi_dev_handle *hdev, uint8_t interface,
 												 char *name, size_t namelen);
 int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
@@ -174,10 +176,9 @@ struct usbi_dev_private
 struct usbi_dev_hdl_private
 {
 	int             fd;            /* file descriptor for usbdevfs entry */
-  int             event_pipe[2]; /* let's us know when things are happening */
+	int             event_pipe[2]; /* let's us know when things are happening */
 	int16_t					reattachdrv;	 /* do we need to reattach the kernel driver */
 	pthread_t       io_thread;     /* thread for processing io requests */
-  struct timeval  tvo;           /* the next soonest timeout */ 
 };
 
 
