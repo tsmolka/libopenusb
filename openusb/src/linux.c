@@ -1,7 +1,10 @@
 /*
  * Linux USB support
  *
- * This library is covered by the LGPL, read LICENSE for details.
+ *	Copyright 2007 Michael Lewis <milewis1@gmail.com>
+ *	Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
+ *
+ *	This library is covered by the LGPL, read LICENSE for details.
  */
 
 #include <stdlib.h>	/* getenv, etc */

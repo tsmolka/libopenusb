@@ -1,3 +1,12 @@
+/*
+ * Linux USB support
+ *
+ *	Copyright 2007 Michael Lewis <milewis1@gmail.com>
+ *	Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
+ *
+ *	This library is covered by the LGPL, read LICENSE for details.
+ */
+
 #ifndef __LINUX_H__
 #define __LINUX_H__
 
