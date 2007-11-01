@@ -374,9 +374,8 @@ typedef enum libusb_transfer_type {
 	USB_TYPE_INTERRUPT,
 	USB_TYPE_BULK,
 	USB_TYPE_ISOCHRONOUS,
+	USB_TYPE_LAST
 } libusb_transfer_type_t;
-
-#define USB_TYPE_LAST USB_TYPE_ISOCHRONOUS+1
 
 typedef void	(*libusb_event_callback_t)(libusb_handle_t handle,
 	libusb_devid_t devid, libusb_event_t event, void *arg);
@@ -881,6 +880,28 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
 	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
 	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt, uint8_t eptidx,
 	usb_endpoint_desc_t *eptdesc);
+
+
+/*
+ * Gets the maximum data transfer size per request based on
+ * the bus and type of transfer
+ *
+ * Arguments:
+ *	handle		- LibUSB Handle
+ *	bus				- Bus Id
+ *	type			- Transfer type
+ *	bytes			- Maximum data transfer size
+ *
+ * Return Values:
+ *	LIBUSB_SUCCESS
+ *	LIBUSB_INVALID_HANDLE	- Invalid LibUSB Handle
+ *	LIBUSB_UNKNOWN_DEVICE	- Bus Id is not valid
+ *	LIBUSB_NOT_SUPPORTED	- Operation not supported
+ */
+int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
+	libusb_busid_t bus, libusb_transfer_type_t type, size_t *bytes);
+
+
 
 /*
  * Function for preparing device and making the default
