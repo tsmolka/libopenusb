@@ -1480,3 +1480,27 @@ void libusb_free_device_data(libusb_dev_data_t *data)
 	free(data);
 }
 
+int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
+	libusb_busid_t bus, libusb_transfer_type_t type, uint32_t *bytes)
+{
+	struct usbi_bus			*ibus;
+	struct usbi_handle	*hdl;
+
+	hdl = usbi_find_handle(handle);
+	if (!hdl)
+		return (LIBUSB_INVALID_HANDLE);
+
+	ibus = usbi_find_bus_by_id(bus);
+	if (!ibus)
+		return (LIBUSB_UNKNOWN_DEVICE);
+
+	if ((type <= USB_TYPE_ALL) || (type >= USB_TYPE_LAST)) {
+		usbi_debug(hdl,2,"Invalid transfer type");
+		return (LIBUSB_BADARG);
+	}
+
+	/* return our value */
+	*bytes = ibus->max_xfer_size[type];
+
+	return (LIBUSB_SUCCESS);
+}
