@@ -126,7 +126,7 @@ void usbi_free_io(struct usbi_io *io)
 }
 
 /* Helper routine. To be called from the various ports */
-void usbi_io_complete(struct usbi_io *io, int status, size_t transferred_bytes)
+void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_bytes)
 {
 	libusb_request_result_t *result = NULL;
 	libusb_transfer_type_t type;
@@ -457,7 +457,7 @@ int usbi_io_async(struct usbi_io *iop)
 
 	dev = iop->dev;
 
-	usbi_debug(dev->lib_hdl, 4, "Begin io = %p",iop);	
+	usbi_debug(dev->lib_hdl, 4, "Begin io = %p",iop);
 	
 	type = iop->req->type;
 

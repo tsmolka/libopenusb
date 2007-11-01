@@ -152,6 +152,7 @@ enum usbi_io_status {
 	USBI_IO_CANCEL,
 	USBI_IO_COMPLETED,
 	USBI_IO_COMPLETED_FAIL,
+	USBI_IO_TIMEOUT
 };
 
 #define USBI_ASYNC 1
@@ -359,7 +360,7 @@ void *timeout_thread(void *arg);
 int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req);
 int usbi_io_async(struct usbi_io *iop);
 
-void usbi_io_complete(struct usbi_io *io, int status,
+void usbi_io_complete(struct usbi_io *io, int32_t status,
 	size_t transferred_bytes);
 
 struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
