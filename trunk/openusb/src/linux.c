@@ -1344,13 +1344,13 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 			}
 		}
 
-		io->status = USBI_IO_COMPLETED;
-
 		/* urb->status == -2, indicates that the URB was discarded, aka canceled */
 		if (urb->status == -2) {
-			usbi_io_complete(io, USBI_IO_CANCEL, urb->actual_length);
+			io->status = USBI_IO_CANCEL;
+			usbi_io_complete(io, LIBUSB_IO_CANCELED, urb->actual_length);
 		} else {
-			usbi_io_complete(io, USBI_IO_COMPLETED, urb->actual_length);
+			io->status = USBI_IO_COMPLETED;
+			usbi_io_complete(io, LIBUSB_SUCCESS, urb->actual_length);
 		}
 	}
 
@@ -1394,6 +1394,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 				io->priv->urb.buffer = NULL;
 			}
 
+			io->status = USBI_IO_TIMEOUT;
 			usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
 		}
 	}
@@ -1414,17 +1415,12 @@ int32_t linux_io_cancel(struct usbi_io *io)
 {
 	int ret;
 
-	pthread_mutex_lock(&io->dev->lock);
-
 	/* Discard/Cancel the URB */
 	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 	if (ret < 0) {
 		usbi_debug(io->dev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
 		return translate_errno(errno);
 	}
-
-	/* Unlock... */
-	pthread_mutex_unlock(&io->dev->lock);
 
 	/* Always do this to avoid race conditions */
 	wakeup_io_thread(io->dev, WAKEUP);
