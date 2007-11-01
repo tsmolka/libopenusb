@@ -1499,6 +1499,10 @@ int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 		return (LIBUSB_BADARG);
 	}
 
+	if (bytes == NULL) {
+		return (LIBUSB_BADARG);
+	}
+
 	/* return our value */
 	*bytes = ibus->max_xfer_size[type];
 
