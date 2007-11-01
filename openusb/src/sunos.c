@@ -18,7 +18,6 @@
 #include <fcntl.h>
 #include <config_admin.h>
 #include <pthread.h>
-#include <sys/usb/usba.h>
 #include <sys/usb/clients/ugen/usb_ugen.h>
 
 #include "usbi.h"
@@ -99,6 +98,37 @@ static uchar_t root_hub_config_descriptor[] = {
 	0xff            /* bInterval */
 };
 
+struct ugen_lc2stat {
+	int lc;
+	int stat;
+} ugen_lc2libstat_table[] = {
+	{USB_LC_STAT_NOERROR,		LIBUSB_SUCCESS			},
+	{USB_LC_STAT_CRC,		LIBUSB_IO_CRC_ERROR		},
+	{USB_LC_STAT_DEV_NOT_RESP,	LIBUSB_IO_DEVICE_HUNG		},
+	{USB_LC_STAT_BITSTUFFING,	LIBUSB_IO_BIT_STUFFING		},
+	{USB_LC_STAT_UNEXP_PID,		LIBUSB_IO_UNEXPECTED_PID	},
+	{USB_LC_STAT_DATA_OVERRUN,	LIBUSB_IO_DATA_OVERRUN		},
+	{USB_LC_STAT_DATA_UNDERRUN,	LIBUSB_IO_DATA_UNDERRUN		},
+	{USB_LC_STAT_BUFFER_OVERRUN,	LIBUSB_IO_BUFFER_OVERRUN	},
+	{USB_LC_STAT_BUFFER_UNDERRUN,	LIBUSB_IO_BUFFER_UNDERRUN	},
+	{USB_LC_STAT_PID_CHECKFAILURE,	LIBUSB_IO_PID_CHECK_FAILURE	},
+	{USB_LC_STAT_DATA_TOGGLE_MM,	LIBUSB_IO_DATA_TOGGLE_MISMATCH	},
+	{USB_LC_STAT_TIMEOUT,		LIBUSB_IO_TIMEOUT		},
+	{USB_LC_STAT_STALL, 		LIBUSB_IO_STALL			}
+};
+
+static int ugen_lc2libstat(int lc)
+{
+	int i;
+	for (i = 0; i < sizeof(ugen_lc2libstat_table); i++) {
+		if (ugen_lc2libstat_table[i].lc == lc) {
+
+			return (ugen_lc2libstat_table[i].stat);
+		}
+	}
+
+	return LIBUSB_PLATFORM_FAILURE;
+}
 
 #if 1 /* hal */
 
@@ -1788,7 +1818,7 @@ usb_do_io(int fd, int stat_fd, char *data, size_t size, int flag, int *status)
 			save_errno,strerror(save_errno));
 
 		if (status) {
-			*status = error;
+			*status = ugen_lc2libstat(error);
 		}
 
 		return (-save_errno);
