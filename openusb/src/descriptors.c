@@ -33,7 +33,7 @@ int usbi_get_descriptor(libusb_dev_handle_t dev, unsigned char type,
 	}
 
 	ret = libusb_ctrl_xfer(dev,0,0,&ctrl);
-	if (ret < 0 || ctrl.result.status != 0) {
+	if (ret < 0 || ctrl.result.status != LIBUSB_SUCCESS) {
 		return -1;
 	}
 
