@@ -1198,6 +1198,38 @@ solaris_refresh_devices(struct usbi_bus *ibus)
 	return (LIBUSB_SUCCESS);
 }
 
+void sunos_set_max_xfer_size(struct usbi_bus *ibus, uint8_t rhmodel)
+{
+	switch(rhmodel) {
+	case SUNOS_BUS_EHCI:
+		ibus->max_xfer_size[USB_TYPE_CONTROL] = 0x10000; /* 64K */
+		ibus->max_xfer_size[USB_TYPE_BULK] = 0xA0000; /* 640K */
+		ibus->max_xfer_size[USB_TYPE_INTERRUPT] = 0x5000; /* 20K */
+
+		/* FIXME: isoc is limited by 1024*ep.wMaxPacketSize */
+		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = 1024 * 3072;
+		break;
+	case SUNOS_BUS_OHCI:
+		ibus->max_xfer_size[USB_TYPE_CONTROL] = 0x10000; /* 64K */
+		ibus->max_xfer_size[USB_TYPE_BULK] = 0x40000; /* 256K */
+		ibus->max_xfer_size[USB_TYPE_INTERRUPT] = 0x2000; /* 8K */
+
+		/* FIXME: isoc is limited by 256*ep.wMaxPacketSize */
+		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = 256 * 1024;
+		break;
+	case SUNOS_BUS_UHCI:
+		ibus->max_xfer_size[USB_TYPE_CONTROL] = 0x10000; /* 64K */
+		ibus->max_xfer_size[USB_TYPE_BULK] = 0x1F000; /* 124K */
+		ibus->max_xfer_size[USB_TYPE_INTERRUPT] = 0x500; /* */
+
+		/* FIXME: isoc is limited by 256*ep.wMaxPacketSize */
+		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = 256 * 1024;
+		break;
+	default:
+		break;
+	}
+}
+
 static int
 detect_root_hub(di_node_t node, void *arg)
 {
@@ -1260,6 +1292,7 @@ detect_root_hub(di_node_t node, void *arg)
 	di_devfs_path_free(phys_path);
 	
 	ibus->priv->model = rhmodel;
+	sunos_set_max_xfer_size(ibus, rhmodel);
 
 	list_add(&ibus->list, busses);
 
