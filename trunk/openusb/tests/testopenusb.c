@@ -234,6 +234,11 @@ void dump_dev_data(libusb_dev_data_t *pdev)
 		convert_string(buf, pdev->serialnumber, 256);
 		printf("serial: %s\n", buf);
 	}
+
+	printf("MAX Xfer size:\n");
+	printf("CTRL = 0x%x, INTR = 0x%x, BULK = 0x%x, ISOC = 0x%x\n",
+		pdev->ctrl_max_xfer_size, pdev->intr_max_xfer_size,
+		pdev->bulk_max_xfer_size, pdev->isoc_max_xfer_size);
 	
 	printf("\nRAW descriptor:\n");
 	if(pdev->raw_cfg_desc) {
