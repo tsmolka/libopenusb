@@ -153,7 +153,6 @@ int32_t io_complete(struct usbi_dev_handle *hdev);
 int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc);
 int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
                           uint16_t devnum, uint32_t max_children);
-int32_t device_is_new(struct usbi_device *idev, uint16_t devnum);
 int32_t check_usb_path(const char *dirname);
 int32_t translate_errno(int errnum);
 int32_t wakeup_io_thread(struct usbi_dev_handle *hdev, uint8_t command);
