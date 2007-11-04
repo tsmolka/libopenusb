@@ -731,9 +731,6 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 			/* Only add this device if it's new */
 			/* If we don't have a device by this number yet, it must be new */
 			idev = ibus->priv->dev_by_num[devnum];
-			if (idev && device_is_new(idev, devnum))
-				idev = NULL;
-
 			if (!idev) {
 				int ret;
 
@@ -879,9 +876,6 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 
 					/* If we don't have a device by this number yet, it must be new */
 					idev = ibus->priv->dev_by_num[devnum];
-					if (idev && device_is_new(idev, devnum))
-						idev = NULL;
-
 					if (!idev) {
 						int ret;
 
@@ -1516,9 +1510,6 @@ void *poll_io(void *devhdl)
 
 		gettimeofday(&tvc, NULL);
 
-		/* lock the device while we do this */
-		pthread_mutex_lock(&hdev->lock);
-		
 		/* if there is data to be read on the event pipe read it and discard*/
 		if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
 			memset(buf,0,sizeof(buf));
@@ -1530,6 +1521,9 @@ void *poll_io(void *devhdl)
 			}
 		}
 
+		/* lock the device while we do this */
+		pthread_mutex_lock(&hdev->lock);
+
 		/* now that we've waited for select, determine what action to take */
 		/* Have any io requests completed? */
 		if (FD_ISSET(hdev->priv->fd, &writefds)) {
@@ -1539,7 +1533,9 @@ void *poll_io(void *devhdl)
 		/* Check for requests that may have timed out */
 		io_timeout(hdev, &tvc);
 
+		/* unlock the device */
 		pthread_mutex_unlock(&hdev->lock);
+		
 	}
 
 	return (NULL);
@@ -1603,48 +1599,9 @@ void *poll_events(void *unused)
 
 
 /*
- * device_is_new
- *
- *  This function attempts to determine if a device is new or if we've already
- *  seen it before. The original idea was to check the mtime to see if the
- *  device is new, however this won't work as the mtime will always be different.
- *  TODO: A new way is definitely needed!
- */
-int32_t device_is_new(struct usbi_device *idev, uint16_t devnum)
-{
-	char filename[PATH_MAX + 1];
-	struct stat st;
-
-	/* Compare the mtime to ensure it's new */
-	snprintf(idev->priv->filename, sizeof(filename) - 1, "%s/%03d", idev->bus->priv->filename, devnum);
-	stat(filename, &st);
-
-	if (st.st_mtime == idev->priv->mtime)
-		/* mtime matches, not a new device */
-		return LIBUSB_SUCCESS;
-
-	/*
-	 * FIXME: mtime does not match. Maybe the USB drivers have been unloaded and
-	 * reloaded? We should probably track the mtime of the bus to catch this
-	 * case and detach all devices on the bus. We would then detect all of
-	 * the devices as new.
-	 */
-	/*
-	usbi_debug(1, "device %s previously existed, but mtime has changed",
-						 filename);
-  */
-
-	return (0);
-}
-
-
-
-/*
  * create_new_device
  *
  *  Allocate memory for the new device and fill in the require information.
- *  THIS IS THE FUNCTION RESPONSIBLE FOR READING AND PARSING THE DEVICE
- *  DESCRIPTORS!
  */
 int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
                           uint16_t devnum, uint32_t max_children)
