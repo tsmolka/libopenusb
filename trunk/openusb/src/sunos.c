@@ -287,9 +287,15 @@ void process_new_device(const char *udi)
 	}
 
 	parent = libhal_device_get_property_string(hal_ctx, udi,
-		"info.parent", NULL);
-	usbi_debug(NULL, 4, "parent: %s");
+		"info.parent", &error);
+	if (dbus_error_is_set(&error)) {
+		libhal_free_string(devpath);
+		dbus_error_free(&error);
+		return;
+	}
 
+	usbi_debug(NULL, 4, "parent: %s",parent);
+	
 	pidev = find_device_by_udi(parent); /* get parent's usbi_device */
 	if (!pidev) {
 		goto add_fail;
@@ -1374,7 +1380,7 @@ usb_open_ep0(struct usbi_dev_handle *hdev)
 	hdev->priv->eps[0].datafd = open(filename, O_RDWR);
 	if (hdev->priv->eps[0].datafd < 0) {
 		usbi_debug(NULL, 1, "open cntrl0 of dev: %s failed (%s)",
-		    idev->sys_path, strerror(errno));
+		    filename, strerror(errno));
 
 		return LIBUSB_SYS_FUNC_FAILURE;
 	}
