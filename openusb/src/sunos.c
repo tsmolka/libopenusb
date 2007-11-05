@@ -223,6 +223,7 @@ set_device_udi(void)
 			   This should prevent errors if a call above fails */
 			usbi_debug(NULL, 4, "get device syspath error");
 			dbus_error_free (&error);
+			continue;
 		}
 
 		idev = find_device_by_syspath(devpath);
