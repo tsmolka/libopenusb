@@ -104,8 +104,13 @@ static void refresh_bus(struct usbi_backend *backend)
 		int found = 0;
 
 		list_for_each_entry_safe(nibus, tnibus, &busses, list) {
-			if (ibus->busnum == nibus->busnum) {
-				/* Remove it from the new devices list */
+			/*
+			 * Remove it from the new devices list, if busnum or
+			 * sys_path is same as old bus. It's already in global
+			 * bus list.
+			 */
+			if ((ibus->busnum == nibus->busnum) ||
+			    (strcmp(ibus->sys_path, nibus->sys_path) == 0)){
 				list_del(&nibus->list);
 
 				usbi_free_bus(nibus);
