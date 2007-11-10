@@ -154,6 +154,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
 	/* Stop the IO processing (polling) thread */
 	wakeup_io_thread(hdev, WAKEUPANDEXIT);
+	pthread_cancel(hdev->priv->io_thread);
 	pthread_join(hdev->priv->io_thread, NULL);
 
 	/* If we've already closed the file, we're done */
@@ -1291,10 +1292,7 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 		/* if this was a control request copy the payload */
 		if (io->req->type == USB_TYPE_CONTROL) {
 			memcpy(io->req->req.ctrl->payload, urb->buffer + USBI_CONTROL_SETUP_LEN, io->req->req.ctrl->length);
-			if(urb->buffer) {
-				free(urb->buffer);
-				urb->buffer = NULL;
-			}
+			free(urb->buffer);
 		}
 
 		/*complete handle for isochronous transfer*/
@@ -1303,10 +1301,6 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 			packets = io->req->req.isoc->pkts.packets;
 			io->req->req.isoc->isoc_results = (libusb_request_result_t *)malloc(io->req->req.isoc->pkts.num_packets * sizeof(libusb_request_result_t));
 			if(io->req->req.isoc->isoc_results == NULL) {
-				if(urb->buffer) {
-					free(urb->buffer);
-					urb->buffer = NULL;
-				}
 				free(io->priv);
 				io->priv = NULL;
 				usbi_free_io(io);
@@ -1320,10 +1314,6 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 				offset += packets[i].length;
 				io->req->req.isoc->isoc_results[i].status = urb->iso_frame_desc[i].status;
 				io->req->req.isoc->isoc_results[i].transferred_bytes = urb->iso_frame_desc[i].actual_length;
-			}
-			if(urb->buffer) {
-				free(urb->buffer);
-				urb->buffer = NULL;
 			}
 			free(io->priv);
 			io->priv = NULL;
@@ -1341,7 +1331,7 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 		/* urb->status == -2, indicates that the URB was discarded, aka canceled */
 		if (urb->status == -2) {
 			io->status = USBI_IO_CANCEL;
-			usbi_io_complete(io, LIBUSB_IO_CANCELED, urb->actual_length);
+			usbi_io_complete(io, LIBUSB_IO_CANCELED, 0);
 		} else {
 			io->status = USBI_IO_COMPLETED;
 			usbi_io_complete(io, LIBUSB_SUCCESS, urb->actual_length);
@@ -1379,13 +1369,17 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 			ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 			if (ret < 0) {
 				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
-				return (translate_errno(errno));
+				/* Don't return here, we still want to call usbi_io_complete to remove
+				 * the IO request from our lists so that we don't get stuck on this one
+				 * in the future */
+				io->status = USBI_IO_TIMEOUT;
+				usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
+				return translate_errno(errno);
 			}
 
-			/* clear out the buffer if it exists */
-			if(io->priv->urb.buffer) {
+			/* clear out the buffer if we allocated (only on a control req) */
+			if (io->req->type == USB_TYPE_CONTROL) {
 				free(io->priv->urb.buffer);
-				io->priv->urb.buffer = NULL;
 			}
 
 			io->status = USBI_IO_TIMEOUT;
@@ -1404,6 +1398,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
  *  Called to cancel a pending io request. This function will fail if the io
  *  request has already been submitted to the usbfs kernel driver, even if it
  *  hasn't been completed.
+ *
  */
 int32_t linux_io_cancel(struct usbi_io *io)
 {
@@ -1413,6 +1408,11 @@ int32_t linux_io_cancel(struct usbi_io *io)
 	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 	if (ret < 0) {
 		usbi_debug(io->dev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
+
+		/* Even if we've failed to cancel the request we need to make sure that we
+		* remove it from the list and report at status */
+		io->status = USBI_IO_CANCEL;
+		usbi_io_complete(io, LIBUSB_IO_CANCELED, 0);
 		return translate_errno(errno);
 	}
 
@@ -1437,7 +1437,7 @@ int32_t linux_io_cancel(struct usbi_io *io)
 void *poll_io(void *devhdl)
 {
 	struct usbi_dev_handle  *hdev = (struct usbi_dev_handle*)devhdl;
-	struct timeval					tvc, tvo;
+	struct timeval					tvc, tvo, tvNext;
 	fd_set									readfds, writefds;
 	int											i, ret, maxfd;
 	struct usbi_io					*io;
@@ -1467,6 +1467,7 @@ void *poll_io(void *devhdl)
 		/* get the time so that we can determine if any timeouts have passed */
 		gettimeofday(&tvc, NULL);
 		memset(&tvo, 0, sizeof(tvo));
+		memset(&tvNext, 0, sizeof(tvNext));
 
 		/* loop through the pending io requests and find our next soonest timeout */
 		list_for_each_entry(io, &hdev->io_head, list) {
@@ -1481,6 +1482,9 @@ void *poll_io(void *devhdl)
 				memcpy(&tvo, &io->tvo, sizeof(tvo));
 			}
 		}
+
+		/* save the next soonest timeout */
+		memcpy(&tvNext, &tvo, sizeof(tvo));
 
 		/* calculate the timeout for select() based on what we found above */
 		if (!tvo.tv_sec) {
@@ -1531,7 +1535,9 @@ void *poll_io(void *devhdl)
 		}
 
 		/* Check for requests that may have timed out */
-		io_timeout(hdev, &tvc);
+		if (usbi_timeval_compare(&tvNext, &tvc) <= 0) {
+			io_timeout(hdev, &tvc);
+		}
 
 		/* unlock the device */
 		pthread_mutex_unlock(&hdev->lock);
