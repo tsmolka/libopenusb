@@ -1353,17 +1353,16 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		usbi_debug(NULL, 1, "get manufacturer");
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iManufacturer,
 			0x409, strings, sizeof(strings))) < 0) {
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return ret;
+			/* this should not be an error, perhaps we just don't have permission */
+			pdata->manufacturer = NULL;
+		} else {
+			if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
+				free(pdata);
+				if (!dev_found) { libusb_close_device(hdev); }
+				return LIBUSB_NO_RESOURCES;
+			}
+			memcpy(pdata->manufacturer, strings, strings[0]);
 		}
-
-		if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return LIBUSB_NO_RESOURCES;
-		}
-		memcpy(pdata->manufacturer, strings, strings[0]);
 	}
 
 	/* product */
@@ -1371,38 +1370,35 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		usbi_debug(NULL, 1, "get product");
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iProduct,
 			0x409, strings, sizeof(strings))) < 0) {
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return ret;
+			/* this should not be an error, perhaps we just don't have permission */
+			pdata->product = NULL;
+		} else {
+			if ((pdata->product= malloc(strings[0])) == NULL) {
+				free(pdata->manufacturer);
+				free(pdata);
+				if (!dev_found) { libusb_close_device(hdev); }
+				return LIBUSB_NO_RESOURCES;
+			}
+			memcpy(pdata->product, strings, strings[0]);
 		}
-
-		if ((pdata->product= malloc(strings[0])) == NULL) {
-			free(pdata->manufacturer);
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return LIBUSB_NO_RESOURCES;
-		}
-		memcpy(pdata->product, strings, strings[0]);
 	}
 
 	/* serial Number */
 	if (pdata->dev_desc.iSerialNumber) {
 		if ((ret = usbi_get_string(hdev, pdata->dev_desc.iSerialNumber,
 			0x409, strings, sizeof(strings))) < 0) {
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return ret;
+			/* this should not be an error, perhaps we just don't have permission */
+			pdata->serialnumber = NULL;
+		} else {
+			if ((pdata->serialnumber = malloc(strings[0])) == NULL) {
+				free(pdata->product);
+				free(pdata->manufacturer);
+				free(pdata);
+				if (!dev_found) { libusb_close_device(hdev); }
+				return LIBUSB_NO_RESOURCES;
+			}
+			memcpy(pdata->serialnumber, strings, strings[0]);
 		}
-
-		if ((pdata->serialnumber = malloc(strings[0])) == NULL) {
-			free(pdata->product);
-			free(pdata->manufacturer);
-			free(pdata);
-			if (!dev_found) { libusb_close_device(hdev); }
-			return LIBUSB_NO_RESOURCES;
-		}
-
-		memcpy(pdata->serialnumber, strings, strings[0]);
 	}
 	
 	if (!dev_found) {
