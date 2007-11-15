@@ -339,11 +339,24 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	int  buflen;
 
 	if ((endpoint == 0) && (type == USB_TYPE_CONTROL)) {
-	/* default pipe. No need to check interface,altSetting */
+		/* default pipe. No need to check interface,altSetting */
 		return 0;
 	} else if (endpoint == 0) {
-	/* default endpoint,but not a CONTROL xfer request */
+		/* default endpoint,but not a CONTROL xfer request */
 		return -1;
+	}
+
+	/*
+	 * do quick check and return immediately. Backend or the OS
+	 * will check the validity of a request. OpenUSB only fully
+	 * check the request for debug purpose.
+	 */
+	if (dev->lib_hdl->debug_level < 5) { 
+		if (libusb_is_interface_claimed(dev->handle, ifc) == 1) {
+			return 0;
+		} else {
+			return -1;
+		}
 	}
 
 	ret = libusb_get_configuration(dev->handle, &cfg);
@@ -1250,7 +1263,8 @@ int32_t libusb_start(libusb_multi_request_handle_t handle)
 	list_init(&mi_req->list);
 	list_init(&mi_req->req_head);
 
-	pthread_create(&thread, NULL,(void*) process_multi_request, mi_req);
+	pthread_create(&thread, NULL,(void*) process_multi_request,
+		(void *)mi_req);
 
 	pthread_mutex_lock(&hdev->lock);
 	list_add(&mi_req->list, &hdev->m_head);
