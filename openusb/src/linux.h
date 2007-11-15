@@ -142,9 +142,13 @@ struct usbk_hub_portinfo {
  * all work via IOCTL_USB_IOCTL
  */
 
+
+
 /* Thread Functions */
 void *poll_io(void *usbihdl);
 void *poll_events(void *unused);
+
+
 
 /* Helper Functions */
 struct usbi_io* isoc_io_clone(struct usbi_io *io);

@@ -124,7 +124,12 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create io polling thread (ret = %d)", ret);
 		return (LIBUSB_NO_RESOURCES);
-	} 
+	}
+
+	/* Start up the timeout thread */
+	//if(linux_create_timeout_thread(hdev) != 0) {
+	//	return LIBUSB_SYS_FUNC_FAILURE;
+	//}
 
 	/* usbfs has set the configuration to 0, so make sure we note that */
 	hdev->idev->cur_config = 0;
@@ -157,6 +162,10 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	pthread_cancel(hdev->priv->io_thread);
 	pthread_join(hdev->priv->io_thread, NULL);
 
+	/* Stop the timeout thread */
+//	pthread_cancel(hdev->priv->timeout_thread);
+//	pthread_join(hdev->priv->timeout_thread, NULL);
+	
 	/* If we've already closed the file, we're done */
 	if (hdev->priv->fd < 0) {
 		free(hdev->priv);
@@ -939,7 +948,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
  */
 void linux_free_device(struct usbi_device *idev)
 {
-	free (idev->priv);
+	free(idev->priv);
 	return;
 }
 
@@ -1301,8 +1310,7 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 			packets = io->req->req.isoc->pkts.packets;
 			io->req->req.isoc->isoc_results = (libusb_request_result_t *)malloc(io->req->req.isoc->pkts.num_packets * sizeof(libusb_request_result_t));
 			if(io->req->req.isoc->isoc_results == NULL) {
-				free(io->priv);
-				io->priv = NULL;
+				io->status = USBI_IO_COMPLETED_FAIL;
 				usbi_free_io(io);
 				continue;
 			}
@@ -1315,8 +1323,6 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 				io->req->req.isoc->isoc_results[i].status = urb->iso_frame_desc[i].status;
 				io->req->req.isoc->isoc_results[i].transferred_bytes = urb->iso_frame_desc[i].actual_length;
 			}
-			free(io->priv);
-			io->priv = NULL;
 
 			/*resubmit isoc io*/
 			if(resubmit_flag == RESUBMIT)
@@ -1368,18 +1374,14 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 			usbi_debug(hdev->lib_hdl, 4, "IO Request Timeout Out!");
 			ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 			if (ret < 0) {
-				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
-				/* Don't return here, we still want to call usbi_io_complete to remove
-				 * the IO request from our lists so that we don't get stuck on this one
-				 * in the future */
-				io->status = USBI_IO_TIMEOUT;
-				usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
-				return translate_errno(errno);
+				/* If this failed, then we haven't submitted the request to usbfs
+				 * yet. So let's log it and complete the request */
+				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
 			}
 
 			/* clear out the buffer if we allocated (only on a control req) */
 			if (io->req->type == USB_TYPE_CONTROL) {
-				free(io->priv->urb.buffer);
+				if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
 			}
 
 			io->status = USBI_IO_TIMEOUT;
@@ -1407,13 +1409,14 @@ int32_t linux_io_cancel(struct usbi_io *io)
 	/* Discard/Cancel the URB */
 	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 	if (ret < 0) {
+		/* If this fails then we probably haven't submitted the request to usbfs.
+		 * So we'll just log the error and continue on as normal */
 		usbi_debug(io->dev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
+	}
 
-		/* Even if we've failed to cancel the request we need to make sure that we
-		* remove it from the list and report at status */
-		io->status = USBI_IO_CANCEL;
-		usbi_io_complete(io, LIBUSB_IO_CANCELED, 0);
-		return translate_errno(errno);
+	/* clear out the buffer if we allocated (only on a control req) */
+	if (io->req->type == USB_TYPE_CONTROL) {
+		if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
 	}
 
 	/* Always do this to avoid race conditions */
@@ -1453,8 +1456,11 @@ void *poll_io(void *devhdl)
 		FD_ZERO(&readfds);
 		FD_ZERO(&writefds);
 
-		/* Always check the event_pipe and our device file descriptor */
+		/* We need to check our private event pipe, our device's file, and the
+		 * event pipe used by the frontend's timeout thread (which the Linux
+		 * backened doesn't use). */
 		FD_SET(hdev->priv->event_pipe[0], &readfds);
+		FD_SET(hdev->event_pipe[0], &readfds);
 		FD_SET(hdev->priv->fd, &writefds);
 
 		/* get the max file descriptor for select() */
@@ -1463,6 +1469,9 @@ void *poll_io(void *devhdl)
 		} else {
 			maxfd = hdev->priv->fd;
 		}
+		if (hdev->event_pipe[0] > maxfd) {
+			maxfd = hdev->event_pipe[0];
+		}
 
 		/* get the time so that we can determine if any timeouts have passed */
 		gettimeofday(&tvc, NULL);
@@ -1470,6 +1479,7 @@ void *poll_io(void *devhdl)
 		memset(&tvNext, 0, sizeof(tvNext));
 
 		/* loop through the pending io requests and find our next soonest timeout */
+		pthread_mutex_lock(&hdev->lock);
 		list_for_each_entry(io, &hdev->io_head, list) {
 			/* skip the timeout calculation if it's an isochronous request */
 			if(io->req->type == USB_TYPE_ISOCHRONOUS) {
@@ -1482,6 +1492,7 @@ void *poll_io(void *devhdl)
 				memcpy(&tvo, &io->tvo, sizeof(tvo));
 			}
 		}
+		pthread_mutex_unlock(&hdev->lock);
 
 		/* save the next soonest timeout */
 		memcpy(&tvNext, &tvo, sizeof(tvo));
@@ -1514,7 +1525,7 @@ void *poll_io(void *devhdl)
 
 		gettimeofday(&tvc, NULL);
 
-		/* if there is data to be read on the event pipe read it and discard*/
+		/* if there is data to be read on the event pipe read it and discard */
 		if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
 			memset(buf,0,sizeof(buf));
 			read(hdev->priv->event_pipe[0], buf, sizeof(buf));
@@ -1523,6 +1534,16 @@ void *poll_io(void *devhdl)
 			for (i = 0; i < sizeof(buf); i++) {
 				if (buf[0] == WAKEUPANDEXIT) { return (0); }
 			}
+		}
+
+		/* If there is data to be read on the frontend's even pipe, read it.
+		 * Even though the Linux backend doesn't use the frontend's timeout
+		 * thread, the frontend will write to the even pipe everytime a request
+		 * is submitted, so if we don't read the data out eventually we'll no
+		 * longer be able to submit io requests (because the file buffer will
+		 * fill up. */
+		if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
+			read(hdev->event_pipe[0], buf, sizeof(buf));
 		}
 
 		/* lock the device while we do this */
@@ -1534,7 +1555,8 @@ void *poll_io(void *devhdl)
 			io_complete(hdev);
 		}
 
-		/* Check for requests that may have timed out */
+		/* Check for requests that may have timed out: This is handled by the
+		 * separate timeout thread now */
 		if (usbi_timeval_compare(&tvNext, &tvc) <= 0) {
 			io_timeout(hdev, &tvc);
 		}
