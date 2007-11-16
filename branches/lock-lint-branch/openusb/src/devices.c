@@ -30,12 +30,14 @@ static libusb_devid_t cur_device_id = 1;
 void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
 {
 	/* FIXME: Handle busid rollover gracefully? */
+	pthread_mutex_lock(&ibus->lock);
 	ibus->busid = cur_bus_id++;
 
 	ibus->ops = backend->ops;
 
 	list_init(&(ibus->devices.head));
 
+	/* usbi_buses locked by caller */
 	list_add(&ibus->list, &usbi_buses.head);
 
 	/* backend initialize the following elements. Should be moved to
@@ -43,14 +45,20 @@ void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
 	 *  ibus->lock
 	 *  ibus->devices list
 	 */
+	pthread_mutex_unlock(&ibus->lock);
 }
 
+/* implicit access of usbi_buses list, locked by caller */
 void usbi_free_bus(struct usbi_bus *ibus)
 {
+
 	/*FIXME: what about the ibus->devices list */
+	pthread_mutex_lock(&ibus->lock);
 	if (ibus->priv) {
 		free(ibus->priv);
 	}
+	pthread_mutex_unlock(&ibus->lock);
+
 	free(ibus);
 }
 
@@ -67,11 +75,18 @@ struct usbi_bus *usbi_find_bus_by_id(libusb_busid_t busid)
 	/* FIXME: We should probably index the device id in
 	 * a rbtree or something
 	 */
+	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
-		if (ibus->busid == busid)
+		pthread_mutex_lock(&ibus->lock);
+		if (ibus->busid == busid) {
+			pthread_mutex_unlock(&ibus->lock);
+			pthread_mutex_unlock(&usbi_buses.lock);
 			return ibus;
+		}
+		pthread_mutex_unlock(&ibus->lock);
 	}
+	pthread_mutex_unlock(&usbi_buses.lock);
 
 	return NULL;
 }
@@ -99,6 +114,7 @@ static void refresh_bus(struct usbi_backend *backend)
 	 * If we don't find it in the new list, the bus was removed. Any
 	 * busses still in the new list, are new to us.
 	 */
+	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry_safe(ibus, tibus, &usbi_buses.head, list) {
 		struct usbi_bus *nibus, *tnibus;
 		int found = 0;
@@ -109,14 +125,19 @@ static void refresh_bus(struct usbi_backend *backend)
 			 * sys_path is same as old bus. It's already in global
 			 * bus list.
 			 */
+			pthread_mutex_lock(&ibus->lock);
 			if ((ibus->busnum == nibus->busnum) ||
 			    (strcmp(ibus->sys_path, nibus->sys_path) == 0)){
+
+				pthread_mutex_unlock(&ibus->lock);
+
 				list_del(&nibus->list);
 
 				usbi_free_bus(nibus);
 				found = 1;
 				break;
 			}
+			pthread_mutex_unlock(&ibus->lock);
 		}
 
 		if (!found)
@@ -132,6 +153,7 @@ static void refresh_bus(struct usbi_backend *backend)
 		list_del(&ibus->list);
 		usbi_add_bus(ibus, backend);
 	}
+	pthread_mutex_unlock(&usbi_buses.lock);
 }
 
 static void usbi_refresh_busses(void)
@@ -156,9 +178,12 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 	idev->bus = ibus;
 	idev->ops = &ibus->ops->dev;
 	
-	/*FIXME: lock here */
+	/* caller lock this one */
 	list_add(&idev->bus_list, &ibus->devices.head);
+
+	pthread_mutex_lock(&usbi_devices.lock);
 	list_add(&idev->dev_list, &usbi_devices.head);
+	pthread_mutex_unlock(&usbi_devices.lock);
 
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
@@ -208,32 +233,21 @@ void usbi_remove_device(struct usbi_device *idev)
  */
 void usbi_rescan_devices(void)
 {
-  struct usbi_bus *ibus, *tbus;
+	struct usbi_bus *ibus, *tbus;
 
-  usbi_refresh_busses();
+	usbi_refresh_busses();
 
-  list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
-    ibus->ops->refresh_devices(ibus);
+	pthread_mutex_lock(&usbi_buses.lock);
 
-#if 0 
-      /*
-       * Some platforms fetch the descriptors on scanning (like Linux) so we
-       * don't need to fetch them again
-       */
-      if (!idev->desc.device_raw.data) {
-        libusb_dev_handle_t udev;
+	list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
+		pthread_mutex_unlock(&usbi_buses.lock);
 
-        ret = libusb_open(idev->devid, &udev);
-        if (ret >= 0) {
-          usbi_fetch_and_parse_descriptors(udev);
+		ibus->ops->refresh_devices(ibus);
 
-          libusb_close(udev);
-        }
-      }
+		pthread_mutex_lock(&usbi_buses.lock);
+	}
 
-      /* FIXME: Handle checking the device and config descriptor seperately */
-#endif
-  }
+	pthread_mutex_unlock(&usbi_buses.lock);
 }
 
 #if 1 /* this internal interfaces defined, but not used */
@@ -290,15 +304,17 @@ int usbi_get_parent_device_id(libusb_devid_t child_devid,
 
 int usbi_get_bus_id(libusb_devid_t devid, libusb_busid_t *busid)
 {
-  struct usbi_device *idev;
+	struct usbi_device *idev;
 
-  idev = usbi_find_device_by_id(devid);
-  if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+	idev = usbi_find_device_by_id(devid);
+	if (!idev)
+		return LIBUSB_UNKNOWN_DEVICE;
 
-  *busid = idev->bus->busid;
+	pthread_mutex_lock(&idev->bus->lock);
+	*busid = idev->bus->busid;
+	pthread_mutex_unlock(&idev->bus->lock);
 
-  return LIBUSB_SUCCESS;
+	return LIBUSB_SUCCESS;
 }
 
 int usbi_get_devnum(libusb_devid_t devid, unsigned char *devnum)
@@ -356,7 +372,10 @@ int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
 	tmp = *busids;
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
+		pthread_mutex_lock(&ibus->lock);
 		*tmp = ibus->busid;
+		pthread_mutex_unlock(&ibus->lock);
+
 		tmp++;
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
@@ -1274,6 +1293,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	}
 	memset(pdata, 0, sizeof(*pdata));
 
+	pthread_mutex_lock(&pdev->bus->lock);
 	pdata->bulk_max_xfer_size = pdev->bus->max_xfer_size[USB_TYPE_BULK];
 	pdata->ctrl_max_xfer_size = pdev->bus->max_xfer_size[USB_TYPE_CONTROL];
 	pdata->intr_max_xfer_size = pdev->bus->max_xfer_size[USB_TYPE_INTERRUPT];
@@ -1281,6 +1301,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 
 	pdata->busid = pdev->bus->busid;
 	pdata->bus_address = pdev->bus->busnum;
+	pthread_mutex_unlock(&pdev->bus->lock);
 
 	/* since we're not allowed to cache device data internally,we'll have
 	 * to get raw descriptors
@@ -1484,7 +1505,7 @@ void libusb_free_device_data(libusb_dev_data_t *data)
 int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 	libusb_busid_t bus, libusb_transfer_type_t type, size_t *bytes)
 {
-	struct usbi_bus			*ibus;
+	struct usbi_bus		*ibus;
 	struct usbi_handle	*hdl;
 
 	hdl = usbi_find_handle(handle);
@@ -1505,7 +1526,9 @@ int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 	}
 
 	/* return our value */
-	*bytes = (size_t)ibus->max_xfer_size[type];
+	pthread_mutex_lock(&ibus->lock);
+	*bytes = ibus->max_xfer_size[type];
+	pthread_mutex_unlock(&ibus->lock);
 
 	return (LIBUSB_SUCCESS);
 }
