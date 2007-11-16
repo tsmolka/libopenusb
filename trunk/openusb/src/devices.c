@@ -884,7 +884,7 @@ int32_t libusb_parse_device_desc(libusb_handle_t handle,
 	uint8_t *tmpbuf;
 	uint16_t tmplen;
 	int ret = LIBUSB_SUCCESS;
-	size_t count;
+	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
@@ -928,7 +928,7 @@ int32_t libusb_parse_config_desc(libusb_handle_t handle,
 	uint8_t *tmpbuf;
 	uint16_t tmplen;
 	int ret = LIBUSB_SUCCESS;
-	size_t count;
+	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
@@ -969,7 +969,7 @@ int32_t libusb_parse_interface_desc(libusb_handle_t handle,
 	uint8_t *tmpbuf, *sp;
 	uint16_t tmplen;
 	int ret = LIBUSB_PARSE_ERROR;
-	size_t count;
+	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
@@ -1054,7 +1054,7 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
 	uint8_t *tmpbuf, *sp1, *sp2;
 	uint16_t tmplen;
 	int ret = LIBUSB_PARSE_ERROR;
-	size_t count;
+	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
@@ -1482,7 +1482,7 @@ void libusb_free_device_data(libusb_dev_data_t *data)
 }
 
 int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
-	libusb_busid_t bus, libusb_transfer_type_t type, uint32_t *bytes)
+	libusb_busid_t bus, libusb_transfer_type_t type, size_t *bytes)
 {
 	struct usbi_bus			*ibus;
 	struct usbi_handle	*hdl;
@@ -1505,7 +1505,7 @@ int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 	}
 
 	/* return our value */
-	*bytes = ibus->max_xfer_size[type];
+	*bytes = (size_t)ibus->max_xfer_size[type];
 
 	return (LIBUSB_SUCCESS);
 }

@@ -270,7 +270,7 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 	char *newbuf;
 	int ret;
 	struct usb_config_desc cfg_desc;
-	int count;
+	uint32_t count;
 
 	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
 			(USB_DESC_TYPE_CONFIG << 8) + cfg, 0, buf,
@@ -281,7 +281,7 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 	}
 
 	libusb_parse_data("bbw", (unsigned char *)buf, 8, &cfg_desc,
-			sizeof(cfg_desc), (size_t *)&count);
+			sizeof(cfg_desc), &count);
 
 	newbuf = malloc(cfg_desc.wTotalLength);
 	if (!newbuf) {

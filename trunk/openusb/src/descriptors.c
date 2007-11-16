@@ -41,8 +41,8 @@ int usbi_get_descriptor(libusb_dev_handle_t dev, unsigned char type,
 }
 
 /* FIXME: Should we return LIBUSB_NO_RESOURCES on buffer overflow? */
-int libusb_parse_data(char *format, unsigned char *source, size_t sourcelen,
-	void *dest, size_t destlen, size_t *count)
+int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
+	void *dest, uint32_t destlen, uint32_t *count)
 {
 	unsigned char *sp = source, *dp = dest;
 	uint16_t w;
@@ -135,7 +135,7 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 {
 	struct usb_descriptor_header header;
 	int parsed = 0, numskipped = 0;
-	size_t count;
+	uint32_t count;
 	char *extra;
 	int extra_len;
 
@@ -277,7 +277,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 	struct usb_descriptor_header header;
 	uint8_t alt_num;
 	struct usbi_altsetting *as = NULL;
-	size_t count;
+	uint32_t count;
 	char *extra;
 	int extra_len;
 
@@ -479,7 +479,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 {
 	struct usb_descriptor_header header;
 	int i, retval;
-	size_t count;
+	uint32_t count;
 	char *extra;
 	int extra_len;
 	int numskipped = 0;
@@ -683,7 +683,7 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 	int i;
 	int ret;
 	char devbuf[USBI_DEVICE_DESC_SIZE+1];
-	size_t count;
+	uint32_t count;
 
 	usbi_destroy_configuration(dev); /* free old descriptors */
 
