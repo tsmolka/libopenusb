@@ -174,12 +174,18 @@ int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 		dev->config = NULL; 
 		dev->dev = NULL;
 
+		pthread_mutex_unlock(&ibus->lock);
 		tmph = usb_open(dev); /* device descriptors will be filled */
+		pthread_mutex_lock(&ibus->lock);
+
 		if (!tmph) {
 		/* if it can't be opened, don't add it to device list */
 			continue;
 		}
+
+		pthread_mutex_unlock(&ibus->lock);
 		usb_close(tmph); /* descriptors get set up */
+		pthread_mutex_lock(&ibus->lock);
 		
 		/* add this device to the bus's device list */
 		if(bus->devices == NULL) {
@@ -220,7 +226,13 @@ int usb_find_devices(void)
 
 		list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
 
-			if ((ret = wr_create_devices(bus, ibus)) >= 0) {
+			pthread_mutex_unlock(&usbi_buses.lock);	
+
+			ret = wr_create_devices(bus, ibus);
+
+			pthread_mutex_lock(&usbi_buses.lock);	
+
+			if (ret >= 0) {
 				dev_cnt += ret;
 			} else {
 				usbi_debug(NULL, 1,
@@ -252,21 +264,29 @@ libusb_devid_t wr_find_device(struct usb_device *dev)
 	struct usbi_device *idev = NULL;
 	int found = 0;
 	
+	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
+		pthread_mutex_lock(&ibus->devices.lock);
 		list_for_each_entry(idev, &ibus->devices.head, bus_list) {
 		/* safe */
-			if (strncmp(idev->sys_path, dev->filename, PATH_MAX)
-				== 0) {
+			if (strncmp(idev->sys_path, dev->filename,
+			    PATH_MAX) == 0) {
+
 				found = 1;
+				pthread_mutex_unlock(&ibus->devices.lock);
+
 				goto out;
 			}
 		}
+		pthread_mutex_unlock(&ibus->devices.lock);
 	}
 out:
 	if (found==1) {
 		devid = idev->devid;
 	}
+
+	pthread_mutex_unlock(&usbi_buses.lock);
 
 	return devid;
 }
