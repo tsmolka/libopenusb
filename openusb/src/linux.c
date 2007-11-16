@@ -1739,7 +1739,7 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	uint8_t               *cfgdescr = NULL;
 	struct usbi_raw_desc  *configs_raw = NULL;
 	size_t                devdescrlen;
-	size_t                count;
+	uint32_t              count;
 	usb_device_desc_t     device;
 	int32_t               sts = LIBUSB_SUCCESS;
 	int32_t               i, fd, ret;
