@@ -1,0 +1,15 @@
+  <title>Examples</title>
+  <partintro>
+  <para> This section is to provide some sample codes to demonstrate how to use libusb 1.0
+  interfaces. </para>
+  <para> To be provided </para>
+  </partintro>
+
+  <chapter id="examples-other">
+    <title>Other Applications</title>
+    <para>Another source of examples can be gleaned from other applications.</para>
+    <itemizedlist>
+      <listitem><para><ulink url="">TBD</ulink></para></listitem>
+      <listitem><para><ulink url="">TBD</ulink></para></listitem>
+    </itemizedlist>
+  </chapter>

@@ -1,0 +1,18 @@
+  <title>API</title>
+  <partintro>
+    <para>This is the external API for applications to use.</para>
+    <para>The API is relatively lean and designed to have close analogies to the USB specification.</para>
+  </partintro> 
+
+  <chapter id="api-timeouts">
+    <title>Timeouts</title>
+
+    <para>Timeout's are always specified in milliseconds.</para>
+  </chapter>
+
+  <chapter id="api-types">
+    <title>Data Types</title>
+
+    <para>libusb tries to use standard C types wherever possible to avoid complicating things. Where standard C types are insufficient, libusb uses abstracted types to ensure portability and forward compatibility.</para>
+  </chapter>
+

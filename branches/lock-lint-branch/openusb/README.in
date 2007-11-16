@@ -1,0 +1,69 @@
+General Information
+===================
+
+Openusb is an enhanced version of the libusb 0.1.* library which allows
+userspace application access to USB devices. The development work is still
+in progress. And the documentation has not been updated yet.
+
+The official web site is:
+  http://openusb.sourceforge.net/
+
+Installation
+============
+
+We haven't tested install yet. Please avoid running "make install" at this
+moment. Use "LIBUSB_DRIVER_PATH" environment variable to specify the path
+of *.so which should be under the src/.libs directory.
+
+How to report bugs
+==================
+
+To report a bug, visit http://www.sourceforge.net/projects/openusb/ and fill
+out a bug report form.
+
+Please make sure to include:
+
+* Information about your system. For instance:
+
+   - What operating system and version
+   - For Linux, what version of the C library
+
+  And anything else you think is relevant.
+
+* How to reproduce the bug. 
+
+  If you can reproduce it with the testlibusb program that is built 
+  in the libusb/ directory, that will be most convenient.  Otherwise, 
+  please include a short test program that exhibits the behavior. 
+  As a last resort, you can also provide a pointer to a larger piece 
+  of software that can be downloaded.
+
+* If the bug was a crash, the exact text that was printed out
+  when the crash occured.
+
+* Further information such as stack traces may be useful, but
+  is not necessary.
+
+Patches
+=======
+
+Patches can be sent to libusb-devel@lists.sourceforge.net.
+
+If the patch fixes a bug, it is usually a good idea to include
+all the information described in "How to Report Bugs".
+
+Building
+========
+
+It should be as simple as running these two commands:
+
+./autogen.sh
+make
+
+You may need to install additional software to build the code on some systems.
+For example, automake and libtool are required for Solaris. 
+
+FIXME: Note about building documentation
+
+Building documentation may fail. To eliminate the error messages, please compile by:
+./autogen.sh --disable-build-docs
