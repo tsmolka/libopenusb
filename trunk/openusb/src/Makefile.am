@@ -52,7 +52,7 @@ sunos_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/inc
 libusb_la_CFLAGS += -I/usr/sfw/include
 endif
 
-libusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c
+libusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
 libusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/usb\"
 
 include_HEADERS = libusb.h
