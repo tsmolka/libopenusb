@@ -44,7 +44,8 @@ if SUNOS_API
 usblib_LTLIBRARIES = sunos.la
 
 sunos_la_SOURCES = sunos.c sunos.h
-sunos_la_LDFLAGS =  -avoid-version -module -ldevinfo -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lusb
+sunos_la_LDFLAGS =  -avoid-version -module
+sunos_la_LIBADD = -ldevinfo -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0 -lusb
 
 #to use hal for hotplug event support
 sunos_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/hal
