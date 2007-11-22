@@ -289,6 +289,7 @@ void process_new_device(const char *udi)
 	parent = libhal_device_get_property_string(hal_ctx, udi,
 		"info.parent", &error);
 	if (dbus_error_is_set(&error)) {
+		libhal_free_string(subsys);
 		libhal_free_string(devpath);
 		dbus_error_free(&error);
 		return;
@@ -392,7 +393,7 @@ hal_hotplug_event_thread(void)
 	event_loop = g_main_loop_new (context, FALSE);
 
 	dbus_error_init (&error);
-	conn = dbus_bus_get (DBUS_BUS_SYSTEM, &error);
+	conn = dbus_bus_get_private (DBUS_BUS_SYSTEM, &error);
 	if (conn == NULL) {
 		fprintf (stderr, "error: dbus_bus_get: %s: %s\n",
 				error.name, error.message);
@@ -435,18 +436,18 @@ hal_hotplug_event_thread(void)
 		usbi_debug(NULL, 4, "hotplug thread running");
 		g_main_loop_run (event_loop);
 
-		pthread_testcancel();
 	}
 
 	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE)
 		LIBHAL_FREE_DBUS_ERROR (&error);
 	libhal_ctx_free (hal_ctx);
 
+	dbus_connection_close (conn);
 	dbus_connection_unref (conn);
 	
 	g_main_context_unref(context);
 	g_main_context_release(context);
-
+	
 	if (show_device)
 		free(show_device);
 
@@ -2652,6 +2653,7 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 
 	if(solaris_back_inited != 0) {/*already inited */
 		usbi_debug(NULL, 1, "Already inited");
+		solaris_back_inited++; /* libusb_init gets called once more */
 		return 0;
 	}
 	
@@ -2683,6 +2685,9 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 #endif
 
 #if 1 //hal
+	if (!g_thread_supported ())
+		g_thread_init (NULL);
+
 	ret = pthread_create(&hotplug_thread, NULL,
 		(void *) hal_hotplug_event_thread, NULL);
 	if (ret < 0) {
@@ -2715,7 +2720,7 @@ void solaris_fini(struct usbi_handle *hdl)
 	if (solaris_back_inited == 1) {
 		usbi_debug(NULL, 4, "stop hotplug thread");
 		g_main_loop_quit(event_loop);
-		pthread_cancel(hotplug_thread);
+		pthread_join(hotplug_thread, NULL);
 	}
 	solaris_back_inited--;
 	return;
