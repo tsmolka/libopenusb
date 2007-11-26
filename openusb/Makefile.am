@@ -39,7 +39,8 @@ dist-hook: libusb.spec
 	     && cp INSTALL.libusb LICENSE README $(distdir) ; \
 	fi \
 	&& cp libusb.spec $(distdir)
-	-$(MAKE) dist-bzip2 # create .tar.bz2 dist package if supported
+	test -e $(top_srcdir)/doc/html && cp -r $(top_srcdir)/doc/html $(distdir)/doc || echo "no built doc"
+#	-$(MAKE) dist-bzip2 # create .tar.bz2 dist package if supported
 
 ########################################################################
 # create .tar.bz2 distribution package for convenience if the
