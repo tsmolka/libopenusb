@@ -60,11 +60,13 @@ void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 		return;
 
 	if (hdl) {
+		pthread_mutex_lock(&hdl->lock);
+
 		if (level > hdl->debug_level) {
+			pthread_mutex_unlock(&hdl->lock);
+
 			return;
 		}
-
-		pthread_mutex_lock(&hdl->lock);
 	}
 
 	va_start(ap, fmt);
@@ -616,6 +618,7 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 	usbi_rescan_devices();
 
 	*handle = hdl->handle;
+
 	usbi_debug(hdl, 4, "End");
 
 	return LIBUSB_SUCCESS;
@@ -776,10 +779,14 @@ struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev)
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
 	/* safe */
+		pthread_mutex_lock(&hdev->lock);
 		if (hdev->handle == dev) {
+			pthread_mutex_unlock(&hdev->lock);
+
 			pthread_mutex_unlock(&usbi_dev_handles.lock);
 			return hdev;
 		}
+		pthread_mutex_unlock(&hdev->lock);
 	}
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 	
@@ -884,14 +891,18 @@ int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
 
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 
+	pthread_mutex_lock(&hdev->lock);
+
 	list_add(&hdev->list, &usbi_dev_handles.head);
 	hdev->state = USBI_DEVICE_OPENED;
 
+	/* do we need to add the handle to idev and make a ref count */
+	*dev = hdev->handle;
+
+	pthread_mutex_unlock(&hdev->lock);
+
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
-	/* do we need to add the handle to idev and make a ref count */
-
-	*dev = hdev->handle;
 
 	return LIBUSB_SUCCESS;
 }
@@ -915,17 +926,23 @@ int32_t libusb_close_device(libusb_dev_handle_t dev)
 		pthread_mutex_lock(&hdev->lock);
 	}
 	pthread_mutex_unlock(&hdev->lock);
-
+	
 	ret = hdev->idev->ops->close(hdev);
 
 	pthread_mutex_lock(&usbi_dev_handles.lock);
-	list_del(&hdev->list);
-	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
-	pthread_mutex_destroy(&hdev->lock);
+	pthread_mutex_lock(&hdev->lock);
+
+	list_del(&hdev->list);
 
 	close(hdev->event_pipe[0]);
 	close(hdev->event_pipe[1]);
+
+	pthread_mutex_unlock(&hdev->lock);
+
+	pthread_mutex_unlock(&usbi_dev_handles.lock);
+
+	pthread_mutex_destroy(&hdev->lock);
 
 	free(hdev);
 
@@ -944,7 +961,9 @@ int32_t libusb_get_devid(libusb_dev_handle_t dev, libusb_devid_t *devid)
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
+	pthread_mutex_lock(&hdev->lock);
 	*devid = hdev->idev->devid;
+	pthread_mutex_unlock(&hdev->lock);
 
 	return LIBUSB_SUCCESS;
 }
@@ -962,7 +981,9 @@ int32_t libusb_get_lib_handle(libusb_dev_handle_t dev,
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
+	pthread_mutex_lock(&hdev->lock);
 	*lib_handle = hdev->lib_hdl->handle;
+	pthread_mutex_unlock(&hdev->lock);
 
 	return LIBUSB_SUCCESS;
 }
@@ -984,7 +1005,11 @@ int libusb_abort(libusb_request_handle_t phdl)
 	 * When we find one we'll cancel it. We don't lock here because we
 	 * leave it up to the backend to handle that appropriately.
 	 */
+	pthread_mutex_lock(&usbi_dev_handles.lock);
+
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
+		pthread_mutex_unlock(&usbi_dev_handles.lock);
+
 		pthread_mutex_lock(&hdev->lock);
 		list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
 			if (io->req == phdl) {
@@ -1006,7 +1031,11 @@ int libusb_abort(libusb_request_handle_t phdl)
 			}
 		}
 		pthread_mutex_unlock(&hdev->lock);
+
+		pthread_mutex_lock(&usbi_dev_handles.lock);
 	}
+
+	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
 	return (LIBUSB_INVALID_HANDLE); /* can't find specified request */
 }
@@ -1141,10 +1170,21 @@ void *timeout_thread(void *arg)
 		FD_ZERO(&readfds);
 		FD_ZERO(&writefds);
 
+		/*
+		 * Caution:
+		 *    This thread is supposed to be cancelled by other thread.
+		 *    Pay attention to the system defined cancellation point.
+		 *    Do NOT hold mutex before a cancellation point. Otherwise
+		 *    a deadlock may occur.
+		 *    see cancellation(5) on Solaris for detail.
+		 */
+
+		pthread_mutex_lock(&devh->lock);
 		/* Always check the event_pipe and the devices file */
 		FD_SET(devh->event_pipe[0], &readfds);
 
 		maxfd = devh->event_pipe[0];
+		pthread_mutex_unlock(&devh->lock);
 
 		gettimeofday(&tvc, NULL);
 
@@ -1156,14 +1196,11 @@ void *timeout_thread(void *arg)
 		 */  
 		pthread_mutex_lock(&devh->lock);
 
-
 		list_for_each_entry(io, &devh->io_head, list) {
 		/* safe */
-
 			/* avoid possible process on aborted io request */
 			if (io->status != USBI_IO_INPROGRESS) {
 
-				pthread_mutex_unlock(&devh->lock);
 				continue;
 			}
 
@@ -1218,11 +1255,14 @@ void *timeout_thread(void *arg)
 			char buf[16];
 			read(devh->event_pipe[0], buf, sizeof(buf));
 
+			pthread_mutex_lock(&devh->lock);
 			if(devh->state == USBI_DEVICE_CLOSING) {
 			/* device is closing, exit this thread */
 
+				pthread_mutex_unlock(&devh->lock);
 				return NULL;
 			}
+			pthread_mutex_unlock(&devh->lock);
 		}
 
 		pthread_testcancel();
@@ -1231,11 +1271,13 @@ void *timeout_thread(void *arg)
 
 		list_for_each_entry_safe(io, tio, &devh->io_head, list) {
 
+			pthread_mutex_unlock(&devh->lock);
 			if (usbi_timeval_compare(&io->tvo, &tvc) <= 0) {
 
 				usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
 
 			}
+			pthread_mutex_lock(&devh->lock);
 		}
 
 		pthread_mutex_unlock(&devh->lock);

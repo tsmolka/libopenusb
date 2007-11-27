@@ -41,8 +41,9 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 	pthread_mutex_init(&io->lock, NULL);
 	pthread_cond_init(&io->cond, NULL);
 
+	pthread_mutex_lock(&io->lock);
 	list_init(&io->list);
-
+	
 	io->dev = dev;
 	if (timeout == 0) {
 	/* set it to a big value to avoid the timeout thread delete it */
@@ -63,6 +64,7 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 		io->tvo.tv_usec -= 1000000;
 		io->tvo.tv_sec++;
 	}
+	pthread_mutex_unlock(&io->lock);
 
 	/*timeout thread will process this list */
 	pthread_mutex_lock(&dev->lock);
@@ -73,9 +75,9 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 	 */
 	list_add(&io->list,&dev->io_head);
 
-	pthread_mutex_unlock(&dev->lock);
-
 	write(dev->event_pipe[1],buf, 1); /* notify timeout thread */
+
+	pthread_mutex_unlock(&dev->lock);
 
 	return io;
 }
@@ -88,14 +90,14 @@ void usbi_free_io(struct usbi_io *io)
 		return;
 	}
 
+	pthread_mutex_lock(&io->lock);
+
 	pthread_mutex_lock(&io->dev->lock);
 	/* remove it from its original list to prevent
 	 * other threads further processing on it
 	 */
 	list_del(&io->list);
 	pthread_mutex_unlock(&io->dev->lock);
-
-	pthread_mutex_lock(&io->lock);
 
 	if (io->status == USBI_IO_INPROGRESS && io->flag == USBI_ASYNC) {
 		usbi_debug(io->dev->lib_hdl, 4, "IO is in progress, cancel it");
@@ -104,6 +106,10 @@ void usbi_free_io(struct usbi_io *io)
 	}
 
 	write(io->dev->event_pipe[1], buf, 1); /* wakeup timeout thread */
+
+	if (io->priv) {
+		free(io->priv);
+	}
 
 	pthread_mutex_unlock(&io->lock);
 
@@ -121,7 +127,6 @@ void usbi_free_io(struct usbi_io *io)
 
 	pthread_mutex_destroy(&io->lock);
 
-	if (io->priv) { free(io->priv); }
 	free(io);
 }
 
@@ -148,6 +153,7 @@ void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_byt
 		pthread_mutex_unlock(&hdev->lib_hdl->complete_lock);
 	}
 
+	pthread_mutex_lock(&io->lock);
 	type = io->req->type;
 
 	if (type == USB_TYPE_CONTROL) {
@@ -167,7 +173,8 @@ void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_byt
 		result = &io->req->req.isoc->isoc_results[0];
 
 	}
-	
+	pthread_mutex_unlock(&io->lock);
+
 	result->status = status;
 	result->transferred_bytes = transferred_bytes;
 
@@ -197,8 +204,10 @@ int usbi_async_submit(struct usbi_io *io)
 	int ret;
 	libusb_transfer_type_t type;
 	
+	pthread_mutex_lock(&io->lock);
 	type = io->req->type;
 	io->flag = USBI_ASYNC;
+	pthread_mutex_unlock(&io->lock);
   
 	dev = usbi_find_dev_handle(io->req->dev);
 	if (!dev)
@@ -295,6 +304,8 @@ static void simple_io_setup(struct simple_io *io)
 
 static int simple_io_wait(struct simple_io *io)
 {
+	int status;
+
 	/* Race Condition: We do not want to wait on io->complete if it's
 	 * already been signaled. Use io->completed == 1 as the signal
 	 * this has happened. 
@@ -303,9 +314,10 @@ static int simple_io_wait(struct simple_io *io)
 	if (!io->completed) {
 		pthread_cond_wait(&io->complete, &io->lock);
 	}
+	status = io->status;
 	pthread_mutex_unlock(&io->lock);
 	
-	return io->status;
+	return (status);
 }
 
 static void simple_io_complete(struct simple_io *io, int status)
@@ -455,16 +467,17 @@ int usbi_io_async(struct usbi_io *iop)
 	int ret = LIBUSB_PLATFORM_FAILURE;
 	libusb_transfer_type_t type;
 
+	pthread_mutex_lock(&iop->lock);
 	dev = iop->dev;
-
-	usbi_debug(dev->lib_hdl, 4, "Begin io = %p",iop);
-	
 	type = iop->req->type;
+	pthread_mutex_unlock(&iop->lock);
 
 	if (!dev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
+	pthread_mutex_lock(&dev->idev->bus->lock);
 	io_pattern = dev->idev->bus->ops->io_pattern;
+	pthread_mutex_unlock(&dev->idev->bus->lock);
 	
 	if (type < USB_TYPE_CONTROL || type > USB_TYPE_ISOCHRONOUS) {
 		return LIBUSB_BADARG;
