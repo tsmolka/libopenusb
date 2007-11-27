@@ -60,6 +60,8 @@ int32_t libusb_set_configuration(libusb_dev_handle_t dev, uint8_t cfg)
 int32_t libusb_get_configuration(libusb_dev_handle_t dev, uint8_t *cfg)
 {
 	struct usbi_dev_handle *hdev;
+	int ret;
+
 	if (!cfg) {
 		return LIBUSB_BADARG;
 	}
@@ -67,7 +69,11 @@ int32_t libusb_get_configuration(libusb_dev_handle_t dev, uint8_t *cfg)
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
-	return hdev->idev->ops->get_configuration(hdev, cfg);
+	pthread_mutex_lock(&hdev->lock);
+	ret = hdev->idev->ops->get_configuration(hdev, cfg);
+	pthread_mutex_unlock(&hdev->lock);
+
+	return (ret);
 }
 
 int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
@@ -88,7 +94,8 @@ int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
 	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
 		return LIBUSB_BADARG;
 	}
-
+	
+	pthread_mutex_lock(&hdev->lock);
 	/* check if this is a valid interface */
 	if ((ifc>= USBI_MAXINTERFACES) ||
 	    (ifc >= hdev->idev->desc.configs[hdev->config_value-1].
@@ -97,21 +104,26 @@ int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
 		usbi_debug(hdev->lib_hdl, 1, "interface %d not valid",
 			ifc);
 
+		pthread_mutex_unlock(&hdev->lock);
 		return (LIBUSB_BADARG);
 	}
+	pthread_mutex_unlock(&hdev->lock);
 
 	ret = hdev->idev->ops->claim_interface(hdev, ifc, flags);
 
+	pthread_mutex_lock(&hdev->lock);
 	if(ret == 0) {
 		hdev->claimed_ifs[ifc].clm= USBI_IFC_CLAIMED;
 		hdev->claimed_ifs[ifc].altsetting = 0; /*set to default 0 */
 	}
+	pthread_mutex_unlock(&hdev->lock);
 	return ret;
 }
 
 int32_t libusb_release_interface(libusb_dev_handle_t dev, uint8_t ifc)
 {
 	struct usbi_dev_handle *hdev;
+	int ret;
 
 	if (ifc > USBI_MAXINTERFACES) {
 		return(LIBUSB_BADARG);
@@ -125,7 +137,12 @@ int32_t libusb_release_interface(libusb_dev_handle_t dev, uint8_t ifc)
 		return LIBUSB_BADARG;
 	}
 
-	return hdev->idev->ops->release_interface(hdev, ifc);
+	pthread_mutex_lock(&hdev->lock);
+	/* backends do NOT grab this lock again */
+	ret = hdev->idev->ops->release_interface(hdev, ifc);
+	pthread_mutex_unlock(&hdev->lock);
+
+	return (ret);
 }
 
 int32_t libusb_is_interface_claimed(libusb_dev_handle_t dev, uint8_t ifc)
@@ -141,10 +158,13 @@ int32_t libusb_is_interface_claimed(libusb_dev_handle_t dev, uint8_t ifc)
 	if(!hdev) {
 		return LIBUSB_BADARG;
 	}
-
+	
+	pthread_mutex_lock(&hdev->lock);
 	if (hdev->claimed_ifs[ifc].clm == USBI_IFC_CLAIMED) {
+		pthread_mutex_unlock(&hdev->lock);
 		return 1;
 	} else {
+		pthread_mutex_unlock(&hdev->lock);
 		return 0;
 	}
 }
@@ -155,6 +175,7 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	struct usbi_dev_handle *hdev;
 	struct usbi_device *idev;
 	struct usbi_config *pcfg;
+	int ret;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
@@ -163,14 +184,17 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	if (ifc > USBI_MAXINTERFACES) {
 		return LIBUSB_BADARG;
 	}
-
+	
+	pthread_mutex_lock(&hdev->lock);
 	idev = hdev->idev;
+	pthread_mutex_unlock(&hdev->lock);
 	
 	/* refresh descriptors */
 	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
 		return LIBUSB_PARSE_ERROR;
 	}
 
+	pthread_mutex_lock(&hdev->lock);
 	pcfg=&idev->desc.configs[hdev->config_value - 1];
 
 	/* not valid interface, or not claimed, or not valid alt */
@@ -180,16 +204,22 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 		/* alternate counts from 0 */
 		usbi_debug(hdev->lib_hdl, 1,
 			"invalid interface(%d) or alt(%d)", ifc, alt);
+		pthread_mutex_unlock(&hdev->lock);
+
 		return LIBUSB_BADARG;
 	}
 
 	if (alt == hdev->claimed_ifs[ifc].altsetting) {
 		usbi_debug(hdev->lib_hdl, 1, "same alt, no need to change");
+		pthread_mutex_unlock(&hdev->lock);
 
 		return (0);
 	}
 
-	return hdev->idev->ops->set_altsetting(hdev, ifc, alt);
+	ret = hdev->idev->ops->set_altsetting(hdev, ifc, alt);
+	pthread_mutex_unlock(&hdev->lock);
+
+	return (ret);
 }
 
 int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
@@ -206,12 +236,15 @@ int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	if (!hdev)
 		return LIBUSB_UNKNOWN_DEVICE;
 
+	pthread_mutex_lock(&hdev->lock);
 	/* not claimed */
 	if (hdev->claimed_ifs[ifc].clm != USBI_IFC_CLAIMED) {
+		pthread_mutex_unlock(&hdev->lock);
 		return LIBUSB_BADARG;
 	}
 
 	idev = hdev->idev;
+	pthread_mutex_unlock(&hdev->lock);
 
 	return idev->ops->get_altsetting(hdev, ifc, alt);
 }
@@ -219,6 +252,7 @@ int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 int32_t libusb_reset(libusb_dev_handle_t dev)
 {
 	struct usbi_dev_handle *hdev;
+	int ret;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
@@ -227,7 +261,13 @@ int32_t libusb_reset(libusb_dev_handle_t dev)
 	if (!(hdev->idev->ops->reset)) {
 		return LIBUSB_NOT_SUPPORTED;
 	}
-	return hdev->idev->ops->reset(hdev);
+
+	pthread_mutex_lock(&hdev->lock);
+	/* maybe not a good idea to hold this lock */
+	ret = hdev->idev->ops->reset(hdev);
+	pthread_mutex_unlock(&hdev->lock);
+
+	return (ret);
 }
 
 int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
@@ -490,7 +530,14 @@ int32_t libusb_xfer_wait(libusb_request_handle_t req)
 		return LIBUSB_BADARG;
 	}
 
+	pthread_mutex_lock(&dev->lock);
+	pthread_mutex_lock(&dev->idev->bus->lock);
+
   	io_pattern = dev->idev->bus->ops->io_pattern;
+
+	pthread_mutex_unlock(&dev->idev->bus->lock);
+	pthread_mutex_unlock(&dev->lock);
+
 	if (io_pattern < PATTERN_ASYNC || io_pattern > PATTERN_BOTH) {
 		return LIBUSB_PLATFORM_FAILURE;
 	}
@@ -650,7 +697,9 @@ int32_t usbi_get_xfer_timeout(libusb_request_handle_t req,
 	}
 
 	if(timeout == 0) {
+		pthread_mutex_lock(&dev->lib_hdl->lock);
 		timeout = dev->lib_hdl->timeout[req->type];
+		pthread_mutex_unlock(&dev->lib_hdl->lock);
 	}
 	return timeout;
 }
@@ -680,7 +729,9 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 		return LIBUSB_INVALID_HANDLE;
 	}
 
+	pthread_mutex_lock(&dev->lock);
 	timeout = usbi_get_xfer_timeout(req, dev);
+	pthread_mutex_unlock(&dev->lock);
 
 	io = usbi_alloc_io(dev, req, timeout);
 
@@ -755,7 +806,7 @@ int32_t libusb_wait(uint32_t num_reqs,libusb_request_handle_t *handles,
 	 */
 	for(i = 0; i < num_reqs; i++) {
 		if (handles[i]->cb != NULL) {
-			usbi_debug(hdev->lib_hdl, 1, "Callback should not"
+			usbi_debug(ph, 1, "Callback should not"
 				"set here");
 			return LIBUSB_BADARG;
 		}
@@ -764,7 +815,7 @@ int32_t libusb_wait(uint32_t num_reqs,libusb_request_handle_t *handles,
 waiting:
 	pthread_mutex_lock(&ph->complete_lock);
 
-	usbi_debug(hdev->lib_hdl, 4 ,"ph = %p, cv=%p, count = %d, lock=%p",ph,
+	usbi_debug(ph, 4 ,"ph = %p, cv=%p, count = %d, lock=%p",ph,
 		&ph->complete_cv, ph->complete_count,&ph->complete_lock);
 
 	while (ph->complete_count == 0) {
@@ -775,7 +826,7 @@ waiting:
 	/* safe */
 		if (io) {
 			/*get the first completed io */
-			usbi_debug(hdev->lib_hdl, 4, "waiting list: %p\n",
+			usbi_debug(ph, 4, "waiting list: %p\n",
 				io->req);
 
 			for (i = 0; i < num_reqs; i++) {
@@ -794,7 +845,7 @@ waiting:
 		list_del(&io->list); /* remove it from the list */
 
 		ph->complete_count--;
-		usbi_debug(hdev->lib_hdl, 4, "One was completed");
+		usbi_debug(ph, 4, "One was completed");
 
 		*handle = io->req;
 		pthread_mutex_unlock(&ph->complete_lock);
@@ -802,7 +853,7 @@ waiting:
 		return 0;
 
 	} else { /* Maybe the submitted io not complete, waiting it */
-		usbi_debug(hdev->lib_hdl, 4, "Continue waiting");
+		usbi_debug(ph, 4, "Continue waiting");
 
 		/* FIXME:need more consideration. We may miss completed
 		 * request here.
@@ -815,10 +866,6 @@ waiting:
 		pthread_mutex_unlock(&ph->complete_lock);
 		goto waiting;
 	}
-	
-	pthread_mutex_unlock(&ph->complete_lock);
-
-	return 0;
 }
 
 int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
@@ -848,7 +895,9 @@ int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
 		return LIBUSB_BADARG;
 	}
 
+	pthread_mutex_lock(&hdev->lock);
 	ph = hdev->lib_hdl;
+	pthread_mutex_unlock(&hdev->lock);
 
 	if(!ph) {
 		return LIBUSB_BADARG;
@@ -859,11 +908,12 @@ int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
 	/* safe */
 		if(io) {
 			/*get the first io on the complete list */
-			usbi_debug(hdev->lib_hdl, 4, "complete list: %p\n",
+			usbi_debug(ph, 4, "complete list: %p\n",
 				io->req);
 
 			for(i=0;i<num_reqs;i++) {
-			usbi_debug(hdev->lib_hdl, 4, "polling %p",handles[i]);
+				usbi_debug(ph, 4, "polling %p",
+					handles[i]);
 				if(io->req == handles[i]) {
 					ph->complete_count--;
 					found = 1;
@@ -880,12 +930,12 @@ int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
 
 		*handle = io->req;
 
-		usbi_debug(hdev->lib_hdl, 4, "One was completed: %p",io->req);
+		usbi_debug(ph, 4, "One was completed: %p",io->req);
 
 		usbi_free_io(io);
 
 	} else { /* Maybe the submitted io not complete, waiting it */
-		usbi_debug(hdev->lib_hdl, 4, "No one was completed");
+		usbi_debug(ph, 4, "No one was completed");
 		*handle = NULL;
 	}
 
@@ -1056,6 +1106,7 @@ loop:
 		req = malloc(sizeof(struct libusb_request_handle));
 		if (!req) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
+			pthread_mutex_unlock(&mi_req->lock);
 			return LIBUSB_NO_RESOURCES;
 		}
 
@@ -1065,6 +1116,7 @@ loop:
 		args = malloc(sizeof(struct usbi_multi_req_args));
 		if (!args) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
+			pthread_mutex_unlock(&mi_req->lock);
 			return LIBUSB_NO_RESOURCES;
 		}
 
@@ -1097,6 +1149,7 @@ loop:
 			/* submit all the request buffers */
 			bulk = malloc(sizeof(*bulk));
 			if (!bulk) {
+				pthread_mutex_unlock(&mi_req->lock);
 				return LIBUSB_NO_RESOURCES;
 			}
 
@@ -1109,7 +1162,10 @@ loop:
 
 			req->req.bulk = bulk;
 
+			/* do not hold this lock for a long time*/
+			pthread_mutex_unlock(&mi_req->lock);
 			libusb_xfer_aio(req);
+			pthread_mutex_lock(&mi_req->lock);
 
 			m_bulk->rp++; /* move rp forward */
 
@@ -1121,6 +1177,7 @@ loop:
 
 			intr = malloc(sizeof(*intr));
 			if (!intr) {
+				pthread_mutex_unlock(&mi_req->lock);
 				return LIBUSB_NO_RESOURCES;
 			}
 
@@ -1135,9 +1192,14 @@ loop:
 
 			req->req.intr = intr;
 
+			
+			pthread_mutex_unlock(&mi_req->lock);
 			ret = libusb_xfer_aio(req);
+			pthread_mutex_lock(&mi_req->lock);
+
 			if (ret != 0) {
 				usbi_debug(hdev->lib_hdl, 1, "intr aio fail");
+				pthread_mutex_unlock(&mi_req->lock);
 				return ret;
 			}
 
@@ -1153,6 +1215,7 @@ loop:
 			isoc = malloc(sizeof(*isoc));
 			if (!isoc) {
 				free(req);
+				pthread_mutex_unlock(&mi_req->lock);
 				return LIBUSB_NO_RESOURCES;
 			}
 
@@ -1163,19 +1226,20 @@ loop:
 
 			req->req.isoc = isoc;
 
+			pthread_mutex_unlock(&mi_req->lock);
 			libusb_xfer_aio(req);
+			pthread_mutex_lock(&mi_req->lock);
 
 			m_isoc->rp++; /* move rp forward */
 
 		} else {
+			pthread_mutex_unlock(&mi_req->lock);
 			return(LIBUSB_BADARG);
 		}
 	}
 
 	mi_req->flag = USBI_MREQ_NO_NEW_BUF; /* clear flag */
-	pthread_mutex_unlock(&mi_req->lock);
 
-	pthread_mutex_lock(&mi_req->lock);
 	while(mi_req->flag == USBI_MREQ_NO_NEW_BUF) {
 		pthread_cond_wait(&mi_req->cv,&mi_req->lock);
 	}
@@ -1185,7 +1249,9 @@ loop:
 		struct usbi_multi_req_args *pargs, *tmp;
 
 		list_for_each_entry_safe(pargs, tmp, &mi_req->req_head, list) {
+			pthread_mutex_unlock(&mi_req->lock);
 			libusb_abort(pargs->req);
+			pthread_mutex_lock(&mi_req->lock);
 			free(pargs->req); /*FIXME: should be here ??? */
 			free(pargs);
 		}
@@ -1193,7 +1259,7 @@ loop:
 		pthread_mutex_unlock(&mi_req->lock);
 		free(mi_req);
 
-		pthread_exit(0);
+		return (0);
 	}
 
 	pthread_mutex_unlock(&mi_req->lock);

@@ -1615,7 +1615,6 @@ usb_close_all_eps(struct usbi_dev_handle *hdev)
 	int i;
 
 	/* not close ep0 */
-	pthread_mutex_lock(&hdev->lock);
 
 	for (i = 1; i < USBI_MAXENDPOINTS; i++) {
 		if (hdev->priv->eps[i].datafd != -1) {
@@ -1627,7 +1626,6 @@ usb_close_all_eps(struct usbi_dev_handle *hdev)
 			hdev->priv->eps[i].statfd = -1;
 		}
 	}
-	pthread_mutex_unlock(&hdev->lock);
 }
 
 static int
@@ -1685,6 +1683,9 @@ solaris_close(struct usbi_dev_handle *hdev)
 
 	/* wait for timeout thread exiting */
 	pthread_join(hdev->priv->timeout_thr, NULL);
+
+	pthread_mutex_lock(&hdev->lock);
+
 	usbi_debug(hdev->lib_hdl, 4, "timeout thread exit");
 
 	for(i = 0; i < USBI_MAXINTERFACES ; i++) {
@@ -1694,11 +1695,11 @@ solaris_close(struct usbi_dev_handle *hdev)
 	usb_close_all_eps(hdev);
 	usb_close_ep0(hdev);
 	
-	pthread_mutex_lock(&hdev->lock);
 	hdev->state = USBI_DEVICE_CLOSING;
+	free(hdev->priv);
+
 	pthread_mutex_unlock(&hdev->lock);
 
-	free(hdev->priv);
 	return (LIBUSB_SUCCESS);
 }
 
@@ -2465,6 +2466,7 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 		buf = malloc(len);
 		if(!buf) {
+			pthread_mutex_unlock(&hdev->lock);
 			return LIBUSB_NO_RESOURCES;
 		}
 		memset(buf, 0, len);
