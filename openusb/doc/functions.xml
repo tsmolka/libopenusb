@@ -748,7 +748,7 @@
 
 
 
-<refentry id="libusbgetdevid">
+<refentry id="function.libusbgetdevid">
 
   <refnamediv>
     <refname><function>libusb_get_devid</function></refname>
@@ -811,7 +811,7 @@
   </refsect1>
 </refentry>
 
-<refentry id="libusbgetlibhandle">
+<refentry id="function.libusbgetlibhandle">
 
   <refnamediv>
     <refname><function>libusb_get_lib_handle</function></refname>
@@ -873,7 +873,7 @@
 </refentry>
 
 
-<refentry id="libusbgetconfiguration">
+<refentry id="function.libusbgetconfiguration">
 
   <refnamediv>
     <refname><function>libusb_get_configuration, libusb_set_configuration</function></refname>
@@ -946,7 +946,7 @@
 </refentry>
 
 
-<refentry id="libusbclaiminterface">
+<refentry id="function.libusbclaiminterface">
 
   <refnamediv>
     <refname><function>libusb_claim_interface, libusb_release_interface,
@@ -1033,7 +1033,7 @@
 </refentry>
 
 
-<refentry id="libusbgetaltsetting">
+<refentry id="function.libusbgetaltsetting">
 
   <refnamediv>
     <refname><function>libusb_get_altsetting,libusb_set_altsetting</function></refname>
@@ -1113,12 +1113,12 @@
 
   <refsect1>
     <title>See Also</title>
-    <para><xref linkend="libusbclaiminterface"></para>
+    <para><xref linkend="function.libusbclaiminterface"></para>
   </refsect1>
 </refentry>
 
 
-<refentry id="libusbreset">
+<refentry id="function.libusbreset">
 
   <refnamediv>
     <refname><function>libusb_reset</function></refname>
@@ -1186,7 +1186,7 @@
   <para> This group of functions are helpers to get and parse kinds of USB descriptors.  </para>
   </partintro>
 
-  <refentry id="libusbgetrawdesc">
+  <refentry id="function.libusbgetrawdesc">
 
   <refnamediv>
     <refname>libusb_get_raw_desc, libusb_free_raw_desc, libusb_parse_device_desc, libusb_parse_config_desc,
@@ -1357,7 +1357,7 @@
 
 
 
-<refentry id="libusbparsedata">
+<refentry id="function.libusbparsedata">
 
   <refnamediv>
     <refname><function>libusb_parse_data</function></refname>
@@ -1467,7 +1467,7 @@
   </para>
   </partintro>
 
-  <refentry id="libusbxferwait">
+  <refentry id="function.libusbxferwait">
 
   <refnamediv>
     <refname><function>libusb_xfer_wait, libusb_xfer_aio</function></refname>
@@ -1569,12 +1569,12 @@
 
   <refsect1>
     <title>See Also</title>
-    <para><xref linkend="libusbwait"></para>
+    <para><xref linkend="function.libusbwait"></para>
   </refsect1>
 </refentry>
 
 
-<refentry id="libusbctrlxfer">
+<refentry id="function.libusbctrlxfer">
 
   <refnamediv>
     <refname><function>libusb_ctrl_xfer, libusb_intr_xfer, libusb_bulk_xfer, libusb_isoc_xfer</function></refname>
@@ -1775,7 +1775,7 @@
   </refsect1>
 </refentry>
 
-<refentry id="libusbabort">
+<refentry id="function.libusbabort">
 
   <refnamediv>
     <refname><function>libusb_abort</function></refname>
@@ -1840,7 +1840,7 @@
 
 
 
-<refentry id="libusbwait">
+<refentry id="function.libusbwait">
 
   <refnamediv>
     <refname><function>libusb_wait, libusb_poll</function></refname>
@@ -1940,7 +1940,7 @@
 </refentry>
 
 
-<refentry id="libusbstart">
+<refentry id="function.libusbstart">
 
 
   <refnamediv>
