@@ -1998,7 +1998,7 @@
 
 
 
-<reference>
+<reference id="ref.helper">
 <title>Helper Utilities</title>
 <partintro>
 <para>Some handy functions. </para>
