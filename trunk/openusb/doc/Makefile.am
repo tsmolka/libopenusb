@@ -12,7 +12,7 @@ CLEANFILES = manual.dvi manual.aux manual.tex manual.log \
 
 if BUILD_DOCS
 #MANUALS = manual.ps.gz html/index.html
-MANUALS = html/index.html
+MANUALS = html/index.html html/openusb_guide.html
 # Generating postscript takes forever on my laptop apparentely
 else
 MANUALS =
@@ -28,4 +28,8 @@ html/index.html: $(xml_files) website.dsl
 	rm -rf html
 	mkdir html
 	@JADE@ -t xml -d website.dsl\#html xml.dcl manual.xml
+
+html/openusb_guide.html: $(xml_files) website.dsl
+	test -d html || mkdir html
+	@JADE@ -V nochunks -t xml -d website.dsl\#html xml.dcl manual.xml > html/openusb_guide.html
 
