@@ -3,7 +3,7 @@
   <reference id="ref.core">
     <title>Core</title>
     <partintro>
-      <para>These functions compromise the core of libusb. They are used by all applications that utilize libusb.</para>
+      <para>These functions comprise the core of libusb. They are used by all applications that utilize libusb.</para>
     </partintro>
 
     <refentry id="function.libusbinit">
