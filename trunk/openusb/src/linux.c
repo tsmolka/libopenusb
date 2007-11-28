@@ -1377,7 +1377,6 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 				/* If this failed, then we haven't submitted the request to usbfs
 				* yet. So let's log it and delete the request */
 				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
-				list_del(&io->list);
 			}
 
 			/* clear out the buffer if we allocated (only on a control req) */
@@ -1389,7 +1388,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 			io->status = USBI_IO_TIMEOUT;
 
 			/* Only do this if we were able to discard the URB */
-			if (ret >= 0) { usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0); }
+			usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
 		}
 	}
 
@@ -1568,6 +1567,8 @@ void *poll_io(void *devhdl)
 		/* unlock the device */
 		pthread_mutex_unlock(&hdev->lock);
 		
+		/* see if we need to leave */
+		pthread_testcancel();
 	}
 
 	return (NULL);
@@ -1613,6 +1614,9 @@ void *poll_events(void *unused)
 
 	/* Loop forever, checking for events every 1 second */
 	while(1) {
+		/* see if we need to leave */
+		pthread_testcancel();
+
 		/* We'll only do a rescan if it's been at least 1 sec since our
 		 * last rescan */
 		gettimeofday(&tvc, NULL);
