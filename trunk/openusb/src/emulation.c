@@ -952,3 +952,31 @@ struct usb_bus *usb_get_busses(void)
 {
 	return(usb_busses);
 }
+
+int usb_get_driver_np(usb_dev_handle *dev, int interface, char *name,
+											unsigned int namelen)
+{
+	struct usb_dev_handle_internal *devh =
+			(struct usb_dev_handle_internal *)dev;
+
+	if (!devh) {
+		wr_error_str(EINVAL, "Invalid arguments");
+		return -1;
+	}
+
+	return (usbi_get_driver_np(devh->devh, interface, name, namelen));
+}
+
+
+int usb_detach_kernel_driver_np(usb_dev_handle *dev, int interface)
+{
+	struct usb_dev_handle_internal *devh =
+			(struct usb_dev_handle_internal *)dev;
+
+	if (!devh) {
+		wr_error_str(EINVAL, "Invalid arguments");
+		return -1;
+	}
+
+	return (usbi_detach_kernel_driver_np(devh->devh, interface));
+}

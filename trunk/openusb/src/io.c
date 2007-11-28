@@ -97,7 +97,6 @@ void usbi_free_io(struct usbi_io *io)
 	 * other threads further processing on it
 	 */
 	list_del(&io->list);
-	pthread_mutex_unlock(&io->dev->lock);
 
 	if (io->status == USBI_IO_INPROGRESS && io->flag == USBI_ASYNC) {
 		usbi_debug(io->dev->lib_hdl, 4, "IO is in progress, cancel it");
@@ -105,6 +104,9 @@ void usbi_free_io(struct usbi_io *io)
 			io->dev->idev->ops->io_cancel(io);
 	}
 
+	/* don't release this lock until after the cancel is finished */
+	pthread_mutex_unlock(&io->dev->lock);
+	
 	write(io->dev->event_pipe[1], buf, 1); /* wakeup timeout thread */
 
 	if (io->priv) {
