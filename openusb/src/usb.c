@@ -1285,3 +1285,56 @@ void *timeout_thread(void *arg)
 
 	return NULL;
 }
+
+
+int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
+													 char *name, uint32_t namelen)
+{
+	struct usbi_dev_handle	*hdev;
+	
+	hdev = usbi_find_dev_handle(dev);
+	if (!hdev) {
+		return (LIBUSB_UNKNOWN_DEVICE);
+	}
+
+	if (hdev->idev->ops->get_driver_np != NULL) {
+		return (hdev->idev->ops->get_driver_np(hdev, interface, name, namelen));
+	}
+	
+	/* We're only here because get_driver_np was NULL, so... */
+	return (LIBUSB_NOT_SUPPORTED);
+}
+
+
+int32_t usbi_attach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface)
+{
+	struct usbi_dev_handle	*hdev;
+
+	hdev = usbi_find_dev_handle(dev);
+	if (!hdev) {
+		return (LIBUSB_UNKNOWN_DEVICE);
+	}
+
+	if (hdev->idev->ops->attach_kernel_driver_np != NULL) {
+		return(hdev->idev->ops->attach_kernel_driver_np(hdev, interface));
+	}
+
+	return (LIBUSB_NOT_SUPPORTED);
+}
+
+
+int32_t usbi_detach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface)
+{
+	struct usbi_dev_handle	*hdev;
+
+	hdev = usbi_find_dev_handle(dev);
+	if (!hdev) {
+		return (LIBUSB_UNKNOWN_DEVICE);
+	}
+
+	if (hdev->idev->ops->detach_kernel_driver_np != NULL) {
+		return (hdev->idev->ops->detach_kernel_driver_np(hdev, interface));
+	}
+
+	return (LIBUSB_NOT_SUPPORTED);
+}

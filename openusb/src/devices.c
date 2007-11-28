@@ -1503,7 +1503,7 @@ void libusb_free_device_data(libusb_dev_data_t *data)
 }
 
 int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
-	libusb_busid_t bus, libusb_transfer_type_t type, size_t *bytes)
+	libusb_busid_t bus, libusb_transfer_type_t type, uint32_t *bytes)
 {
 	struct usbi_bus		*ibus;
 	struct usbi_handle	*hdl;

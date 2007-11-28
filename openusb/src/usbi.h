@@ -261,6 +261,15 @@ struct usbi_device_ops {
 
 	/* I/O abort function */
 	int32_t (*io_cancel)(struct usbi_io *io);
+
+	/* Non-portable functions */
+	int32_t (*get_driver_np)(struct usbi_dev_handle *hdev, uint8_t interface,
+													char *name, uint32_t namelen);
+	int32_t (*attach_kernel_driver_np)(struct usbi_dev_handle *hdev,
+																		 uint8_t interface);
+	int32_t (*detach_kernel_driver_np)(struct usbi_dev_handle *hdev,
+																		 uint8_t interface);
+	
 };
 
 /* backend I/O pattern */
@@ -355,6 +364,11 @@ struct usbi_handle *usbi_find_handle(libusb_handle_t handle);
 
 libusb_request_handle_t usbi_alloc_request_handle(void);
 void *timeout_thread(void *arg);
+int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
+													 char *name, uint32_t namelen);
+int32_t usbi_attach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
+int32_t usbi_detach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
+
 
 /* io.c */
 int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req);

@@ -1375,8 +1375,9 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 			ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 			if (ret < 0) {
 				/* If this failed, then we haven't submitted the request to usbfs
-				 * yet. So let's log it and complete the request */
+				* yet. So let's log it and delete the request */
 				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
+				list_del(&io->list);
 			}
 
 			/* clear out the buffer if we allocated (only on a control req) */
@@ -1384,8 +1385,11 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 				if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
 			}
 
+			/* Set the status */
 			io->status = USBI_IO_TIMEOUT;
-			usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
+
+			/* Only do this if we were able to discard the URB */
+			if (ret >= 0) { usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0); }
 		}
 	}
 
@@ -1887,7 +1891,7 @@ done:
  *		Gets the name of the kernel driver currently attached to the interface
  */
 int32_t linux_get_driver(struct usbi_dev_handle *hdev, uint8_t interface,
-												 char *name, size_t namelen)
+												 char *name, uint32_t namelen)
 {
 	struct usbk_getdriver getdrv;
 	int ret;
@@ -1966,32 +1970,35 @@ int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 
 
 struct usbi_backend_ops backend_ops = {
-	.backend_version      = 1,
-	.io_pattern           = PATTERN_ASYNC,
-	.init                 = linux_init,
-	.fini                 = linux_fini,
-	.find_buses           = linux_find_buses,
-	.refresh_devices      = linux_refresh_devices,
-	.free_device          = linux_free_device,
+	.backend_version						= 1,
+	.io_pattern									= PATTERN_ASYNC,
+	.init												= linux_init,
+	.fini												= linux_fini,
+	.find_buses									= linux_find_buses,
+	.refresh_devices						= linux_refresh_devices,
+	.free_device								= linux_free_device,
 	.dev = {
-		.open               = linux_open,
-		.close              = linux_close,
-		.set_configuration  = linux_set_configuration,
-		.get_configuration  = linux_get_configuration,
-		.claim_interface    = linux_claim_interface,
-		.release_interface  = linux_release_interface,
-		.get_altsetting     = linux_get_altsetting,
-		.set_altsetting     = linux_set_altsetting,
-		.reset              = linux_reset,
-		.ctrl_xfer_aio      = linux_submit_ctrl,
-		.intr_xfer_aio      = linux_submit_intr,
-		.bulk_xfer_aio      = linux_submit_bulk,
-		.isoc_xfer_aio      = linux_submit_isoc,
-		.ctrl_xfer_wait     = NULL,
-		.intr_xfer_wait     = NULL,
-		.bulk_xfer_wait     = NULL,
-		.isoc_xfer_wait     = NULL,
-		.io_cancel          = linux_io_cancel,
-		.get_raw_desc       = linux_get_raw_desc,
+		.open											= linux_open,
+		.close										= linux_close,
+		.set_configuration				= linux_set_configuration,
+		.get_configuration				= linux_get_configuration,
+		.claim_interface					= linux_claim_interface,
+		.release_interface				= linux_release_interface,
+		.get_altsetting						= linux_get_altsetting,
+		.set_altsetting						= linux_set_altsetting,
+		.reset										= linux_reset,
+		.get_driver_np						= linux_get_driver,
+		.attach_kernel_driver_np	= linux_attach_kernel_driver,
+		.detach_kernel_driver_np	= linux_detach_kernel_driver,
+		.ctrl_xfer_aio						= linux_submit_ctrl,
+		.intr_xfer_aio						= linux_submit_intr,
+		.bulk_xfer_aio						= linux_submit_bulk,
+		.isoc_xfer_aio						= linux_submit_isoc,
+		.ctrl_xfer_wait						= NULL,
+		.intr_xfer_wait						= NULL,
+		.bulk_xfer_wait						= NULL,
+		.isoc_xfer_wait						= NULL,
+		.io_cancel								= linux_io_cancel,
+		.get_raw_desc							= linux_get_raw_desc,
 	},
 };

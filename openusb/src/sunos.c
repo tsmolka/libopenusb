@@ -2746,11 +2746,9 @@ struct usbi_backend_ops backend_ops = {
 		.get_altsetting			= solaris_get_altinterface,
 		.set_altsetting			= solaris_set_altinterface,
 		.reset				= NULL,
-		/*
-		   .get_driver_np		= NULL,
-		   .attach_kernel_driver_np	= NULL,
-		   .detach_kernel_driver_np	= NULL,
-		 */
+		.get_driver_np		= NULL,
+		.attach_kernel_driver_np	= NULL,
+		.detach_kernel_driver_np	= NULL,
 		.ctrl_xfer_wait			= solaris_submit_ctrl,
 		.intr_xfer_wait			= solaris_submit_intr,
 		.bulk_xfer_wait			= solaris_submit_bulk,

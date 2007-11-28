@@ -899,7 +899,7 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
  *	LIBUSB_NOT_SUPPORTED	- Operation not supported
  */
 int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
-	libusb_busid_t bus, libusb_transfer_type_t type, size_t *bytes);
+	libusb_busid_t bus, libusb_transfer_type_t type, uint32_t *bytes);
 
 
 
