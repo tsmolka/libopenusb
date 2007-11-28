@@ -1,10 +1,11 @@
   <title>Functions</title>
 
-  <reference id="ref.core">
+  <chapter id="ref.core">
     <title>Core</title>
-    <partintro>
-      <para>These functions comprise the core of libusb. They are used by all applications that utilize libusb.</para>
-    </partintro>
+      <para>
+      These functions comprise the core of libusb. They are used by
+      all applications that utilize libusb.
+      </para>
 
     <refentry id="function.libusbinit">
       <refnamediv>
@@ -289,16 +290,13 @@
     </para>
     </refsect1>
     </refentry>
-</reference>
+</chapter>
 
 
-  <reference id="ref.deviceops">
+  <chapter id="ref.deviceops">
     <title>Bus and Device Operations</title>
-    <partintro>
       <para>This group of functions deal with the bus and device. Bus operations allows application
       to scan busses on a system. Device operations allows application to search for specific device, open and close those devices as well standard USB operations like setting the configuration, alternate settings, clearing halts and resetting the device. It also provides OS level operations such as claiming and releasing interfaces.</para>
-    </partintro>
-
 
     <refentry id="function.libusbgetbusidlist">
       <refnamediv>
@@ -1178,13 +1176,11 @@
   </refsect1>
 </refentry>
 
-</reference>
+</chapter>
 
-<reference id ="ref.parsers">
+<chapter id ="ref.parsers">
   <title> Device Descriptor Parsers </title>
-  <partintro>
   <para> This group of functions are helpers to get and parse kinds of USB descriptors.  </para>
-  </partintro>
 
   <refentry id="function.libusbgetrawdesc">
 
@@ -1453,19 +1449,18 @@
   </refsect1>
 </refentry>
 
-</reference>
+</chapter>
 
 
 
-<reference id ="ref.transfer">
+<chapter id ="ref.transfer">
   <title> USB Data Transfer </title>
-  <partintro><para>Functions in this group are used to transfer USB data. OpenUSB implements transfer APIs,
+  <para>Functions in this group are used to transfer USB data. OpenUSB implements transfer APIs,
   including synchronous and asynchronous, defined in libusb 1.0 interface. The synchronous means when such
   API is used, it will block until a transfer request is accomplished or timeout. The asynchronous means
   such interface will returns immediately no matter success or failure. Application can use callback
   mechanism or other libusb 1.0 interface to check asynchronous request.
   </para>
-  </partintro>
 
   <refentry id="function.libusbxferwait">
 
@@ -1994,15 +1989,13 @@
 </refentry>
 
 
-</reference>
+</chapter>
 
 
 
-<reference id="ref.helper">
+<chapter id="ref.helper">
 <title>Helper Utilities</title>
-<partintro>
 <para>Some handy functions. </para>
-</partintro>
     <refentry id="function.libusbstrerror">
       <refnamediv>
         <refname><function>libusb_strerror</function></refname>
@@ -2143,7 +2136,7 @@
     </refsect1>
     </refentry>
 
-</reference>
+</chapter>
 
 
 
