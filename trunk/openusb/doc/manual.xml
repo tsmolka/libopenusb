@@ -34,20 +34,6 @@
     </keywordset>
 
   </bookinfo>
-  <!--titleabbrev-->
-    <revhistory>
-      <revision>
-        <revnumber>0.1</revnumber>
-        <date>October 28, 2007</date>
-        <authorinitials>Lei Chen</authorinitials>
-        <revremark> -- Initial version of OpenUSB help document for review. This version of
-	developer guide only describes external APIs defined in libusb.h.  Guide for backend
-	development will be provided in future revision.
-	</revremark>
-      </revision>
-    </revhistory>
-  <!--/titleabbrev, I don't know why the above can't be printed with this tag -->
-
 
   <preface id="preface">
     <title>Preface</title>
