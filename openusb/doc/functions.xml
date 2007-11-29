@@ -126,7 +126,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -217,7 +217,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -285,7 +285,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -362,7 +362,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -501,7 +501,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -628,7 +628,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -736,7 +736,7 @@
     <refsect1>
     <title> See Also </title>
     <para>
-    <xref linkend="function.libusbinit">
+    <xref linkend="function.libusbinit"/>
     <!--FIXME: point to correct link -->
     </para>
     </refsect1>
@@ -1026,7 +1026,7 @@
 
   <refsect1>
     <title>See Also</title>
-    <para><xref linkend="function.libusbopendevice"></para>
+    <para><xref linkend="function.libusbopendevice"/></para>
   </refsect1>
 </refentry>
 
@@ -1111,7 +1111,7 @@
 
   <refsect1>
     <title>See Also</title>
-    <para><xref linkend="function.libusbclaiminterface"></para>
+    <para><xref linkend="function.libusbclaiminterface"/></para>
   </refsect1>
 </refentry>
 
@@ -1185,8 +1185,9 @@
   <refentry id="function.libusbgetrawdesc">
 
   <refnamediv>
-    <refname>libusb_get_raw_desc, libusb_free_raw_desc, libusb_parse_device_desc, libusb_parse_config_desc,
-    libusb_parse_interface_desc, libusb_parse_endpoint_desc</refname>
+    <refname><function>libusb_get_raw_desc, libusb_free_raw_desc, libusb_parse_device_desc,
+    libusb_parse_config_desc, libusb_parse_interface_desc, libusb_parse_endpoint_desc
+    </function></refname>
     
     <refpurpose>Get/Free raw device descriptors; Get cooked Device, Configuration, Interface,
     Endpoint descriptors  </refpurpose>
@@ -1564,7 +1565,7 @@
 
   <refsect1>
     <title>See Also</title>
-    <para><xref linkend="function.libusbwait"></para>
+    <para><xref linkend="function.libusbwait"/></para>
   </refsect1>
 </refentry>
 
