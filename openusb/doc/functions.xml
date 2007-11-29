@@ -508,7 +508,6 @@
     </refentry>
 
 
-
     <refentry id="function.libusbgetdevicedata">
       <refnamediv>
         <refname><function>libusb_get_device_data,libusb_free_device_data </function></refname>
@@ -869,6 +868,82 @@
     <para></para>
   </refsect1>
 </refentry>
+
+<refentry id="function.libusbgetmaxxfersize">
+
+  <refnamediv>
+    <refname><function>libusb_get_max_xfer_size</function></refname>
+
+    <refpurpose>Get the maximum data transfer size per request based on the bus
+    and type
+    </refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>libusb_get_max_xfer_size</function></funcdef>
+
+        <paramdef>libusb_handle_t <parameter> handle</parameter></paramdef>
+
+        <paramdef>libusb_busid_t  <parameter> bus</parameter></paramdef>
+        <paramdef>libusb_transfer_type_t <parameter> type</parameter></paramdef>
+        <paramdef>uint32_t *<parameter> bytes</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle</parameter> - Libusb handle.</para>
+
+    <para><parameter> bus</parameter> - Bus ID.</para>
+    <para><parameter> type</parameter> - Transfer type.</para>
+    <para><parameter> bytes</parameter> - Max allowed size.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>libusb_get_max_xfer_size()</function> gets the maximum transfer size
+    that can be specified in libusb_request based on the which bus the target device is on
+    and the desired transfer type. The size value is returned in <parameter>bytes</parameter>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>libusb_get_max_xfer_size()</function> returns LIBUSB_SUCCESS on success.
+    Otherwise, a libusb error is returned.</para>
+
+    <para></para>
+
+    <para>LIBUSB_SUCCESS - No errors.</para>
+
+    <para>LIBUSB_INVALID_HANDLE - Invalid libusb handle.</para>
+
+    <para>LIBUSB_UNKNOWN_DEVICE - Bus id<parameter>bus</parameter> is not valid</para>
+
+    <para>LIBUSB_BADARG - <parameter>type</parameter> is not valid or
+    <parameter>bytes</parameter> is NULL.</para>
+
+    <para>LIBUSB_NOT_SUPPORTED - Operation is not supported.</para>
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
 
 
 <refentry id="function.libusbgetconfiguration">
