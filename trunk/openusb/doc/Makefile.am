@@ -18,18 +18,24 @@ else
 MANUALS =
 endif
 
+if SUNOS_API
+XMLDCL = /usr/share/sgml/xml.dcl
+else
+XMLDCL = xml.dcl
+endif
+
 all: $(MANUALS)
 
 manual.ps.gz: $(xml_files) website.dsl
-	@JADE@ -t ps -d website.dsl\#print xml.dcl manual.xml
+	@JADE@ -t ps -d website.dsl\#print $(XMLDCL) manual.xml
 	gzip manual.ps
 
 html/index.html: $(xml_files) website.dsl
 	rm -rf html
 	mkdir html
-	@JADE@ -t xml -d website.dsl\#html xml.dcl manual.xml
+	@JADE@ -t xml -d website.dsl\#html $(XMLDCL) manual.xml
 
 html/openusb_guide.html: $(xml_files) website.dsl
 	test -d html || mkdir html
-	@JADE@ -V nochunks -t xml -d website.dsl\#html xml.dcl manual.xml > html/openusb_guide.html
+	@JADE@ -V nochunks -t xml -d website.dsl\#html $(XMLDCL) manual.xml > html/openusb_guide.html
 
