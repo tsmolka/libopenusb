@@ -24,7 +24,7 @@ linux_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/opt/gno
 
 linux_la_SOURCES = linux.c linux.h
 linux_la_LDFLAGS = -avoid-version -module -L.libs
-linux_la_LIBADD = -lsysfs -lusb -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0
+linux_la_LIBADD = -lusb -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0
 endif
 
 if BSD_API
