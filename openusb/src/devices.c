@@ -1532,3 +1532,10 @@ int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 
 	return (LIBUSB_SUCCESS);
 }
+
+
+
+struct usbi_list *usbi_get_devices_list(void)
+{
+	return (&usbi_devices);
+}

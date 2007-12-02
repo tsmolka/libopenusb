@@ -19,9 +19,12 @@ usblibdir = $(libdir)/usb
 if LINUX_API
 usblib_LTLIBRARIES = linux.la
 
+#to use hal for hotplug event support
+linux_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/opt/gnome/include/glib-2.0 -I/opt/gnome/lib/glib-2.0/include -I/usr/include/hal
+
 linux_la_SOURCES = linux.c linux.h
 linux_la_LDFLAGS = -avoid-version -module -L.libs
-linux_la_LIBADD = -lsysfs -lusb
+linux_la_LIBADD = -lsysfs -lusb -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0
 endif
 
 if BSD_API

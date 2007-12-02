@@ -369,7 +369,6 @@ int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
 int32_t usbi_attach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
 int32_t usbi_detach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
 
-
 /* io.c */
 int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req);
 int usbi_io_async(struct usbi_io *iop);
@@ -403,10 +402,10 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
     size_t buflen);
 int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
     size_t buflen);
+struct usbi_list *usbi_get_devices_list(void);
 
 /* api.c */
 int32_t usbi_get_xfer_timeout(libusb_request_handle_t req, 
 	struct usbi_dev_handle *dev);
-
 
 #endif /* _WRAPPER_H_ */

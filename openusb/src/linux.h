@@ -10,9 +10,16 @@
 #ifndef __LINUX_H__
 #define __LINUX_H__
 
+#define DBUS_API_SUBJECT_TO_CHANGE
+
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <glib.h>
+#include <dbus/dbus-glib-lowlevel.h>
+#include <dbus/dbus-glib.h>
+#include <libhal.h>
+
 #include "libusb.h"
 #include "usbi.h"
 
@@ -147,7 +154,7 @@ struct usbk_hub_portinfo {
 /* Thread Functions */
 void *poll_io(void *usbihdl);
 void *poll_events(void *unused);
-
+void *hal_hotplug_event_thread(void *unused);
 
 
 /* Helper Functions */
@@ -166,22 +173,26 @@ int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
 																	 uint8_t interface);
 int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 																	 uint8_t interface);
+struct usbi_device *find_device_by_udi(const char *udi);
+void process_new_device(const char *udi);
+void device_added(LibHalContext *ctx, const char *udi);
+void device_removed(LibHalContext *ctx, const char *udi);
 
 
 
 /* Linux specific members for various internal structures */
 struct usbi_bus_private
 {
-	char                filename[PATH_MAX + 1];
 	struct usbi_device  *dev_by_num[USB_MAX_DEVICES_PER_BUS];
 };
 
 
 struct usbi_dev_private
 {
-	char    filename[PATH_MAX + 1];   /* full path to usbfs file */
 	time_t  mtime;                    /* modify time to detect dev changes */
 	int     found;                    /* flag to denote if we saw this dev during rescan */
+	int			pdevnum;									/* the device number of this devices parent */
+	char		*udi;											/* HAL unique identifier */
 };
 
 
