@@ -91,21 +91,18 @@ void usbi_free_io(struct usbi_io *io)
 	}
 
 	pthread_mutex_lock(&io->lock);
-
 	pthread_mutex_lock(&io->dev->lock);
 	/* remove it from its original list to prevent
 	 * other threads further processing on it
 	 */
 	list_del(&io->list);
+	pthread_mutex_unlock(&io->dev->lock);
 
 	if (io->status == USBI_IO_INPROGRESS && io->flag == USBI_ASYNC) {
 		usbi_debug(io->dev->lib_hdl, 4, "IO is in progress, cancel it");
 		if (io->dev->idev->ops->io_cancel) 
 			io->dev->idev->ops->io_cancel(io);
 	}
-
-	/* don't release this lock until after the cancel is finished */
-	pthread_mutex_unlock(&io->dev->lock);
 	
 	write(io->dev->event_pipe[1], buf, 1); /* wakeup timeout thread */
 
@@ -142,7 +139,6 @@ void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_byt
 	pthread_mutex_lock(&io->lock);
 	io->status = USBI_IO_COMPLETED;
 	pthread_mutex_unlock(&io->lock);
-
 	list_del(&io->list);
 	
 	/* Add completion for later retrieval */
@@ -180,19 +176,15 @@ void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_byt
 	result->status = status;
 	result->transferred_bytes = transferred_bytes;
 
-  /* run the user supplied callback */
-	if(io->req->cb) {
-		io->req->cb(io->req);
-	}
-
-  /* run the internal callback, if it exists */ 
-	if(io->callback) {
-		io->callback(io,status);
-	}
-
 	pthread_mutex_lock(&io->lock);
 	pthread_cond_broadcast(&io->cond);
 	pthread_mutex_unlock(&io->lock);
+
+	/* run the user supplied callback */
+	if(io->req->cb) {	io->req->cb(io->req);	}
+
+	/* run the internal callback, if it exists */
+	if(io->callback) { io->callback(io,status);	}
 	
 	/* remove usbi_free_io */
 }
