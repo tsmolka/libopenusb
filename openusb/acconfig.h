@@ -1,4 +1,8 @@
-/* libusb - Userspace access to USB devices
+/* libopenusb - Userspace access to USB devices
+ *  
+ * Copyright (c) 2007 Sun Microsystems, Inc. All rights reserved
+ * Use is subject to license terms.
+ *
  * Copyright (C) 2000 Johannes Erdfelt
  *
  * This library is free software; you can redistribute it and/or
@@ -37,9 +41,9 @@
 #undef SIZEOF_INT
 #undef SIZEOF_VOID_P
 
-#undef LIBUSB_MAJOR_VERSION
-#undef LIBUSB_MINOR_VERSION
-#undef LIBUSB_MICRO_VERSION
-#undef LIBUSB_INTERFACE_AGE
-#undef LIBUSB_BINARY_AGE
+#undef LIBOPENUSB_MAJOR_VERSION
+#undef LIBOPENUSB_MINOR_VERSION
+#undef LIBOPENUSB_MICRO_VERSION
+#undef LIBOPENUSB_INTERFACE_AGE
+#undef LIBOPENUSB_BINARY_AGE
 

@@ -10,9 +10,9 @@ configincludedir = $(pkglibdir)/include
 
 EXTRA_DIST = linux.c linux.h bsd.c darwin.c sunos.c sunos.h
 
-libusb_la_CFLAGS =
+libopenusb_la_CFLAGS =
 
-lib_LTLIBRARIES = libusb.la
+lib_LTLIBRARIES = libopenusb.la
 
 usblibdir = $(libdir)/usb
 
@@ -24,7 +24,7 @@ linux_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/opt/gno
 
 linux_la_SOURCES = linux.c linux.h
 linux_la_LDFLAGS = -avoid-version -module -L.libs
-linux_la_LIBADD = -lusb -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0
+linux_la_LIBADD = -lopenusb -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0
 endif
 
 if BSD_API
@@ -48,21 +48,21 @@ usblib_LTLIBRARIES = sunos.la
 
 sunos_la_SOURCES = sunos.c sunos.h
 sunos_la_LDFLAGS =  -avoid-version -module
-sunos_la_LIBADD = -ldevinfo -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0 -lusb
+sunos_la_LIBADD = -ldevinfo -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.0 -lopenusb
 
 #to use hal for hotplug event support
 sunos_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/hal
 
-libusb_la_CFLAGS += -I/usr/sfw/include
+libopenusb_la_CFLAGS += -I/usr/sfw/include
 endif
 
-libusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
-libusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/usb\"
+libopenusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
+libopenusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/usb\"
 
-include_HEADERS = libusb.h
+include_HEADERS = libopenusb.h
 
-libusb_la_LIBADD = -ldl
-libusb_la_LDFLAGS = \
+libopenusb_la_LIBADD = -ldl
+libopenusb_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	-release $(LT_RELEASE) \
 	-export-dynamic \

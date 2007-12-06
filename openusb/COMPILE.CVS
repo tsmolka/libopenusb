@@ -1,4 +1,4 @@
-To compile libusb from CVS:
+To compile openusb from CVS:
 
 ./autogen.sh
 make

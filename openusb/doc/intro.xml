@@ -1,20 +1,20 @@
   <title>Introduction</title>
   <chapter id="intro-overview">
     <title>Overview</title>
-    <para>This documentation will give an overview of how the v1.0 libusb external API
+    <para>This documentation will give an overview of how the OpenUSB external API
     works and relates to &usb;. libusb 1.0 API has been discussed and agreed by users
     and developers in <ulink url="mailto:libusb-devel@lists.sourceforge.net">libusb developers mailing list
      </ulink>. The API defined in this version is stablized and will not probably
      be changed in the near future.
     </para>
 
-    <para>OpenUSB is one of the implementation of libusb 1.0 API. It fully comply with libusb 1.0 API.
-    In documents hereafter, OpenUSB and libusb will be used mutually, except when it's neccesary to explicitly
-    clarify.
+    <para>OpenUSB or libopenusb is one of the implementation of libusb 1.0 API. It fully
+    comply with libusb 1.0 API. In documents hereafter, OpenUSB and libusb may be used
+    mutually, except when it's neccesary to explicitly clarify.
     </para>
 
     <para>This documentation assumes that you have a good understanding of &usb; and how it works.</para>
-    <para>libusb supports &usb; v1.1 and v2.0. </para>
+    <para>OpenUSB supports &usb; v1.1 and v2.0. </para>
     <para>The &usb; 1.1 and 2.0 specification can be found at
     <ulink url="http://www.usb.org/">http://www.usb.org/</ulink>. </para>
   </chapter>
@@ -30,7 +30,8 @@
 
   <chapter id="intro-differences-to-0.1">
     <title>Differences from libusb v0.1.x</title>
-    <para>There are many differences from libusb v0.1, all intended to make the API cleaner and support more commonly requested features. These include:</para>
+    <para>There are many differences from libusb v0.1, all intended to make the API cleaner
+    and support more commonly requested features. These include:</para>
     <itemizedlist>
       <listitem><para>Completely redesigned enumeration scheme. New APIs are presented to search and
       manage bus and device. New APIs also have the ability to notify application about dynamic enents,
@@ -38,8 +39,8 @@
 
       <listitem><para>Cleaned up API. New APIs are more concise and universal.</para></listitem>
 
-      <listitem><para>Multi-thread support. This is one of the most significant changes of libusb
-      1.0 APIs. The new APIs are MT-safe and can satisfy requirements of mutli-thread
+      <listitem><para>Multi-thread support. This is one of the most significant changes of libusb1.0/OpenUSB
+      APIs. The new APIs are MT-safe and can satisfy requirements of mutli-thread
       applications.
       </para></listitem>
 
@@ -50,8 +51,8 @@
 
 
       <listitem><para>More transfer types. libusb v0.1 only supported control and bulk, and control
-      didn't support any endpoints other than the default control pipe. libusb v1.0 now supports all
-      4 types of transfers (control, bulk, interrupt and isochronous) on all endpoints.
+      didn't support any endpoints other than the default control pipe. libusb v1.0/OpenUSB now supports
+      all 4 types of transfers (control, bulk, interrupt and isochronous) on all endpoints.
       </para></listitem>
 
       <listitem><para>Normalization of return types. All functions return &gt;= 0 on success or &lt;
@@ -59,16 +60,16 @@
       </para></listitem>
 
       <listitem><para>OpenUSB is broken into two part,frontend and backend. The frontend is common on
-      all platforms and exports libusb 1.0 APIs to application. The backend is OS specific part,
+      all platforms and exports libusb 1.0/OpenUSB APIs to application. The backend is OS specific part,
       which is the engine behind frontend on different platforms and not visible to application.
       There's a defined internal interface between frontend and backend. Backend developers can easily
       implement a new backend for a platform by this interface.  </para> </listitem>
 
-      <listitem><para>To make libusb 1.0 backward compatible with libusb 0.1.x. An emulation
+      <listitem><para>To make libusb1.0/OpenUSB backward compatible with libusb 0.1.x. An emulation
       layer is implemented in OpenUSB. Thus, existing applications based on libusb 0.1 do not need
-      any change. All functions in libusb 1.0 API have libusb_ prefix. There's no possible name
-      conflict between libusb 1.0 and libusb 0.1.x. New application can choose to use features of
-      libusb 1.0 or 0.1.x on a single OpenUSB library.
+      any change. All functions in libusb 1.0/OpenUSB API have openusb_ prefix. There's no possible name
+      conflict between libusb 1.0/OpenUSB and libusb 0.1.x. New application can choose to use features of
+      libusb 1.0/OpenUSB or 0.1.x on a single OpenUSB library.
       </para> </listitem>
     </itemizedlist>
   </chapter>

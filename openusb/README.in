@@ -1,7 +1,7 @@
 General Information
 ===================
 
-Openusb is an enhanced version of the libusb 0.1.* library which allows
+Openusb is an enhanced version of the openusb 0.1.* library which allows
 userspace application access to USB devices. The development work is still
 in progress. And the documentation has not been updated yet.
 
@@ -32,8 +32,8 @@ Please make sure to include:
 
 * How to reproduce the bug. 
 
-  If you can reproduce it with the testlibusb program that is built 
-  in the libusb/ directory, that will be most convenient.  Otherwise, 
+  If you can reproduce it with the testopenusb program that is built 
+  in the openusb/ directory, that will be most convenient.  Otherwise, 
   please include a short test program that exhibits the behavior. 
   As a last resort, you can also provide a pointer to a larger piece 
   of software that can be downloaded.
@@ -47,7 +47,7 @@ Please make sure to include:
 Patches
 =======
 
-Patches can be sent to libusb-devel@lists.sourceforge.net.
+Patches can be sent to openusb-devel@lists.sourceforge.net.
 
 If the patch fixes a bug, it is usually a good idea to include
 all the information described in "How to Report Bugs".

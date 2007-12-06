@@ -10,7 +10,7 @@
 
 #ifndef _DESCR_H
 #define _DESCR_H
-#include "libusb.h"
+#include "libopenusb.h"
 /* descriptor structures, to be removed ? */
 /* Sizes of various common descriptors */
 #define USBI_DESC_HEADER_SIZE		2

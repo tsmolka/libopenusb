@@ -1,5 +1,5 @@
 /*
- * libusb internal data structures and function prototypes related
+ * openusb internal data structures and function prototypes related
  * with backend
  *
  * Copyright (c) 2007 Sun Microsystems, Inc. All rights reserved
@@ -10,7 +10,7 @@
 #ifndef _USBI_H_
 #define _USBI_H_
 
-#include "libusb.h"
+#include "libopenusb.h"
 
 #include "list.h"
 #include "descr.h"
@@ -29,11 +29,11 @@ struct usbi_backend {
 	struct usbi_backend_ops	*ops;
 };
 
-/* internal representation of USB bus, counterpart of libusb_busid_t */
+/* internal representation of USB bus, counterpart of openusb_busid_t */
 struct usbi_bus {
 	struct list_head	list;
 	pthread_mutex_t		lock;
-	libusb_busid_t		busid;
+	openusb_busid_t		busid;
 
 	unsigned int busnum; /*a unique value, get from kernel on some OS */
 
@@ -48,13 +48,13 @@ struct usbi_bus {
 	struct usbi_bus_private	*priv;	/* backend specific data */
 };
 
-/* internal representation of USB device, counterpart of libusb_devid_t */
+/* internal representation of USB device, counterpart of openusb_devid_t */
 struct usbi_device {
 	struct list_head	dev_list;
 	struct list_head	bus_list;
 	struct list_head	match_list; /* for search functions */
 
-	libusb_devid_t		devid;
+	openusb_devid_t		devid;
 
 	unsigned int devnum; /* unique value, get from kernel on some OS */
 
@@ -64,7 +64,7 @@ struct usbi_device {
 	uint8_t			pport;	/* parent port */
 	uint8_t			nports;	/* number of ports */
 	char			sys_path[PATH_MAX + 1];
-	char			bus_path[LIBUSB_BUS_PATH_MAX];
+	char			bus_path[OPENUSB_BUS_PATH_MAX];
 	struct usbi_device	**children;
 	struct usbi_device_ops	*ops;
 	uint8_t			cur_config;
@@ -75,19 +75,19 @@ struct usbi_device {
 };
 
 struct usbi_event_callback {
-	libusb_event_callback_t	func;
+	openusb_event_callback_t	func;
 	void			*arg;
 };
 
-/* internal representation of libusb_handle_t */
+/* internal representation of openusb_handle_t */
 struct usbi_handle {
 	struct list_head	list;
-	libusb_handle_t		handle;
+	openusb_handle_t		handle;
 	pthread_mutex_t		lock;
 	uint32_t		debug_level;
 	uint32_t		debug_flags;
-	libusb_debug_callback_t	debug_cb;
-	struct usbi_event_callback event_cbs[LIBUSB_EVENT_TYPE_COUNT];
+	openusb_debug_callback_t	debug_cb;
+	struct usbi_event_callback event_cbs[OPENUSB_EVENT_TYPE_COUNT];
 
 	uint8_t		coldplug_complete;
 	pthread_cond_t	coldplug_cv;
@@ -118,7 +118,7 @@ enum usbi_devstate{
 
 #define USBI_MAXINTERFACES	32
 
-/* internal representation of libusb_dev_handle_t */
+/* internal representation of openusb_dev_handle_t */
 struct usbi_dev_handle {
 	struct list_head	list;
 
@@ -128,9 +128,9 @@ struct usbi_dev_handle {
 	struct list_head m_head; /* multi-xfer request list */
 
 	struct usbi_handle	*lib_hdl;
-	libusb_dev_handle_t	handle;
+	openusb_dev_handle_t	handle;
 	struct usbi_device	*idev;	/* device opened */
-	libusb_init_flag_t	flags;	/* init flag */
+	openusb_init_flag_t	flags;	/* init flag */
 
 	/*claimed interfaces of this dev */
 	struct interface_set claimed_ifs[USBI_MAXINTERFACES];
@@ -158,12 +158,12 @@ enum usbi_io_status {
 #define USBI_ASYNC 1
 #define USBI_SYNC 0
 
-/* internal representation of libusb I/O request */
+/* internal representation of openusb I/O request */
 struct usbi_io {
 	struct list_head	list;
 	pthread_mutex_t		lock;
 	struct usbi_dev_handle	*dev;
-	libusb_request_handle_t	req;
+	openusb_request_handle_t	req;
 
 	enum usbi_io_status status; /* status of this io request */
 
@@ -182,14 +182,14 @@ struct usbi_io {
 /*
  * The operation functions in the following two structures are backend
  * specific. Each backend needs to implement the functions as necessary.
- * The return values follow the definitions in libusb.h. For functions not
+ * The return values follow the definitions in openusb.h. For functions not
  * applicable to the backend, the backend can set them to NULL or return
- * LIBUSB_NOT_SUPPORTED.
+ * OPENUSB_NOT_SUPPORTED.
  *
  * The function set is not final and can be changed as we see the need.
  */
 struct usbi_device_ops {
-	/* prepare device and make the default endpoint accessible to libusb */
+	/* prepare device and make the default endpoint accessible to openusb */
 	int32_t (*open)(struct usbi_dev_handle *dev);
 
 	/* close device and return it to original state */
@@ -203,7 +203,7 @@ struct usbi_device_ops {
 
 	/* interface claiming and bandwidth reservation */
 	int32_t (*claim_interface)(struct usbi_dev_handle *dev, uint8_t ifc,
-		libusb_init_flag_t flag);
+		openusb_init_flag_t flag);
 	int32_t (*release_interface)(struct usbi_dev_handle *dev, uint8_t ifc);
 
 	/* alternate setting selection */
@@ -215,10 +215,10 @@ struct usbi_device_ops {
 	/* reset device by resetting port */
 	int32_t (*reset)(struct usbi_dev_handle *dev);
 
-	/* reset endpoint, for backward compatibility with libusb 0.1 */
+	/* reset endpoint, for backward compatibility with openusb 0.1 */
 	int32_t (*resetep)(struct usbi_dev_handle *dev, uint8_t ept);
 
-	/* clear halted endpoint, for backward compatibility with libusb 0.1 */
+	/* clear halted endpoint, for backward compatibility with openusb 0.1 */
 	int32_t (*clear_halt)(struct usbi_dev_handle *dev, uint8_t ept);
 
 	/*
@@ -293,13 +293,13 @@ struct usbi_backend_ops {
 	int io_pattern;
 
 	/*
-	 * backend initialization, called in libusb_init()
-	 *   flags - inherited from libusb_init(), TBD
+	 * backend initialization, called in openusb_init()
+	 *   flags - inherited from openusb_init(), TBD
 	 */
 	//int32_t (*init)(uint32_t flags);
 	int32_t (*init)(struct usbi_handle *hdl, uint32_t flags);
 
-	/* backend specific data cleanup, called in libusb_fini() */
+	/* backend specific data cleanup, called in openusb_fini() */
 	//void (*fini)(void);
 	void (*fini)(struct usbi_handle *hdl);
 
@@ -345,39 +345,39 @@ struct usbi_list usbi_devices; /* protected by usbi_device.lock */
 /* prototypes */
 
 /* usb.c */
-void usbi_callback(struct usbi_handle *hdl,libusb_devid_t devid,
-	enum libusb_event type);
+void usbi_callback(struct usbi_handle *hdl,openusb_devid_t devid,
+	enum openusb_event type);
 
 int usbi_timeval_compare(struct timeval *tva, struct timeval *tvb);
-struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev);
+struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev);
 
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
         uint32_t line, char *fmt, ...);
 
-void usbi_add_event_callback(struct usbi_handle *hdl, libusb_devid_t devid,
-        libusb_event_t type);
+void usbi_add_event_callback(struct usbi_handle *hdl, openusb_devid_t devid,
+        openusb_event_t type);
 
 #define usbi_debug(hdl, level, fmt...) \
 	_usbi_debug(hdl, level, __FUNCTION__, __LINE__, fmt)
 
-struct usbi_handle *usbi_find_handle(libusb_handle_t handle);
+struct usbi_handle *usbi_find_handle(openusb_handle_t handle);
 
-libusb_request_handle_t usbi_alloc_request_handle(void);
+openusb_request_handle_t usbi_alloc_request_handle(void);
 void *timeout_thread(void *arg);
-int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
+int32_t usbi_get_driver_np(openusb_dev_handle_t dev, uint8_t interface,
 													 char *name, uint32_t namelen);
-int32_t usbi_attach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
-int32_t usbi_detach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface);
+int32_t usbi_attach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface);
+int32_t usbi_detach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface);
 
 /* io.c */
-int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req);
+int usbi_io_sync(struct usbi_dev_handle *dev, openusb_request_handle_t req);
 int usbi_io_async(struct usbi_io *iop);
 
 void usbi_io_complete(struct usbi_io *io, int32_t status,
 	size_t transferred_bytes);
 
 struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
-	libusb_request_handle_t req, unsigned int timeout);
+	openusb_request_handle_t req, unsigned int timeout);
 void usbi_free_io(struct usbi_io *io);
 
 int usbi_async_submit(struct usbi_io *io);
@@ -397,15 +397,15 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev);
 void usbi_remove_device(struct usbi_device *idev);
 void usbi_free_device(struct usbi_device *idev);
 void usbi_rescan_devices(void);
-struct usbi_device *usbi_find_device_by_id(libusb_devid_t devid);
-int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
+struct usbi_device *usbi_find_device_by_id(openusb_devid_t devid);
+int usbi_get_string(openusb_dev_handle_t dev, int index, int langid, char *buf,
     size_t buflen);
-int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
+int usbi_get_string_simple(openusb_dev_handle_t dev, int index, char *buf,
     size_t buflen);
 struct usbi_list *usbi_get_devices_list(void);
 
 /* api.c */
-int32_t usbi_get_xfer_timeout(libusb_request_handle_t req, 
+int32_t usbi_get_xfer_timeout(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev);
 
 #endif /* _WRAPPER_H_ */
