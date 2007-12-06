@@ -10,12 +10,12 @@ CFLAGS=
 
 configincludedir = $(pkglibdir)/include
 
-bin_SCRIPTS = libusb-config
-BUILT_SOURCES = libusb-config
+bin_SCRIPTS = openusb-config
+BUILT_SOURCES = openusb-config
 
-libusb-config: libusb-config.in
+openusb-config: openusb-config.in
 
-EXTRA_DIST = libusb.spec.in
+EXTRA_DIST = openusb.spec.in
 
 .PHONY: files release snapshot
 
@@ -31,14 +31,14 @@ release:
 snapshot:
 	$(MAKE) dist distdir=$(PACKAGE)-`date +"%Y%m%d"`
 
-dist-hook: libusb.spec
-	if test -e $(srcdir)/INSTALL.libusb.in && test -e $(srcdir)/README.in ; then \
-	     CONFIG_FILES="INSTALL.libusb:$(srcdir)/INSTALL.libusb.in README:$(srcdir)/README.in" \
+dist-hook: openusb.spec
+	if test -e $(srcdir)/INSTALL.openusb.in && test -e $(srcdir)/README.in ; then \
+	     CONFIG_FILES="INSTALL.openusb:$(srcdir)/INSTALL.openusb.in README:$(srcdir)/README.in" \
 	     CONFIG_HEADERS= \
 	     $(SHELL) config.status \
-	     && cp INSTALL.libusb LICENSE README $(distdir) ; \
+	     && cp INSTALL.openusb LICENSE README $(distdir) ; \
 	fi \
-	&& cp libusb.spec $(distdir)
+	&& cp openusb.spec $(distdir)
 	test -e $(top_srcdir)/doc/html && cp -r $(top_srcdir)/doc/html $(distdir)/doc || echo "no built doc"
 #	-$(MAKE) dist-bzip2 # create .tar.bz2 dist package if supported
 

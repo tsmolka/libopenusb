@@ -4,12 +4,12 @@ The content of this file has been out-of-date. Please check with the REAME file 
 Simple install procedure
 ========================
 
-  % gzip -cd libusb-@LIBUSB_VERSION@.tar.gz | tar xvf -  # unpack the sources
-  % cd libusb-@LIBUSB_VERSION@                           # change to the toplevel directory
+  % gzip -cd openusb-@LIBOPENUSB_VERSION@.tar.gz | tar xvf -  # unpack the sources
+  % cd openusb-@LIBOPENUSB_VERSION@                           # change to the toplevel directory
   % ./configure                             # run the `configure' script
-  % make                                    # build libusb
+  % make                                    # build openusb
   [ Become root if necessary ]
-  % make install                            # install libusb
+  % make install                            # install openusb
 
 The Nitty-Gritty
 ================
@@ -54,9 +54,9 @@ and --exec-prefix options given to configure. There are also more
 detailed flags to control individual directories. However, the
 use of these flags is not tested.
 
-A shell script libusb-config is created during the configure
+A shell script openusb-config is created during the configure
 process, and installed in the bin/ directory
-($exec_prefix/bin). This is used to determine the location of libusb
-when building applications.  If you move libusb after installation,
+($exec_prefix/bin). This is used to determine the location of openusb
+when building applications.  If you move openusb after installation,
 it will be necessary to edit this file.
 

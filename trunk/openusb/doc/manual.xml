@@ -40,7 +40,7 @@
 
 
     <abstract>
-      <simpara>This document's purpose is to explain the API for libusb and how to use it to
+      <simpara>This document's purpose is to explain the API for OpenUSB and how to use it to
       make a &usb; aware application.</simpara>
       <simpara>Any suggestions, corrections and comments regarding this document can be
       sent to the author: <ulink url="mailto:@sun.com">Lei Chen</ulink> or the

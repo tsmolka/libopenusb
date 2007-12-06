@@ -6,9 +6,9 @@ test -z "$srcdir" && srcdir=.
 
 ORIGDIR=`pwd`
 cd $srcdir
-PROJECT=libusb
+PROJECT=openusb
 TEST_TYPE=-f
-FILE=libusb.spec.in
+FILE=openusb.spec.in
 
 DIE=0
 

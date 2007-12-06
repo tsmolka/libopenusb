@@ -6,7 +6,7 @@
  *
  */
 #include <string.h>
-#include <usb.h> /* libusb 0.1.x header file. Its path is OS dependent */
+#include <usb.h> /* openusb 0.1.x header file. Its path is OS dependent */
 #include <pthread.h>
 #include <errno.h>
 
@@ -18,22 +18,22 @@
 
 /*
  * Libusb1.0 to 0.1.x conversion layer
- * This layer provides backward compatibility for existing libusb
+ * This layer provides backward compatibility for existing openusb
  * applications.
  *
- * This wrapper layer exports libusb 0.1.x interfaces. Basically, the
- * implementation behind these interfaces are based on libusb 1.0 APIs.
+ * This wrapper layer exports openusb 0.1.x interfaces. Basically, the
+ * implementation behind these interfaces are based on openusb 1.0 APIs.
  *
  * Return values of the wrapper layer interfaces may be confused.
  */
-libusb_handle_t wr_handle = 0;
+openusb_handle_t wr_handle = 0;
 
 struct usb_bus *usb_busses = NULL;
 
-static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
-	libusb_dev_handle_t);
+static int wr_setup_dev_config(struct usb_device *dev, openusb_devid_t devid,
+	openusb_dev_handle_t);
 
-/* process libusb0.1.x error strings */
+/* process openusb0.1.x error strings */
 typedef enum {
 	USB_ERROR_TYPE_NONE = 0,
 	USB_ERROR_TYPE_STRING,
@@ -102,7 +102,7 @@ void usb_init(void)
 {
 	int ret;
 
-	ret = libusb_init(0, &wr_handle);
+	ret = openusb_init(0, &wr_handle);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "fail");
 
@@ -111,7 +111,7 @@ void usb_init(void)
 	}
 }
 
-/* no corresponding libusb_fini entry in 0.1 !! */
+/* no corresponding openusb_fini entry in 0.1 !! */
 void usb_fini(void)
 {
 }
@@ -119,7 +119,7 @@ void usb_fini(void)
 /* set debug level */
 void usb_set_debug(int level)
 {
-	libusb_set_debug(wr_handle, level, 0, NULL);
+	openusb_set_debug(wr_handle, level, 0, NULL);
 }
 
 /*
@@ -254,12 +254,12 @@ int usb_find_devices(void)
 }
 
 /*
- * given a usb_device, find a corresponding device in libusb1.0
- * return the devid of libusb1.0
+ * given a usb_device, find a corresponding device in openusb1.0
+ * return the devid of openusb1.0
  */
-libusb_devid_t wr_find_device(struct usb_device *dev)
+openusb_devid_t wr_find_device(struct usb_device *dev)
 {
-	libusb_devid_t devid = -1;
+	openusb_devid_t devid = -1;
 	struct usbi_bus *ibus;
 	struct usbi_device *idev = NULL;
 	int found = 0;
@@ -293,8 +293,8 @@ out:
 
 struct usb_dev_handle_internal {
 	struct usb_device *dev;
-	libusb_devid_t devid;
-	libusb_dev_handle_t devh;
+	openusb_devid_t devid;
+	openusb_dev_handle_t devh;
 
 	int config;
 	int interface;
@@ -331,7 +331,7 @@ int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 		ep01->bEndpointAddress = ep10->desc.bEndpointAddress;
 		ep01->bmAttributes = ep10->desc.bmAttributes;
 		ep01->wMaxPacketSize =
-			libusb_le32_to_cpu(ep10->desc.wMaxPacketSize);
+			openusb_le32_to_cpu(ep10->desc.wMaxPacketSize);
 		ep01->bInterval = ep10->desc.bInterval;
 		ep01->bRefresh = ep10->desc.bRefresh;
 		ep01->bSynchAddress = ep10->desc.bSynchAddress;
@@ -402,13 +402,13 @@ int wr_parse_interface(struct usb_interface * ifc01,
 }
 
 /*
- * the current implemetation just copy libusb1.0 cached descriptors to 0.1
+ * the current implemetation just copy openusb1.0 cached descriptors to 0.1
  * device's descriptors. Since 1.0 doesn't cache Vendor/Class specific data,
  * the 0.1 extra of config,interface,endpoint is NULL. usbi_parse_configuration
  * should be enhanced to support extra data parsing.
  */
-static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
-	libusb_dev_handle_t devh)
+static int wr_setup_dev_config(struct usb_device *dev, openusb_devid_t devid,
+	openusb_dev_handle_t devh)
 {
 	struct usbi_device *idev;
 	struct usbi_descriptors *desc;
@@ -454,7 +454,7 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
 		calloc(sizeof (struct usb_config_descriptor) * num_configs, 1);
 
 	if (!dev->config) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	for(i = 0; i < num_configs; i++) {
@@ -470,7 +470,7 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
 
 		pcfg->bLength = picfg->bLength;
 		pcfg->bDescriptorType = picfg->bDescriptorType;
-		pcfg->wTotalLength = libusb_le32_to_cpu(picfg->wTotalLength);
+		pcfg->wTotalLength = openusb_le32_to_cpu(picfg->wTotalLength);
 		pcfg->bNumInterfaces = picfg->bNumInterfaces;
 		pcfg->bConfigurationValue = picfg->bConfigurationValue;
 		pcfg->iConfiguration = picfg->iConfiguration;
@@ -497,7 +497,7 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
 			calloc(sizeof(struct usb_interface) * num_ifs, 1);
 		if (!pcfg->interface) {
 			free(dev->config);
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 		}
 		
 		for(j = 0; j < num_ifs; j++) {
@@ -516,9 +516,9 @@ static int wr_setup_dev_config(struct usb_device *dev, libusb_devid_t devid,
 struct usb_dev_handle *usb_open(struct usb_device *dev)
 {
 	struct usb_dev_handle_internal *devh;
-	libusb_dev_handle_t usb1_devh;
+	openusb_dev_handle_t usb1_devh;
 	int ret;
-	libusb_devid_t devid;
+	openusb_devid_t devid;
 	
 	if (dev == NULL) {
 		wr_error_str(EINVAL, "usb_open: invalid arguments");
@@ -533,12 +533,12 @@ struct usb_dev_handle *usb_open(struct usb_device *dev)
 		return NULL;
 	}
 
-	ret = libusb_open_device(wr_handle, devid, 0, &usb1_devh);
+	ret = openusb_open_device(wr_handle, devid, 0, &usb1_devh);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Fail to open device: %s",
-				libusb_strerror(ret));
+				openusb_strerror(ret));
 		wr_error_str(ret, "Fail to open device: %s",
-			libusb_strerror(ret));
+			openusb_strerror(ret));
 
 		return NULL;
 	}
@@ -554,7 +554,7 @@ struct usb_dev_handle *usb_open(struct usb_device *dev)
 	devh = calloc(sizeof(struct usb_dev_handle_internal), 1);
 	if (!devh) {
 		wr_error(errno);
-		libusb_close_device(usb1_devh);
+		openusb_close_device(usb1_devh);
 		return NULL;
 	}
 
@@ -576,7 +576,7 @@ int usb_close(struct usb_dev_handle *dev)
 	}
 	devh = (struct usb_dev_handle_internal *)dev;
 
-	ret = libusb_close_device(devh->devh);
+	ret = openusb_close_device(devh->devh);
 
 	if (ret != 0) {
 	/* shall we free the dev ? */
@@ -590,12 +590,12 @@ int usb_close(struct usb_dev_handle *dev)
 }
 
 /* internal bulk transfer function
- * throw all validity check work to libusb1.0 API
+ * throw all validity check work to openusb1.0 API
  */
 int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
-	libusb_bulk_request_t bulk;
+	openusb_bulk_request_t bulk;
 	struct usb_dev_handle_internal *devh = 
 		(struct usb_dev_handle_internal *)dev;
 	int ret;
@@ -610,7 +610,7 @@ int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	bulk.length = size;
 	bulk.timeout = timeout;
 
-	ret = libusb_bulk_xfer(devh->devh, devh->interface, ep, &bulk);
+	ret = openusb_bulk_xfer(devh->devh, devh->interface, ep, &bulk);
 
 	if (ret < 0 || bulk.result.status != 0) {
 		wr_error_str(ret, "bulk transfer fail");
@@ -635,12 +635,12 @@ int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
 
 /* 
  * internal interrupt transfer function
- * throw all validity check work to libusb1.0 API
+ * throw all validity check work to openusb1.0 API
  */
 int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
-	libusb_intr_request_t intr;
+	openusb_intr_request_t intr;
 	int ret;
 	struct usb_dev_handle_internal *devh = 
 		(struct usb_dev_handle_internal *)dev;
@@ -655,7 +655,7 @@ int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	intr.length = size;
 	intr.timeout = timeout;
 
-	ret = libusb_intr_xfer(devh->devh, devh->interface, ep, &intr);
+	ret = openusb_intr_xfer(devh->devh, devh->interface, ep, &intr);
 	if (ret != 0 || intr.result.status != 0) {
 		wr_error_str(ret, "interrupt transfer fail");
 		return -1;
@@ -680,7 +680,7 @@ int usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, int size,
 int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 	int value, int index, char *bytes, int size, int timeout)
 {
-	libusb_ctrl_request_t ctrl;
+	openusb_ctrl_request_t ctrl;
 	struct usb_dev_handle_internal *devh = 
 		(struct usb_dev_handle_internal *)dev;
 	int ret;
@@ -704,7 +704,7 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 	ctrl.length = size;
 	ctrl.timeout = timeout;
 
-	ret = libusb_ctrl_xfer(devh->devh, 0, 0, &ctrl);
+	ret = openusb_ctrl_xfer(devh->devh, 0, 0, &ctrl);
 
 	if (ret < 0 || ctrl.result.status != 0) {
 		wr_error_str(ret, "control transfer fail");
@@ -716,7 +716,7 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 
 
 /*
- * libusb1.0 will check configuration validity
+ * openusb1.0 will check configuration validity
  */
 int usb_set_configuration(usb_dev_handle *dev, int configuration)
 {
@@ -730,7 +730,7 @@ int usb_set_configuration(usb_dev_handle *dev, int configuration)
 
 	devh = (struct usb_dev_handle_internal *)dev;
 	
-	if ((ret = libusb_set_configuration(devh->devh,
+	if ((ret = openusb_set_configuration(devh->devh,
 		configuration)) == 0) {
 		devh->config = configuration;
 		return 0;
@@ -740,7 +740,7 @@ int usb_set_configuration(usb_dev_handle *dev, int configuration)
 	return(ret);
 }
 
-/* libusb1.0 will check interface validity */
+/* openusb1.0 will check interface validity */
 int usb_claim_interface(usb_dev_handle *dev, int interface)
 {
 	struct usb_dev_handle_internal *devh = 
@@ -752,7 +752,7 @@ int usb_claim_interface(usb_dev_handle *dev, int interface)
 		return -1;
 	}
 
-	if ((ret = libusb_claim_interface(devh->devh,
+	if ((ret = openusb_claim_interface(devh->devh,
 		interface, 0)) == 0) {
 		devh->interface = interface;
 		return 0;
@@ -762,7 +762,7 @@ int usb_claim_interface(usb_dev_handle *dev, int interface)
 	return (ret);
 }
 
-/* libusb1.0 will check interface validity */
+/* openusb1.0 will check interface validity */
 int usb_release_interface(usb_dev_handle *dev, int interface)
 {
 	struct usb_dev_handle_internal *devh = 
@@ -774,7 +774,7 @@ int usb_release_interface(usb_dev_handle *dev, int interface)
 		return -1;
 	}
 
-	ret = libusb_release_interface(devh->devh, interface);
+	ret = openusb_release_interface(devh->devh, interface);
 	if (ret != 0) {
 		wr_error_str(ret, "release_interface fail");
 	}
@@ -782,7 +782,7 @@ int usb_release_interface(usb_dev_handle *dev, int interface)
 	return ret;
 }
 
-/* libusb1.0 will check alternate validity */
+/* openusb1.0 will check alternate validity */
 int usb_set_altinterface(usb_dev_handle *dev, int alternate)
 {
 	struct usb_dev_handle_internal *devh = 
@@ -794,14 +794,14 @@ int usb_set_altinterface(usb_dev_handle *dev, int alternate)
 		return -1;
 	}
 	
-	/* we throw validity check work to libusb1.0 APIs */
-	if((ret = libusb_set_altsetting(devh->devh, devh->interface,
+	/* we throw validity check work to openusb1.0 APIs */
+	if((ret = openusb_set_altsetting(devh->devh, devh->interface,
 		alternate)) == 0) {
 		devh->alt = alternate;
 		return 0;
 	}
-	usbi_debug(NULL, 4, "libusb_set_altsetting error: %s",
-		libusb_strerror(ret));
+	usbi_debug(NULL, 4, "openusb_set_altsetting error: %s",
+		openusb_strerror(ret));
 
 	wr_error_str(ret, "set_altinterface fail");
 	return(ret);
@@ -841,7 +841,7 @@ int usb_reset(usb_dev_handle *dev)
 		return -1;
 	}
 
-	ret = libusb_reset(devh->devh);
+	ret = openusb_reset(devh->devh);
 	
 	if(ret != 0) {
 		wr_error_str(ret, "reset fail");
@@ -883,7 +883,7 @@ int usb_get_string_simple(usb_dev_handle *dev, int index,
 
 	if (!devh) {
 		wr_error_str(EINVAL, "Invalid arguments");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	ret = usbi_get_string_simple(devh->devh, index, buf, buflen);
@@ -901,7 +901,7 @@ int usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
 
 	if (!buf || size <= 0) {
 		wr_error_str(EINVAL, "Invalid arguments");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	ret = usb_control_msg(dev,
@@ -921,7 +921,7 @@ int usb_get_descriptor(usb_dev_handle *dev, uint8_t type, uint8_t index,
 
 	if (!buf || size <= 0) {
 		wr_error_str(EINVAL, "Invalid arguments");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	ret = usb_control_msg(dev,

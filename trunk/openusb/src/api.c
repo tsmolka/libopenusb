@@ -16,10 +16,10 @@
 
 /*
  * FIXME: this func can only be called after calling 
- * libusb_set_event_callback()? Not quite understand what this
+ * openusb_set_event_callback()? Not quite understand what this
  * func to do.
  */
-void libusb_coldplug_callbacks_done(libusb_handle_t handle)
+void openusb_coldplug_callbacks_done(openusb_handle_t handle)
 {
 	struct usbi_handle *hdl;
 	
@@ -35,7 +35,7 @@ void libusb_coldplug_callbacks_done(libusb_handle_t handle)
 	pthread_mutex_unlock(&hdl->lock);
 }
 
-int32_t libusb_set_configuration(libusb_dev_handle_t dev, uint8_t cfg)
+int32_t openusb_set_configuration(openusb_dev_handle_t dev, uint8_t cfg)
 {
 	struct usbi_dev_handle *hdev;
 	usb_device_desc_t desc;
@@ -43,31 +43,31 @@ int32_t libusb_set_configuration(libusb_dev_handle_t dev, uint8_t cfg)
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 	
-	if ((ret = libusb_parse_device_desc(hdev->lib_hdl->handle,
+	if ((ret = openusb_parse_device_desc(hdev->lib_hdl->handle,
 		hdev->idev->devid, NULL, 0, &desc)) != 0) {
 		return ret;
 	}
 
 	if(cfg < 1 || cfg > desc.bNumConfigurations) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	return hdev->idev->ops->set_configuration(hdev, cfg);
 }
 
-int32_t libusb_get_configuration(libusb_dev_handle_t dev, uint8_t *cfg)
+int32_t openusb_get_configuration(openusb_dev_handle_t dev, uint8_t *cfg)
 {
 	struct usbi_dev_handle *hdev;
 	int ret;
 
 	if (!cfg) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&hdev->lock);
 	ret = hdev->idev->ops->get_configuration(hdev, cfg);
@@ -76,23 +76,23 @@ int32_t libusb_get_configuration(libusb_dev_handle_t dev, uint8_t *cfg)
 	return (ret);
 }
 
-int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
-	libusb_init_flag_t flags)
+int32_t openusb_claim_interface(openusb_dev_handle_t dev, uint8_t ifc,
+	openusb_init_flag_t flags)
 {
 	struct usbi_dev_handle *hdev;
 	int32_t ret;
 
 	if (ifc > USBI_MAXINTERFACES) {
-		return(LIBUSB_BADARG);
+		return(OPENUSB_BADARG);
 	}
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 	
 	/* refresh descriptors before we use it */
 	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	pthread_mutex_lock(&hdev->lock);
@@ -105,7 +105,7 @@ int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
 			ifc);
 
 		pthread_mutex_unlock(&hdev->lock);
-		return (LIBUSB_BADARG);
+		return (OPENUSB_BADARG);
 	}
 	pthread_mutex_unlock(&hdev->lock);
 
@@ -120,21 +120,21 @@ int32_t libusb_claim_interface(libusb_dev_handle_t dev, uint8_t ifc,
 	return ret;
 }
 
-int32_t libusb_release_interface(libusb_dev_handle_t dev, uint8_t ifc)
+int32_t openusb_release_interface(openusb_dev_handle_t dev, uint8_t ifc)
 {
 	struct usbi_dev_handle *hdev;
 	int ret;
 
 	if (ifc > USBI_MAXINTERFACES) {
-		return(LIBUSB_BADARG);
+		return(OPENUSB_BADARG);
 	}
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 	
-	if (libusb_is_interface_claimed(dev, ifc) != 1) {
-		return LIBUSB_BADARG;
+	if (openusb_is_interface_claimed(dev, ifc) != 1) {
+		return OPENUSB_BADARG;
 	}
 
 	pthread_mutex_lock(&hdev->lock);
@@ -145,18 +145,18 @@ int32_t libusb_release_interface(libusb_dev_handle_t dev, uint8_t ifc)
 	return (ret);
 }
 
-int32_t libusb_is_interface_claimed(libusb_dev_handle_t dev, uint8_t ifc)
+int32_t openusb_is_interface_claimed(openusb_dev_handle_t dev, uint8_t ifc)
 {
 	struct usbi_dev_handle *hdev;
 
 	if(ifc > USBI_MAXINTERFACES) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	hdev = usbi_find_dev_handle(dev);
 
 	if(!hdev) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	pthread_mutex_lock(&hdev->lock);
@@ -169,7 +169,7 @@ int32_t libusb_is_interface_claimed(libusb_dev_handle_t dev, uint8_t ifc)
 	}
 }
 
-int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
+int32_t openusb_set_altsetting(openusb_dev_handle_t dev, uint8_t ifc,
 	uint8_t alt)
 {
 	struct usbi_dev_handle *hdev;
@@ -179,10 +179,10 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	if (ifc > USBI_MAXINTERFACES) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	pthread_mutex_lock(&hdev->lock);
@@ -191,7 +191,7 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	
 	/* refresh descriptors */
 	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 
 	pthread_mutex_lock(&hdev->lock);
@@ -206,7 +206,7 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 			"invalid interface(%d) or alt(%d)", ifc, alt);
 		pthread_mutex_unlock(&hdev->lock);
 
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	if (alt == hdev->claimed_ifs[ifc].altsetting) {
@@ -222,25 +222,25 @@ int32_t libusb_set_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	return (ret);
 }
 
-int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
+int32_t openusb_get_altsetting(openusb_dev_handle_t dev, uint8_t ifc,
 	uint8_t *alt)
 {
 	struct usbi_device *idev;
 	struct usbi_dev_handle *hdev;
 
 	if (!alt || (ifc > USBI_MAXINTERFACES)) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev=usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&hdev->lock);
 	/* not claimed */
 	if (hdev->claimed_ifs[ifc].clm != USBI_IFC_CLAIMED) {
 		pthread_mutex_unlock(&hdev->lock);
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	idev = hdev->idev;
@@ -249,17 +249,17 @@ int32_t libusb_get_altsetting(libusb_dev_handle_t dev, uint8_t ifc,
 	return idev->ops->get_altsetting(hdev, ifc, alt);
 }
 
-int32_t libusb_reset(libusb_dev_handle_t dev)
+int32_t openusb_reset(openusb_dev_handle_t dev)
 {
 	struct usbi_dev_handle *hdev;
 	int ret;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	if (!(hdev->idev->ops->reset)) {
-		return LIBUSB_NOT_SUPPORTED;
+		return OPENUSB_NOT_SUPPORTED;
 	}
 
 	pthread_mutex_lock(&hdev->lock);
@@ -273,8 +273,8 @@ int32_t libusb_reset(libusb_dev_handle_t dev)
 int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
         int request, int value, int index, char *bytes, int size, int timeout)
 {
-	libusb_ctrl_request_t ctrl;
-	struct libusb_request_handle req;
+	openusb_ctrl_request_t ctrl;
+	struct openusb_request_handle req;
 	int ret;
 
 	memset(&ctrl, 0, sizeof(ctrl));
@@ -320,13 +320,13 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 		return ret;
 	}
 
-	libusb_parse_data("bbw", (unsigned char *)buf, 8, &cfg_desc,
+	openusb_parse_data("bbw", (unsigned char *)buf, 8, &cfg_desc,
 			sizeof(cfg_desc), &count);
 
 	newbuf = malloc(cfg_desc.wTotalLength);
 	if (!newbuf) {
 		usbi_debug(NULL, 1, "no memory");
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
@@ -362,10 +362,10 @@ void usbi_free_cfg(char *buf)
  * But, we can't judge if a READ request is sent to an out endpoint, and
  * vice vesa.
  */
-int32_t check_req_valid(libusb_request_handle_t req, 
+int32_t check_req_valid(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev)
 {
-	libusb_transfer_type_t type = req->type;
+	openusb_transfer_type_t type = req->type;
 	uint8_t ifc = req->interface;
 	uint8_t endpoint = req->endpoint;
 	uint8_t cfg;
@@ -392,21 +392,21 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	 * check the request for debug purpose.
 	 */
 	if (dev->lib_hdl->debug_level < 5) { 
-		if (libusb_is_interface_claimed(dev->handle, ifc) == 1) {
+		if (openusb_is_interface_claimed(dev->handle, ifc) == 1) {
 			return 0;
 		} else {
 			return -1;
 		}
 	}
 
-	ret = libusb_get_configuration(dev->handle, &cfg);
+	ret = openusb_get_configuration(dev->handle, &cfg);
 	if(ret < 0) {
 		usbi_debug(dev->lib_hdl, 1, "fail get current config");
 		return ret;
 	}
 
 	/* implicit check of interface claiming */
-	ret = libusb_get_altsetting(dev->handle,ifc,&alt);
+	ret = openusb_get_altsetting(dev->handle,ifc,&alt);
 	if (ret < 0) {
 		usbi_debug(dev->lib_hdl, 1, "fail get current altsetting");
 		return ret;
@@ -429,7 +429,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	}
 
 	/* this interface requires config index */
-	ret = libusb_parse_interface_desc(dev->lib_hdl->handle,
+	ret = openusb_parse_interface_desc(dev->lib_hdl->handle,
 		dev->idev->devid, (uint8_t *)buf, buflen, cfg-1, ifc, alt,
 		&if_desc);
 
@@ -442,7 +442,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	for (i = 0; i< if_desc.bNumEndpoints; i++) {
 
 		/* this interface requires config index */
-		ret = libusb_parse_endpoint_desc(dev->lib_hdl->handle,
+		ret = openusb_parse_endpoint_desc(dev->lib_hdl->handle,
 			dev->idev->devid, (uint8_t *)buf, buflen, cfg-1, ifc, alt,
 			i, &ep_desc);
 		if (ret < 0) {
@@ -461,7 +461,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 		/* not find an endpoint with EndpointAddress == endpoint */
 		usbi_debug(dev->lib_hdl, 1, "Invalid endpoint in request");
 		usbi_free_cfg(buf);
-		return(LIBUSB_INVALID_HANDLE);
+		return(OPENUSB_INVALID_HANDLE);
 	}
 
 	pdesc = &ep_desc;
@@ -471,33 +471,33 @@ int32_t check_req_valid(libusb_request_handle_t req,
 			if((pdesc->bmAttributes & USB_EP_TYPE_MASK) != 0){
 				/*Request a CTRL xfer on a non-Ctrl endpoint */
 				usbi_debug(dev->lib_hdl, 1, "invalid type");
-				ret = LIBUSB_INVALID_HANDLE;
+				ret = OPENUSB_INVALID_HANDLE;
 			}
 			break;
 		case USB_TYPE_INTERRUPT:
 			if ((pdesc->bmAttributes & USB_EP_TYPE_MASK) != 3) {
 				/* Request INTR xfer on a non-INTR endpoint */
 				usbi_debug(dev->lib_hdl, 1, "invalid type");
-				ret = LIBUSB_INVALID_HANDLE;
+				ret = OPENUSB_INVALID_HANDLE;
 			}
 			break;
 		case USB_TYPE_BULK:
 			if ((pdesc->bmAttributes & USB_EP_TYPE_MASK) != 2) {
 				/* Request BULK xfer on a non-BULK endpoint */
 				usbi_debug(dev->lib_hdl, 1, "invalid type");
-				ret = LIBUSB_INVALID_HANDLE;
+				ret = OPENUSB_INVALID_HANDLE;
 			}
 			break;
 		case USB_TYPE_ISOCHRONOUS:
 			if ((pdesc->bmAttributes & USB_EP_TYPE_MASK) != 1) {
 				/* Request ISOC xfer on a non-ISOC endpoint */
 				usbi_debug(dev->lib_hdl, 1, "invalid type");
-				ret = LIBUSB_INVALID_HANDLE;
+				ret = OPENUSB_INVALID_HANDLE;
 			}
 			break;
 		default:
 			usbi_debug(dev->lib_hdl, 1, "unknown type");
-			ret = LIBUSB_INVALID_HANDLE;
+			ret = OPENUSB_INVALID_HANDLE;
 			break;
 	}
 
@@ -505,7 +505,7 @@ int32_t check_req_valid(libusb_request_handle_t req,
 	return ret;
 }
 
-int32_t libusb_xfer_wait(libusb_request_handle_t req)
+int32_t openusb_xfer_wait(openusb_request_handle_t req)
 {
 	struct usbi_dev_handle *dev=NULL;
 	int32_t ret;
@@ -516,18 +516,18 @@ int32_t libusb_xfer_wait(libusb_request_handle_t req)
 
 	if(!req) {
 		usbi_debug(NULL, 1, "Invalid request");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	dev = usbi_find_dev_handle(req->dev); 
 	if (!dev) {
 		usbi_debug(NULL, 1, "Can't find device handle:%llu",req->dev);
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	}
 	
 	if (check_req_valid(req, dev) < 0) {
 		usbi_debug(dev->lib_hdl, 1, "Not a valid request");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	pthread_mutex_lock(&dev->lock);
@@ -539,7 +539,7 @@ int32_t libusb_xfer_wait(libusb_request_handle_t req)
 	pthread_mutex_unlock(&dev->lock);
 
 	if (io_pattern < PATTERN_ASYNC || io_pattern > PATTERN_BOTH) {
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 
 	/* FIXME: add more check for request validatin */
@@ -550,30 +550,30 @@ int32_t libusb_xfer_wait(libusb_request_handle_t req)
 
 	ret = usbi_io_sync(dev, req);
 	if (ret < 0) {
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 
-	ret = LIBUSB_SUCCESS;
+	ret = OPENUSB_SUCCESS;
 
 	return ret;
 }
 
-int32_t libusb_ctrl_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
-	libusb_ctrl_request_t *ctrl)
+int32_t openusb_ctrl_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	openusb_ctrl_request_t *ctrl)
 {
-	libusb_request_handle_t reqp;
+	openusb_request_handle_t reqp;
 	int32_t ret;
 
 	if (ctrl == NULL) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	usbi_debug(NULL, 4, "ifc=%d ept=%d bRequest=%d", ifc, ept,
 		ctrl->setup.bRequest);
 
-	reqp = calloc(sizeof(struct libusb_request_handle), 1);
+	reqp = calloc(sizeof(struct openusb_request_handle), 1);
 	if(reqp == NULL) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	reqp->dev = dev;
@@ -582,26 +582,26 @@ int32_t libusb_ctrl_xfer(libusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
 	reqp->type  = USB_TYPE_CONTROL;
 	reqp->req.ctrl = ctrl;
 
-	ret = libusb_xfer_wait(reqp);
+	ret = openusb_xfer_wait(reqp);
 
 	free(reqp);
 
 	return ret;
 }
 
-int32_t libusb_intr_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
-	libusb_intr_request_t *intr)
+int32_t openusb_intr_xfer(openusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
+	openusb_intr_request_t *intr)
 {
-	libusb_request_handle_t reqp;
+	openusb_request_handle_t reqp;
 	int32_t ret;
 
 	if(intr == NULL) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
-	reqp = calloc(sizeof(struct libusb_request_handle), 1);
+	reqp = calloc(sizeof(struct openusb_request_handle), 1);
 	if (reqp == NULL) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	reqp->dev = dev;
@@ -610,25 +610,25 @@ int32_t libusb_intr_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->type = USB_TYPE_INTERRUPT;
 	reqp->req.intr = intr;
 
-	ret = libusb_xfer_wait(reqp);
+	ret = openusb_xfer_wait(reqp);
 	free(reqp);
 
 	return ret;
 }
 
-int32_t libusb_bulk_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
-	libusb_bulk_request_t *bulk)
+int32_t openusb_bulk_xfer(openusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
+	openusb_bulk_request_t *bulk)
 {
-	libusb_request_handle_t reqp;
+	openusb_request_handle_t reqp;
 	int32_t ret;
 
 	if(bulk == NULL) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
-	reqp = calloc(sizeof(struct libusb_request_handle), 1);
+	reqp = calloc(sizeof(struct openusb_request_handle), 1);
 	if (reqp == NULL) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	reqp->dev = dev;
@@ -637,25 +637,25 @@ int32_t libusb_bulk_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->type = USB_TYPE_BULK;
 	reqp->req.bulk = bulk;
 
-	ret = libusb_xfer_wait(reqp);
+	ret = openusb_xfer_wait(reqp);
 	free(reqp);
 
 	return ret;
 }
 
-int32_t libusb_isoc_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
-	libusb_isoc_request_t *isoc)
+int32_t openusb_isoc_xfer(openusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
+	openusb_isoc_request_t *isoc)
 {
-	libusb_request_handle_t reqp;
+	openusb_request_handle_t reqp;
 	int32_t ret;
 	
 	if(isoc == NULL) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
-	reqp = calloc(sizeof(struct libusb_request_handle), 1);
+	reqp = calloc(sizeof(struct openusb_request_handle), 1);
 	if (reqp == NULL) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	reqp->dev = dev;
@@ -664,14 +664,14 @@ int32_t libusb_isoc_xfer(libusb_dev_handle_t dev,uint8_t ifc, uint8_t ept,
 	reqp->type = USB_TYPE_ISOCHRONOUS;
 	reqp->req.isoc = isoc;
 
-	ret = libusb_xfer_wait(reqp);
+	ret = openusb_xfer_wait(reqp);
 	free(reqp);
 
 	return ret;
 }
 
 
-int32_t usbi_get_xfer_timeout(libusb_request_handle_t req, 
+int32_t usbi_get_xfer_timeout(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev)
 {
 	int32_t timeout;
@@ -705,7 +705,7 @@ int32_t usbi_get_xfer_timeout(libusb_request_handle_t req,
 }
 
 
-int32_t libusb_xfer_aio(libusb_request_handle_t req)
+int32_t openusb_xfer_aio(openusb_request_handle_t req)
 {
 	int ret;
 	struct usbi_dev_handle *dev;
@@ -714,19 +714,19 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 	struct usbi_handle *plib;
 
 	if (!req) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	dev = usbi_find_dev_handle(req->dev); 
 	if (!dev) {
 		usbi_debug(NULL, 1, "Can't find device");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	ret = check_req_valid(req, dev);
 	if (ret < 0) {
 		usbi_debug(dev->lib_hdl, 1, "Invalid request");
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	}
 
 	pthread_mutex_lock(&dev->lock);
@@ -737,7 +737,7 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 
 	if (!io) {
 		usbi_debug(dev->lib_hdl, 1, "IO alloc fail");
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 	io->req = req;
 	io->status = USBI_IO_INPROGRESS;
@@ -748,7 +748,7 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 	ret = usbi_io_async(io);
 	if(ret != 0) {
 		usbi_debug(dev->lib_hdl, 1, "async fail: %s",
-			libusb_strerror(ret));
+			openusb_strerror(ret));
 
 		pthread_mutex_lock(&dev->lock);
 		list_del(&io->list);	
@@ -766,13 +766,13 @@ int32_t libusb_xfer_aio(libusb_request_handle_t req)
 /*
  * Don't set request's callback if this interface is used.
  */
-int32_t libusb_wait(uint32_t num_reqs,libusb_request_handle_t *handles, 
-	libusb_request_handle_t *handle)
+int32_t openusb_wait(uint32_t num_reqs,openusb_request_handle_t *handles, 
+	openusb_request_handle_t *handle)
 {
 	int i,found = 0;
 	struct usbi_dev_handle *hdev;
 	struct usbi_handle *ph;/* assuming all these request are in the same
-				* libusb instance
+				* openusb instance
 				*/
 	struct usbi_io *io;
 
@@ -783,20 +783,20 @@ int32_t libusb_wait(uint32_t num_reqs,libusb_request_handle_t *handles,
 	}
 
 	if(!handles || !handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev = usbi_find_dev_handle(handles[0]->dev);
 	if (!hdev) {
 		usbi_debug(NULL, 1, "can't find device");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	ph = hdev->lib_hdl;
 
 	if(!ph) {
 		usbi_debug(NULL, 1, "lib handle error");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	/* if callback is set, then callback will be called
@@ -808,7 +808,7 @@ int32_t libusb_wait(uint32_t num_reqs,libusb_request_handle_t *handles,
 		if (handles[i]->cb != NULL) {
 			usbi_debug(ph, 1, "Callback should not"
 				"set here");
-			return LIBUSB_BADARG;
+			return OPENUSB_BADARG;
 		}
 	}
 
@@ -868,13 +868,13 @@ waiting:
 	}
 }
 
-int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
-	libusb_request_handle_t * handle)
+int32_t openusb_poll(uint32_t num_reqs,openusb_request_handle_t * handles,
+	openusb_request_handle_t * handle)
 {
 	int i;
 	struct usbi_dev_handle *hdev;
 	struct usbi_handle *ph=NULL;/* assuming all these request are in the same 
-				     * libusb instance
+				     * openusb instance
 				     */
 	struct usbi_io *io=NULL;
 	int found = 0;
@@ -887,12 +887,12 @@ int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
 	}
 
 	if(!handles || !handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev = usbi_find_dev_handle(handles[0]->dev);
 	if (!hdev) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	pthread_mutex_lock(&hdev->lock);
@@ -900,7 +900,7 @@ int32_t libusb_poll(uint32_t num_reqs,libusb_request_handle_t * handles,
 	pthread_mutex_unlock(&hdev->lock);
 
 	if(!ph) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	pthread_mutex_lock(&ph->complete_lock);
@@ -953,7 +953,7 @@ struct usbi_multi_request {
 	struct list_head list; 
 	struct list_head req_head; /* this multi-request's outstanding reqs */
 
-	libusb_multi_request_handle_t mreq; /* user request */
+	openusb_multi_request_handle_t mreq; /* user request */
 
 	pthread_mutex_t lock; /* protect this struct */
 	pthread_cond_t cv;
@@ -964,25 +964,25 @@ struct usbi_multi_request {
 struct usbi_multi_req_args {
 	struct usbi_multi_request *mi_req;
 	uint32_t idx;
-	libusb_request_handle_t req;
+	openusb_request_handle_t req;
 	struct list_head list;
 };
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 /*
- * callback of libusb_xfer_aio()
- * process individual previously submitted libusb_request_handle
+ * callback of openusb_xfer_aio()
+ * process individual previously submitted openusb_request_handle
  *
  */
-int32_t multi_req_callback(libusb_request_handle_t req)
+int32_t multi_req_callback(openusb_request_handle_t req)
 {
-	libusb_multi_request_handle_t mreq;
+	openusb_multi_request_handle_t mreq;
 	struct usbi_multi_request *mi_req;
 	uint32_t len=0;
-	libusb_request_result_t *result;
-	libusb_transfer_type_t type;
-	libusb_multi_isoc_request_t *isoc;
+	openusb_request_result_t *result;
+	openusb_transfer_type_t type;
+	openusb_multi_isoc_request_t *isoc;
 	uint32_t idx = 0;
 	struct usbi_multi_req_args *args;
 
@@ -994,7 +994,7 @@ int32_t multi_req_callback(libusb_request_handle_t req)
 	mi_req = (struct usbi_multi_request*)args->mi_req;
 	if(!mi_req) {
 		usbi_debug(NULL, 1, "Invalid multi-request handle");
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	}
 
 	idx = args->idx;
@@ -1004,25 +1004,25 @@ int32_t multi_req_callback(libusb_request_handle_t req)
 	mreq = mi_req->mreq;
 	if(!mreq) {
 		usbi_debug(NULL, 1, "Multi-Req NULL");	
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	}
 
 	type = mreq->type;
 
 	if (type == USB_TYPE_BULK || type == USB_TYPE_INTERRUPT) {
 
-		len = sizeof(struct libusb_request_result);
+		len = sizeof(struct openusb_request_result);
 
 	} else if (type == USB_TYPE_ISOCHRONOUS) {
 		isoc = mreq->req.isoc;
 
-		len = sizeof(struct libusb_request_result) * 
+		len = sizeof(struct openusb_request_result) * 
 			isoc->pkts[idx].num_packets;
 	}
 
 	result = malloc(len);
 	if (!result) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	if (type == USB_TYPE_BULK) {
@@ -1045,7 +1045,7 @@ int32_t multi_req_callback(libusb_request_handle_t req)
 
 /*
  * multi xfer request processing thread 
- * split one multi-request to num_bufs libusb_request_handle
+ * split one multi-request to num_bufs openusb_request_handle
  * usbi_multi_request --> usbi_multi_req_args
  *                    --> usbi_multi_req_args
  *		      ...
@@ -1055,13 +1055,13 @@ int process_multi_request(void *arg)
 {
 	struct usbi_multi_request *mi_req = (struct usbi_multi_request *)arg;
 	int i;
-	libusb_dev_handle_t dev;
+	openusb_dev_handle_t dev;
 	uint8_t ifc;
 	uint8_t endpoint;
-	libusb_transfer_type_t type;
-	libusb_request_handle_t req;
+	openusb_transfer_type_t type;
+	openusb_request_handle_t req;
 	struct usbi_dev_handle *hdev;
-	libusb_multi_request_handle_t mh;
+	openusb_multi_request_handle_t mh;
 	struct usbi_multi_req_args *args;
 	uint32_t req_num = 0;
 	int ret;
@@ -1069,7 +1069,7 @@ int process_multi_request(void *arg)
 	usbi_debug(NULL, 4, "Begin");
 
 	if(!mi_req) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	mh = mi_req->mreq;
@@ -1080,7 +1080,7 @@ int process_multi_request(void *arg)
 
 	hdev = usbi_find_dev_handle(dev);
 	if(!hdev) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 loop:
@@ -1103,24 +1103,24 @@ loop:
 	for(i = 0; i< req_num; i++) {
 		usbi_debug(hdev->lib_hdl, 4, "submit request %d",i);
 
-		req = malloc(sizeof(struct libusb_request_handle));
+		req = malloc(sizeof(struct openusb_request_handle));
 		if (!req) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
 			pthread_mutex_unlock(&mi_req->lock);
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 		}
 
 		/* args is the additional argument of callback 
-		 * in libusb_request_handle_t
+		 * in openusb_request_handle_t
 		 */
 		args = malloc(sizeof(struct usbi_multi_req_args));
 		if (!args) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
 			pthread_mutex_unlock(&mi_req->lock);
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 		}
 
-		memset(req, 0, sizeof(struct libusb_request_handle));
+		memset(req, 0, sizeof(struct openusb_request_handle));
 		memset(args, 0, sizeof(struct usbi_multi_req_args));
 
 		req->dev = mh->dev;
@@ -1141,8 +1141,8 @@ loop:
 		req->cb = multi_req_callback;
 
 		if (type==USB_TYPE_BULK) {
-			libusb_multi_bulk_request_t *m_bulk;
-			libusb_bulk_request_t *bulk;
+			openusb_multi_bulk_request_t *m_bulk;
+			openusb_bulk_request_t *bulk;
 
 			m_bulk = mh->req.bulk;
 
@@ -1150,10 +1150,10 @@ loop:
 			bulk = malloc(sizeof(*bulk));
 			if (!bulk) {
 				pthread_mutex_unlock(&mi_req->lock);
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 			}
 
-			memset(bulk, 0, sizeof(struct libusb_bulk_request));
+			memset(bulk, 0, sizeof(struct openusb_bulk_request));
 
 			bulk->payload = m_bulk->payloads[i];
 			bulk->length = m_bulk->lengths[i];
@@ -1164,21 +1164,21 @@ loop:
 
 			/* do not hold this lock for a long time*/
 			pthread_mutex_unlock(&mi_req->lock);
-			libusb_xfer_aio(req);
+			openusb_xfer_aio(req);
 			pthread_mutex_lock(&mi_req->lock);
 
 			m_bulk->rp++; /* move rp forward */
 
 		} else if (type == USB_TYPE_INTERRUPT) {
-			libusb_multi_intr_request_t *m_intr;
-			libusb_intr_request_t *intr;
+			openusb_multi_intr_request_t *m_intr;
+			openusb_intr_request_t *intr;
 
 			m_intr = mh->req.intr;
 
 			intr = malloc(sizeof(*intr));
 			if (!intr) {
 				pthread_mutex_unlock(&mi_req->lock);
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 			}
 
 			intr->payload = m_intr->payloads[i];
@@ -1194,7 +1194,7 @@ loop:
 
 			
 			pthread_mutex_unlock(&mi_req->lock);
-			ret = libusb_xfer_aio(req);
+			ret = openusb_xfer_aio(req);
 			pthread_mutex_lock(&mi_req->lock);
 
 			if (ret != 0) {
@@ -1206,8 +1206,8 @@ loop:
 			m_intr->rp++; /* move rp forward */
 
 		} else if (type==USB_TYPE_ISOCHRONOUS) {
-			libusb_multi_isoc_request_t *m_isoc;
-			libusb_isoc_request_t *isoc;
+			openusb_multi_isoc_request_t *m_isoc;
+			openusb_isoc_request_t *isoc;
 
 			m_isoc = mh->req.isoc;
 
@@ -1216,10 +1216,10 @@ loop:
 			if (!isoc) {
 				free(req);
 				pthread_mutex_unlock(&mi_req->lock);
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 			}
 
-			memset(isoc, 0, sizeof(struct libusb_isoc_request));
+			memset(isoc, 0, sizeof(struct openusb_isoc_request));
 			isoc->pkts = m_isoc->pkts[i];
 			isoc->start_frame = m_isoc->start_frame;
 			isoc->flags = m_isoc->flags;
@@ -1227,14 +1227,14 @@ loop:
 			req->req.isoc = isoc;
 
 			pthread_mutex_unlock(&mi_req->lock);
-			libusb_xfer_aio(req);
+			openusb_xfer_aio(req);
 			pthread_mutex_lock(&mi_req->lock);
 
 			m_isoc->rp++; /* move rp forward */
 
 		} else {
 			pthread_mutex_unlock(&mi_req->lock);
-			return(LIBUSB_BADARG);
+			return(OPENUSB_BADARG);
 		}
 	}
 
@@ -1250,7 +1250,7 @@ loop:
 
 		list_for_each_entry_safe(pargs, tmp, &mi_req->req_head, list) {
 			pthread_mutex_unlock(&mi_req->lock);
-			libusb_abort(pargs->req);
+			openusb_abort(pargs->req);
 			pthread_mutex_lock(&mi_req->lock);
 			free(pargs->req); /*FIXME: should be here ??? */
 			free(pargs);
@@ -1267,24 +1267,24 @@ loop:
 }
 
 /*
- * turn a libusb_multi_request_handle to internal structure 
- * libusb_multi_request_handle <--> usbi_multi_request
+ * turn a openusb_multi_request_handle to internal structure 
+ * openusb_multi_request_handle <--> usbi_multi_request
  */
-int32_t libusb_start(libusb_multi_request_handle_t handle)
+int32_t openusb_start(openusb_multi_request_handle_t handle)
 {
 	int ret = 0;
-	libusb_dev_handle_t dev;
+	openusb_dev_handle_t dev;
 	uint8_t ifc;
 	uint8_t endpoint;
-	libusb_transfer_type_t type;
-	libusb_request_handle_t req;
+	openusb_transfer_type_t type;
+	openusb_request_handle_t req;
 	struct usbi_dev_handle *hdev;
 	struct usbi_multi_request *mi_req;
 	pthread_t thread;
 
 
 	if (!handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	
 	dev = handle->dev;
@@ -1295,20 +1295,20 @@ int32_t libusb_start(libusb_multi_request_handle_t handle)
 	hdev = usbi_find_dev_handle(dev);
 	if(!hdev) {
 		usbi_debug(NULL, 1, "invalid device");
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	mi_req = malloc(sizeof(struct usbi_multi_request));
 	if (!mi_req) {
 		usbi_debug(hdev->lib_hdl, 1, "malloc fail");
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
-	req = malloc(sizeof(struct libusb_request_handle));
+	req = malloc(sizeof(struct openusb_request_handle));
 	if (!req) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
-	memset(req, 0, sizeof(struct libusb_request_handle));
+	memset(req, 0, sizeof(struct openusb_request_handle));
 
 	req->dev = handle->dev;
 	req->interface = handle->interface;
@@ -1340,18 +1340,18 @@ int32_t libusb_start(libusb_multi_request_handle_t handle)
 	return ret;
 }
 
-int32_t usbi_add_or_stop(libusb_multi_request_handle_t handle, int flag)
+int32_t usbi_add_or_stop(openusb_multi_request_handle_t handle, int flag)
 {
 	struct usbi_multi_request *mreq;
 	struct usbi_dev_handle *hdev;
 
 	if (!handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev = usbi_find_dev_handle(handle->dev);
 	if(!hdev) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	pthread_mutex_lock(&hdev->lock);
@@ -1365,8 +1365,8 @@ int32_t usbi_add_or_stop(libusb_multi_request_handle_t handle, int flag)
 	pthread_mutex_unlock(&hdev->lock);
 
 	if (!mreq) {
-		/* must call libusb_start first */
-		return LIBUSB_INVALID_HANDLE;
+		/* must call openusb_start first */
+		return OPENUSB_INVALID_HANDLE;
 	}
 
 	pthread_mutex_lock(&mreq->lock);
@@ -1385,12 +1385,12 @@ int32_t usbi_add_or_stop(libusb_multi_request_handle_t handle, int flag)
  *    the previous buffers are safe to use. All the internal processing will
  *    use these buffers until user's callback is called.
  */
-int32_t libusb_add(libusb_multi_request_handle_t handle)
+int32_t openusb_add(openusb_multi_request_handle_t handle)
 {
 	return (usbi_add_or_stop(handle, USBI_MREQ_NEW_BUF));
 }
 
-int32_t libusb_stop(libusb_multi_request_handle_t handle)
+int32_t openusb_stop(openusb_multi_request_handle_t handle)
 {
 	return (usbi_add_or_stop(handle, USBI_MREQ_STOPPED));
 }

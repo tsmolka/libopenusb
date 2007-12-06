@@ -5,18 +5,18 @@
 %define prefix   /usr
 
 Summary: Application access to USB devices
-Name: libusb
+Name: openusb
 Version: %ver
 Release: %rel
 License: LGPL
 Group: Libraries
-Source: ftp://ftp.libusb.sourceforge.net/pub/libusb/libusb-%{ver}.tar.gz
-BuildRoot: /var/tmp/libusb-%{PACKAGE_VERSION}-root
-URL: http://libusb.sourceforge.net
+Source: ftp://ftp.openusb.sourceforge.net/pub/openusb/openusb-%{ver}.tar.gz
+BuildRoot: /var/tmp/openusb-%{PACKAGE_VERSION}-root
+URL: http://openusb.sourceforge.net
 
 %description
 Provides a library for application access to USB devices. Development
-libs and headers are in libusb-devel
+libs and headers are in openusb-devel
 
 %package devel
 Summary: Application USB device access library
@@ -50,7 +50,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-, root, root)
 
 %doc AUTHORS COPYING LICENSE ChangeLog NEWS README
-%{prefix}/lib/libusb-1.0.so.*
+%{prefix}/lib/openusb-1.0.so.*
 
 %files devel
 %defattr(-, root, root)

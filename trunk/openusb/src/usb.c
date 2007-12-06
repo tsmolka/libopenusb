@@ -25,14 +25,14 @@
 
 /*
  * env variables:
- *	LIBUSB_DRIVER_PATH - file path of backends
- *	USB_DEBUG - debug level of a libusb instance
+ *	OPENUSB_BACKEND_PATH - file path of backends
+ *	OPENUSB_DEBUG - debug level of a openusb instance
  */
 
-static int32_t libusb_global_debug_level = 0;
+static int32_t openusb_global_debug_level = 0;
 
-static libusb_handle_t cur_handle = 1; /* protected by usbi_lock */
-static libusb_dev_handle_t cur_dev_handle = 1; /* protected by usbi_lock */
+static openusb_handle_t cur_handle = 1; /* protected by usbi_lock */
+static openusb_dev_handle_t cur_dev_handle = 1; /* protected by usbi_lock */
 
 static int usbi_inited = 0;
 static pthread_mutex_t usbi_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -40,7 +40,7 @@ static pthread_mutex_t usbi_lock = PTHREAD_MUTEX_INITIALIZER;
 struct list_head backends = { .prev = &backends, .next = &backends };
 
 /*
- * event callbacks list, all libusb instances share the same list
+ * event callbacks list, all openusb instances share the same list
  * this list has its own lock
  */
 static struct usbi_list event_callbacks;
@@ -56,7 +56,7 @@ void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 	va_list ap;
 
 
-	if ((!hdl) && (level > libusb_global_debug_level))
+	if ((!hdl) && (level > openusb_global_debug_level))
 		return;
 
 	if (hdl) {
@@ -72,12 +72,12 @@ void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 	va_start(ap, fmt);
 
 	if (hdl && hdl->debug_cb) {
-		snprintf(str, sizeof (str), "libusb: [%s:%d] %s", func,
+		snprintf(str, sizeof (str), "openusb: [%s:%d] %s", func,
 			line, fmt);
 		hdl->debug_cb(hdl->handle, str,ap);
 	} else {
 		vsnprintf(str, sizeof (str), fmt, ap);
-		fprintf(stderr, "libusb: [%s:%d] %s\n", func, line, str);
+		fprintf(stderr, "openusb: [%s:%d] %s\n", func, line, str);
 	}
 
 	va_end(ap);
@@ -89,16 +89,16 @@ void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 
 struct eventcallback {
 	struct list_head list;
-	libusb_devid_t devid;
-	libusb_event_t type;
+	openusb_devid_t devid;
+	openusb_event_t type;
 	struct usbi_handle *handle;
 };
 
 int callback_queue_full = 0;
 
-/* set callback for every libusb instance.*/
-void usbi_add_event_callback(struct usbi_handle *hdl, libusb_devid_t devid, 
-	libusb_event_t type)
+/* set callback for every openusb instance.*/
+void usbi_add_event_callback(struct usbi_handle *hdl, openusb_devid_t devid, 
+	openusb_event_t type)
 {
 	struct eventcallback *cb;
 
@@ -148,10 +148,10 @@ static void *process_event_callbacks(void *unused)
 		 */
 		listh = event_callbacks.head.next;
 		while(listh != &event_callbacks.head) {
-			libusb_devid_t devid;
-			libusb_event_t type;
+			openusb_devid_t devid;
+			openusb_event_t type;
 			struct usbi_handle *hdl;
-			libusb_event_callback_t func;
+			openusb_event_callback_t func;
 			void *arg;
 
 			cb = list_entry(&(listh->prev), struct eventcallback,
@@ -313,7 +313,7 @@ static int load_backends(const char *dirpath)
 }
 
 /* 
- * init libusb internal lists
+ * init openusb internal lists
  */
 static int usbi_list_init(struct usbi_list *list)
 {
@@ -322,7 +322,7 @@ static int usbi_list_init(struct usbi_list *list)
 	list_init(&list->head);
 
 	if ((ret = pthread_mutex_init(&list->lock, NULL)) != 0)
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 
 	return ret;
 }
@@ -342,29 +342,29 @@ static int usbi_init_common(void)
 	int ret;
 
 	/* set global debug level to default level */
-	if (getenv("USB_DEBUG"))
-		libusb_global_debug_level = atoi(getenv("USB_DEBUG"));
+	if (getenv("OPENUSB_DEBUG"))
+		openusb_global_debug_level = atoi(getenv("OPENUSB_DEBUG"));
 
 	/* Initialize the lib handle list */
 	if ((ret = usbi_list_init(&usbi_handles)) < 0) {
 		usbi_debug(NULL, 1, "unable to init lib handle list "
 			"(ret = %d)", ret);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	/* Initializa the bus list */
-	/* all libusb instances share the same bus list */
+	/* all openusb instances share the same bus list */
 	if ((ret = usbi_list_init(&usbi_buses)) < 0) {
 		usbi_debug(NULL, 1, "unable to init bus list "
 			"(ret = %d)", ret);
 		usbi_list_fini(&usbi_handles);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	/* Initializa the device list 
-	 * all libusb instances share the same devices list
+	 * all openusb instances share the same devices list
 	 */
 	if ((ret = usbi_list_init(&usbi_devices)) < 0) {
 		usbi_debug(NULL, 1, "unable to init device list "
@@ -372,11 +372,11 @@ static int usbi_init_common(void)
 		usbi_list_fini(&usbi_buses);
 		usbi_list_fini(&usbi_handles);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	/* Initializa the device handle list 
-	 * all libusb instances share the same open devices list
+	 * all openusb instances share the same open devices list
 	 */
 	if ((ret = usbi_list_init(&usbi_dev_handles)) < 0) {
 		usbi_debug(NULL, 1, "unable to init device handle list "
@@ -385,11 +385,11 @@ static int usbi_init_common(void)
 		usbi_list_fini(&usbi_buses);
 		usbi_list_fini(&usbi_handles);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	/* Initialize the callback list and thread
-	 * all libusb instances share the same event_callback list
+	 * all openusb instances share the same event_callback list
 	 * and one callback processing thread
 	 */
 	if ((ret = usbi_list_init(&event_callbacks)) < 0) {
@@ -400,7 +400,7 @@ static int usbi_init_common(void)
 		usbi_list_fini(&usbi_buses);
 		usbi_list_fini(&usbi_handles);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	pthread_cond_init(&event_callback_cond, NULL);
@@ -418,13 +418,13 @@ static int usbi_init_common(void)
 		usbi_list_fini(&usbi_buses);
 		usbi_list_fini(&usbi_handles);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
-	/* Load backends. All libusb instances share the same backends */
+	/* Load backends. All openusb instances share the same backends */
 	load_backends(DRIVER_PATH); /* may need to check error */
 
-	driver_path = getenv("LIBUSB_DRIVER_PATH");
+	driver_path = getenv("OPENUSB_BACKEND_PATH");
 
 	if (driver_path) {
 		usbi_debug(NULL, 4, "backend path: %s",driver_path);
@@ -433,20 +433,20 @@ static int usbi_init_common(void)
 	
 	/*
 	 * actually, the usbi_bus ops only points to one backend's ops
-	 * why libusb creates a backend list ?
+	 * why openusb creates a backend list ?
 	 */
 	if(list_empty(&backends)) {
 		usbi_debug(NULL, 1, "load backends fail");
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 
 	usbi_debug(NULL, 4, "End");
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 
-/* called upon last libusb instance fini */
+/* called upon last openusb instance fini */
 static void usbi_fini_common()
 {
 	/* XXX need to free device, bus and backend list */
@@ -462,11 +462,11 @@ static void usbi_fini_common()
 
 }
 
-struct usbi_handle *usbi_find_handle(libusb_handle_t handle)
+struct usbi_handle *usbi_find_handle(openusb_handle_t handle)
 { 
 	struct usbi_handle *hdl;
 
-	/* fail if libusb is not inited */
+	/* fail if openusb is not inited */
 	pthread_mutex_lock(&usbi_lock);
 	if (usbi_inited == 0) {
 		pthread_mutex_unlock(&usbi_lock);
@@ -511,8 +511,8 @@ struct usbi_handle *usbi_init_handle(void)
 	}
 
 	/* set debug level to default level */
-	if (getenv("USB_DEBUG"))
-		hdl->debug_level = atoi(getenv("USB_DEBUG"));
+	if (getenv("OPENUSB_DEBUG"))
+		hdl->debug_level = atoi(getenv("OPENUSB_DEBUG"));
 
 	/* the mutex protects cur_handle */
 	pthread_mutex_lock(&usbi_lock);
@@ -553,7 +553,7 @@ void usbi_destroy_handle(struct usbi_handle *hdl)
 	free(hdl);
 }
 
-int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
+int32_t openusb_init(uint32_t flags, openusb_handle_t *handle)
 {
 	struct usbi_handle *hdl;
 	int ret;
@@ -562,7 +562,7 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 	int init_cnt = 0;
 	
 	if(!handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	*handle = 0;
@@ -589,7 +589,7 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 			usbi_fini_common();
 		pthread_mutex_unlock(&usbi_lock);
 
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 	
 	list_for_each_entry(backend,&backends,list) {
@@ -611,7 +611,7 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 		pthread_mutex_unlock(&usbi_lock);
 		
 		free(hdl);
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 
 	/*set up device tree */
@@ -621,10 +621,10 @@ int32_t libusb_init(uint32_t flags, libusb_handle_t *handle)
 
 	usbi_debug(hdl, 4, "End");
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-void libusb_fini(libusb_handle_t handle)
+void openusb_fini(openusb_handle_t handle)
 {
 	struct usbi_handle *hdl;
 	struct usbi_backend *backend, *tbackend;
@@ -651,7 +651,7 @@ void libusb_fini(libusb_handle_t handle)
 		usbi_debug(NULL, 4, "Last lib handle");
 		usbi_fini_common();
 
-		/* last libusb instance, destroy lock */
+		/* last openusb instance, destroy lock */
 		pthread_mutex_unlock(&usbi_lock);
 		pthread_mutex_destroy(&usbi_lock);
 		return;
@@ -674,20 +674,20 @@ void usbi_coldplug_complete(struct usbi_handle *hdl)
 }
 
 /* 
- * set event callbacks for every libusb instance
+ * set event callbacks for every openusb instance
  *	callback = NULL, unset previous callback settings
  */
-int32_t libusb_set_event_callback(libusb_handle_t handle,
-	libusb_event_t type, libusb_event_callback_t callback, void *arg)
+int32_t openusb_set_event_callback(openusb_handle_t handle,
+	openusb_event_t type, openusb_event_callback_t callback, void *arg)
 {
 	struct usbi_handle *hdl;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
-	if (type < 0 || type >= LIBUSB_EVENT_TYPE_COUNT )
-		return LIBUSB_BADARG;
+	if (type < 0 || type >= OPENUSB_EVENT_TYPE_COUNT )
+		return OPENUSB_BADARG;
 
 	pthread_mutex_lock(&hdl->lock);
 	hdl->event_cbs[type].func = callback;
@@ -695,15 +695,15 @@ int32_t libusb_set_event_callback(libusb_handle_t handle,
 	pthread_mutex_unlock(&hdl->lock);
 	
 	/* FIXME: just call coldplug_complete to prevent
-	 * libusb_coldplug_callbacks_done() blocking.
+	 * openusb_coldplug_callbacks_done() blocking.
 	 */
 	usbi_coldplug_complete(hdl);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-void libusb_set_debug(libusb_handle_t handle, uint32_t level,
-	uint32_t flags, libusb_debug_callback_t callback)
+void openusb_set_debug(openusb_handle_t handle, uint32_t level,
+	uint32_t flags, openusb_debug_callback_t callback)
 {
 	struct usbi_handle *hdl;
 
@@ -730,8 +730,8 @@ void libusb_set_debug(libusb_handle_t handle, uint32_t level,
 
 /* FIXME: do we need timeout for isoc transfer */
 /* 	type = 0, set default timeout value for all types */
-int32_t libusb_set_default_timeout(libusb_handle_t handle,
-	libusb_transfer_type_t type, uint32_t timeout)
+int32_t openusb_set_default_timeout(openusb_handle_t handle,
+	openusb_transfer_type_t type, uint32_t timeout)
 {
 	struct usbi_handle *hdl;
 
@@ -739,10 +739,10 @@ int32_t libusb_set_default_timeout(libusb_handle_t handle,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if ((type < 0) || (type > USB_TYPE_ISOCHRONOUS))
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 
 	pthread_mutex_lock(&hdl->lock);
 
@@ -757,15 +757,15 @@ int32_t libusb_set_default_timeout(libusb_handle_t handle,
 
 	pthread_mutex_unlock(&hdl->lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-/* find an opened device's usbi_dev_handle by its libusb_dev_handle */
-struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev)
+/* find an opened device's usbi_dev_handle by its openusb_dev_handle */
+struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev)
 { 
 	struct usbi_dev_handle *hdev;
 
-	/* fail if libusb is not inited */
+	/* fail if openusb is not inited */
 	pthread_mutex_lock(&usbi_lock);
 	if (usbi_inited == 0) {
 		pthread_mutex_unlock(&usbi_lock);
@@ -794,11 +794,11 @@ struct usbi_dev_handle *usbi_find_dev_handle(libusb_dev_handle_t dev)
 }   
 
 /* find a device's usbi_device struct by its devid */
-struct usbi_device *usbi_find_device_by_id(libusb_devid_t devid)
+struct usbi_device *usbi_find_device_by_id(openusb_devid_t devid)
 {
 	struct usbi_device *idev;
 
-	/* fail if libusb is not inited */
+	/* fail if openusb is not inited */
 	pthread_mutex_lock(&usbi_lock);
 	if (usbi_inited == 0) {
 		pthread_mutex_unlock(&usbi_lock);
@@ -823,11 +823,11 @@ struct usbi_device *usbi_find_device_by_id(libusb_devid_t devid)
 }
 
 /*
- * allocate libusb_dev_handle structure and populate it.
+ * allocate openusb_dev_handle structure and populate it.
  * no device nodes opened at this moment on Solaris.
  */
-int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
-	libusb_init_flag_t flags, libusb_dev_handle_t *dev)
+int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
+	openusb_init_flag_t flags, openusb_dev_handle_t *dev)
 {
 	struct usbi_handle *hdl; /* lib internal handle */
 	struct usbi_device *idev;
@@ -836,22 +836,22 @@ int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
 	int i;
 	
 	if(!dev) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	*dev = 0;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	idev = usbi_find_device_by_id(devid);
 	if (!idev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	hdev = malloc(sizeof (*hdev));
 	if (!hdev)
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 
 	/* protect cur_dev_handle */
 	pthread_mutex_lock(&usbi_lock);
@@ -864,7 +864,7 @@ int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
 
 	if (pthread_mutex_init(&hdev->lock,NULL) != 0) {
 		free(hdev);
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	for(i=0;i<USBI_MAXINTERFACES;i++) {
@@ -879,7 +879,7 @@ int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
 	if (pipe(hdev->event_pipe) < 0) {
 		pthread_mutex_destroy(&hdev->lock);
 		free(hdev);
-		return LIBUSB_SYS_FUNC_FAILURE;
+		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
 	ret = idev->ops->open(hdev);
@@ -904,10 +904,10 @@ int32_t libusb_open_device(libusb_handle_t handle, libusb_devid_t devid,
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-int32_t libusb_close_device(libusb_dev_handle_t dev)
+int32_t openusb_close_device(openusb_dev_handle_t dev)
 {
 	struct usbi_dev_handle *hdev;
 	int ret;
@@ -915,7 +915,7 @@ int32_t libusb_close_device(libusb_dev_handle_t dev)
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 	
 	/* FIXME: need to abort the outstanding io request first */
 	pthread_mutex_lock(&hdev->lock);
@@ -949,55 +949,55 @@ int32_t libusb_close_device(libusb_dev_handle_t dev)
 	return ret;
 }
 
-int32_t libusb_get_devid(libusb_dev_handle_t dev, libusb_devid_t *devid)
+int32_t openusb_get_devid(openusb_dev_handle_t dev, openusb_devid_t *devid)
 {
 	struct usbi_dev_handle *hdev;
 
 	if (!devid) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&hdev->lock);
 	*devid = hdev->idev->devid;
 	pthread_mutex_unlock(&hdev->lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-int32_t libusb_get_lib_handle(libusb_dev_handle_t dev,
-	libusb_handle_t *lib_handle)
+int32_t openusb_get_lib_handle(openusb_dev_handle_t dev,
+	openusb_handle_t *lib_handle)
 {
 	struct usbi_dev_handle *hdev;
 	
 	if (!lib_handle) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&hdev->lock);
 	*lib_handle = hdev->lib_hdl->handle;
 	pthread_mutex_unlock(&hdev->lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 
-int libusb_abort(libusb_request_handle_t phdl)
+int openusb_abort(openusb_request_handle_t phdl)
 {
 	struct usbi_dev_handle *hdev;
 	struct usbi_io *io,*tio;
-	int ret = LIBUSB_PLATFORM_FAILURE; 
+	int ret = OPENUSB_PLATFORM_FAILURE; 
 	char buf[1]={1};
 
 	if(!phdl) {
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	}
 
 	/* We're looking at all open devices (open devices are ones we have
@@ -1037,7 +1037,7 @@ int libusb_abort(libusb_request_handle_t phdl)
 
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
-	return (LIBUSB_INVALID_HANDLE); /* can't find specified request */
+	return (OPENUSB_INVALID_HANDLE); /* can't find specified request */
 }
 
 
@@ -1049,7 +1049,7 @@ int libusb_abort(libusb_request_handle_t phdl)
  * might even be able to optimize away the code to figure out the endianess.
  */
 
-inline uint16_t libusb_le16_to_cpu(uint16_t data)
+inline uint16_t openusb_le16_to_cpu(uint16_t data)
 {
 	uint16_t endian = 0x1234;
 
@@ -1063,7 +1063,7 @@ inline uint16_t libusb_le16_to_cpu(uint16_t data)
 	}
 }
 
-inline uint32_t libusb_le32_to_cpu(uint32_t data)
+inline uint32_t openusb_le32_to_cpu(uint32_t data)
 {
 	uint32_t endian = 0x12345678;
 
@@ -1103,38 +1103,38 @@ static struct errorstr {
 	int code;
 	char *msg;
 } errorstrs[] = {
-	{ LIBUSB_SUCCESS,		"Call success" },
-	{ LIBUSB_PLATFORM_FAILURE,	"Unspecified kernel/driver failure" },
-	{ LIBUSB_NO_RESOURCES,		"No resources available" },
-	{ LIBUSB_NO_BANDWIDTH,		"No bandwidth available" },
-	{ LIBUSB_NOT_SUPPORTED,		"Not supported by HCD" },
-	{ LIBUSB_HC_HARDWARE_ERROR,	"USB host controller error" },
-	{ LIBUSB_INVALID_PERM,		"Privileged operation" },
-	{ LIBUSB_BUSY,			"Busy condition" },
-	{ LIBUSB_BADARG,		"Invalid parameter" },
-	{ LIBUSB_NOACCESS,		"Access to device denied" },
-	{ LIBUSB_PARSE_ERROR,		"Data could not be parsed" },
-	{ LIBUSB_UNKNOWN_DEVICE,	"Device id is stale or invalid" },
-	{ LIBUSB_INVALID_HANDLE,		"Handle is invalid" },
-	{ LIBUSB_SYS_FUNC_FAILURE,	"Call other system function failed" },
-	{ LIBUSB_NULL_LIST,		"Can not find bus or device" },
-	{ LIBUSB_IO_STALL,		"Endpoint stalled" },
-	{ LIBUSB_IO_CRC_ERROR,		"CRC error" },
-	{ LIBUSB_IO_DEVICE_HUNG,	"Device hung" },
-	{ LIBUSB_IO_REQ_TOO_BIG,	"Request too big" },
-	{ LIBUSB_IO_BIT_STUFFING,	"Bit stuffing error" },
-	{ LIBUSB_IO_UNEXPECTED_PID,	"Unexpected PID" },
-	{ LIBUSB_IO_DATA_OVERRUN,	"Data overrun" },
-	{ LIBUSB_IO_DATA_UNDERRUN,	"Data underrun" },
-	{ LIBUSB_IO_BUFFER_OVERRUN,	"Buffer overrun" },
-	{ LIBUSB_IO_BUFFER_UNDERRUN,	"Buffer underrun" },
-	{ LIBUSB_IO_PID_CHECK_FAILURE,	"PID check failure" },
-	{ LIBUSB_IO_DATA_TOGGLE_MISMATCH, "Data toggle mismatch" },
-	{ LIBUSB_IO_TIMEOUT,		"I/O timeout" },
-	{ LIBUSB_IO_CANCELED,		"I/O canceled" } 
+	{ OPENUSB_SUCCESS,		"Call success" },
+	{ OPENUSB_PLATFORM_FAILURE,	"Unspecified kernel/driver failure" },
+	{ OPENUSB_NO_RESOURCES,		"No resources available" },
+	{ OPENUSB_NO_BANDWIDTH,		"No bandwidth available" },
+	{ OPENUSB_NOT_SUPPORTED,		"Not supported by HCD" },
+	{ OPENUSB_HC_HARDWARE_ERROR,	"USB host controller error" },
+	{ OPENUSB_INVALID_PERM,		"Privileged operation" },
+	{ OPENUSB_BUSY,			"Busy condition" },
+	{ OPENUSB_BADARG,		"Invalid parameter" },
+	{ OPENUSB_NOACCESS,		"Access to device denied" },
+	{ OPENUSB_PARSE_ERROR,		"Data could not be parsed" },
+	{ OPENUSB_UNKNOWN_DEVICE,	"Device id is stale or invalid" },
+	{ OPENUSB_INVALID_HANDLE,		"Handle is invalid" },
+	{ OPENUSB_SYS_FUNC_FAILURE,	"Call other system function failed" },
+	{ OPENUSB_NULL_LIST,		"Can not find bus or device" },
+	{ OPENUSB_IO_STALL,		"Endpoint stalled" },
+	{ OPENUSB_IO_CRC_ERROR,		"CRC error" },
+	{ OPENUSB_IO_DEVICE_HUNG,	"Device hung" },
+	{ OPENUSB_IO_REQ_TOO_BIG,	"Request too big" },
+	{ OPENUSB_IO_BIT_STUFFING,	"Bit stuffing error" },
+	{ OPENUSB_IO_UNEXPECTED_PID,	"Unexpected PID" },
+	{ OPENUSB_IO_DATA_OVERRUN,	"Data overrun" },
+	{ OPENUSB_IO_DATA_UNDERRUN,	"Data underrun" },
+	{ OPENUSB_IO_BUFFER_OVERRUN,	"Buffer overrun" },
+	{ OPENUSB_IO_BUFFER_UNDERRUN,	"Buffer underrun" },
+	{ OPENUSB_IO_PID_CHECK_FAILURE,	"PID check failure" },
+	{ OPENUSB_IO_DATA_TOGGLE_MISMATCH, "Data toggle mismatch" },
+	{ OPENUSB_IO_TIMEOUT,		"I/O timeout" },
+	{ OPENUSB_IO_CANCELED,		"I/O canceled" } 
 };
 
-const char *libusb_strerror(int32_t error)
+const char *openusb_strerror(int32_t error)
 {
 	int i;
 
@@ -1274,7 +1274,7 @@ void *timeout_thread(void *arg)
 			pthread_mutex_unlock(&devh->lock);
 			if (usbi_timeval_compare(&io->tvo, &tvc) <= 0) {
 
-				usbi_io_complete(io, LIBUSB_IO_TIMEOUT, 0);
+				usbi_io_complete(io, OPENUSB_IO_TIMEOUT, 0);
 
 			}
 			pthread_mutex_lock(&devh->lock);
@@ -1287,14 +1287,14 @@ void *timeout_thread(void *arg)
 }
 
 
-int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
+int32_t usbi_get_driver_np(openusb_dev_handle_t dev, uint8_t interface,
 													 char *name, uint32_t namelen)
 {
 	struct usbi_dev_handle	*hdev;
 	
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev) {
-		return (LIBUSB_UNKNOWN_DEVICE);
+		return (OPENUSB_UNKNOWN_DEVICE);
 	}
 
 	if (hdev->idev->ops->get_driver_np != NULL) {
@@ -1302,39 +1302,39 @@ int32_t usbi_get_driver_np(libusb_dev_handle_t dev, uint8_t interface,
 	}
 	
 	/* We're only here because get_driver_np was NULL, so... */
-	return (LIBUSB_NOT_SUPPORTED);
+	return (OPENUSB_NOT_SUPPORTED);
 }
 
 
-int32_t usbi_attach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface)
+int32_t usbi_attach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface)
 {
 	struct usbi_dev_handle	*hdev;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev) {
-		return (LIBUSB_UNKNOWN_DEVICE);
+		return (OPENUSB_UNKNOWN_DEVICE);
 	}
 
 	if (hdev->idev->ops->attach_kernel_driver_np != NULL) {
 		return(hdev->idev->ops->attach_kernel_driver_np(hdev, interface));
 	}
 
-	return (LIBUSB_NOT_SUPPORTED);
+	return (OPENUSB_NOT_SUPPORTED);
 }
 
 
-int32_t usbi_detach_kernel_driver_np(libusb_dev_handle_t dev, uint8_t interface)
+int32_t usbi_detach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface)
 {
 	struct usbi_dev_handle	*hdev;
 
 	hdev = usbi_find_dev_handle(dev);
 	if (!hdev) {
-		return (LIBUSB_UNKNOWN_DEVICE);
+		return (OPENUSB_UNKNOWN_DEVICE);
 	}
 
 	if (hdev->idev->ops->detach_kernel_driver_np != NULL) {
 		return (hdev->idev->ops->detach_kernel_driver_np(hdev, interface));
 	}
 
-	return (LIBUSB_NOT_SUPPORTED);
+	return (OPENUSB_NOT_SUPPORTED);
 }

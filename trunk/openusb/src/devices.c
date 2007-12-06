@@ -21,8 +21,8 @@ extern struct list_head backends;
 extern struct usbi_list usbi_buses;
 extern struct usbi_list usbi_devices;
 
-static libusb_busid_t cur_bus_id = 1;
-static libusb_devid_t cur_device_id = 1;
+static openusb_busid_t cur_bus_id = 1;
+static openusb_devid_t cur_device_id = 1;
 
 /*
  * Bus code
@@ -68,7 +68,7 @@ void usbi_remove_bus(struct usbi_bus *ibus)
 	usbi_free_bus(ibus);
 }
 
-struct usbi_bus *usbi_find_bus_by_id(libusb_busid_t busid)
+struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
 {
 	struct usbi_bus *ibus;
 
@@ -187,7 +187,7 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
-		/* every libusb instance should get notification
+		/* every openusb instance should get notification
 		 * of this event
 		 */
 		usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
@@ -212,7 +212,7 @@ void usbi_remove_device(struct usbi_device *idev)
 {
 	struct usbi_handle *handle, *thdl;
 
-	libusb_devid_t devid = idev->devid;
+	openusb_devid_t devid = idev->devid;
 
 	list_del(&idev->bus_list);
 	list_del(&idev->dev_list);
@@ -221,7 +221,7 @@ void usbi_remove_device(struct usbi_device *idev)
 
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
-		/*every libusb instance should get notification of this event */
+		/*every openusb instance should get notification of this event */
 		usbi_add_event_callback(handle,devid, USB_REMOVE);
 	}
 	pthread_mutex_unlock(&usbi_handles.lock);
@@ -251,95 +251,95 @@ void usbi_rescan_devices(void)
 }
 
 #if 1 /* this internal interfaces defined, but not used */
-int usbi_get_child_count(libusb_devid_t devid, unsigned char *count)
+int usbi_get_child_count(openusb_devid_t devid, unsigned char *count)
 {
 	struct usbi_device *idev;
 
 	idev = usbi_find_device_by_id(devid);
 	if (!idev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	*count = idev->nports;
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-int usbi_get_child_device_id(libusb_devid_t hub_devid, int port,
-	libusb_devid_t *child_devid)
+int usbi_get_child_device_id(openusb_devid_t hub_devid, int port,
+	openusb_devid_t *child_devid)
 {
   struct usbi_device *idev;
 
   idev = usbi_find_device_by_id(hub_devid);
   if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+    return OPENUSB_UNKNOWN_DEVICE;
 
   port--;	/* 1-indexed */
   if (port < 0 || port > idev->nports)
-    return LIBUSB_BADARG;
+    return OPENUSB_BADARG;
 
   if (!idev->children[port])
-    return LIBUSB_BADARG;
+    return OPENUSB_BADARG;
 
   *child_devid = idev->children[port]->devid;
 
-  return LIBUSB_SUCCESS;
+  return OPENUSB_SUCCESS;
 }
 
-int usbi_get_parent_device_id(libusb_devid_t child_devid,
-	libusb_devid_t *hub_devid)
+int usbi_get_parent_device_id(openusb_devid_t child_devid,
+	openusb_devid_t *hub_devid)
 {
   struct usbi_device *idev;
 
   idev = usbi_find_device_by_id(child_devid);
   if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+    return OPENUSB_UNKNOWN_DEVICE;
 
   if (!idev->parent)
-    return LIBUSB_BADARG;
+    return OPENUSB_BADARG;
 
   *hub_devid = idev->parent->devid;
 
-  return LIBUSB_SUCCESS;
+  return OPENUSB_SUCCESS;
 }
 
-int usbi_get_bus_id(libusb_devid_t devid, libusb_busid_t *busid)
+int usbi_get_bus_id(openusb_devid_t devid, openusb_busid_t *busid)
 {
 	struct usbi_device *idev;
 
 	idev = usbi_find_device_by_id(devid);
 	if (!idev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&idev->bus->lock);
 	*busid = idev->bus->busid;
 	pthread_mutex_unlock(&idev->bus->lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-int usbi_get_devnum(libusb_devid_t devid, unsigned char *devnum)
+int usbi_get_devnum(openusb_devid_t devid, unsigned char *devnum)
 {
   struct usbi_device *idev;
 
   idev = usbi_find_device_by_id(devid);
   if (!idev)
-    return LIBUSB_UNKNOWN_DEVICE;
+    return OPENUSB_UNKNOWN_DEVICE;
 
   *devnum = idev->devnum;
 
-  return LIBUSB_SUCCESS;
+  return OPENUSB_SUCCESS;
 }
 #endif
 
-int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
+int32_t openusb_get_busid_list(openusb_handle_t handle, openusb_busid_t **busids,
 	uint32_t *num_busids)
 {
 	struct usbi_handle *hdl;
 	struct usbi_bus *ibus;
-	libusb_busid_t *tmp;
+	openusb_busid_t *tmp;
 	
 	if (!busids || *busids || !num_busids) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	*num_busids = 0;
@@ -347,7 +347,7 @@ int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	pthread_mutex_lock(&usbi_buses.lock);
 
@@ -359,14 +359,14 @@ int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
 	if (*num_busids == 0) {
 		pthread_mutex_unlock(&usbi_buses.lock);
 		usbi_debug(hdl, 2, "Null list");
-		return LIBUSB_NULL_LIST;
+		return OPENUSB_NULL_LIST;
 	}
 
-	*busids = malloc((*num_busids) * sizeof (libusb_busid_t));
+	*busids = malloc((*num_busids) * sizeof (openusb_busid_t));
 	if (*busids == NULL) {
 		pthread_mutex_unlock(&usbi_buses.lock);
 		usbi_debug(hdl, 2, "No resource");
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	tmp = *busids;
@@ -380,10 +380,10 @@ int32_t libusb_get_busid_list(libusb_handle_t handle, libusb_busid_t **busids,
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-void libusb_free_busid_list(libusb_busid_t *busids)
+void openusb_free_busid_list(openusb_busid_t *busids)
 {
 	if (busids == NULL)
 		return;
@@ -440,7 +440,7 @@ static int usbi_get_num_altsettings(struct usbi_device *idev,
  *
  * return 1 if success 
  */
-static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
+static int usbi_match_class(openusb_handle_t handle, struct usbi_device *idev,
 	int16_t devclass, int16_t subclass, int16_t protocol)
 {
 	uint8_t *buf;
@@ -457,7 +457,7 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
 	usbi_debug(NULL, 4, "devid= %d class=%d, subclass=%d, proto = %d",
 		(int)idev->devid, devclass, subclass, protocol);
 
-	if ((ret = libusb_parse_device_desc(handle, idev->devid,
+	if ((ret = openusb_parse_device_desc(handle, idev->devid,
 		NULL, 0, &dev_desc)) < 0) {
 		usbi_debug(hdl, 2, "get device desc for devid %llu "
 			"failed (ret = %d)", idev->devid, ret);
@@ -477,7 +477,7 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
 
 	for (c = 0; c < dev_desc.bNumConfigurations; c++) {
 
-		ret = libusb_get_raw_desc(handle, idev->devid,
+		ret = openusb_get_raw_desc(handle, idev->devid,
 			USB_DESC_TYPE_CONFIG, c, 0, &buf, &buflen);
 		if (ret < 0) {
 			usbi_debug(hdl, 2, "get raw config desc index %d "
@@ -486,12 +486,12 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
 			continue;
 		}
 		
-		if ((ret = libusb_parse_config_desc(handle, idev->devid, buf,
+		if ((ret = openusb_parse_config_desc(handle, idev->devid, buf,
 			buflen, c, &cfg_desc)) < 0) {
 			usbi_debug(hdl, 2, "parse config desc index %d "
 				"for devid %d failed (ret = %d)", c,
 				idev->devid, ret);
-			libusb_free_raw_desc(buf);
+			openusb_free_raw_desc(buf);
 			continue;
 		}
 
@@ -509,14 +509,14 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
 			}
 
 			for (a = 0; a < num_alt; a++) {
-				if ((ret = libusb_parse_interface_desc(handle,
+				if ((ret = openusb_parse_interface_desc(handle,
 					idev->devid, buf, buflen, c, i, a,
 					&ifc_desc)) < 0) {
 					usbi_debug(hdl, 2, "get ifc desc "
 						"%d-%d-%d failed"
 						" (ret = %d (%s))",
 						c, i, a, ret,
-						libusb_strerror(ret));
+						openusb_strerror(ret));
 					continue;
 				}
 
@@ -527,13 +527,13 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
 					((protocol == -1) || (protocol ==
 					ifc_desc.bInterfaceProtocol))) {
 
-					libusb_free_raw_desc(buf);
+					openusb_free_raw_desc(buf);
 					return 1;
 				}
 			}
 		}
 
-		libusb_free_raw_desc(buf);
+		openusb_free_raw_desc(buf);
 	}
 
 	return 0;
@@ -545,18 +545,18 @@ static int usbi_match_class(libusb_handle_t handle, struct usbi_device *idev,
  *	else return devices on that busid
  * NOTE: application must pass a NULL devids. Otherwise, memory will leak
  */
-int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
-	libusb_devid_t **devids, uint32_t *num_devids)
+int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid,
+	openusb_devid_t **devids, uint32_t *num_devids)
 {
 	struct usbi_handle *hdl;
 	struct usbi_bus *ibus;
 	struct usbi_device *idev;
-	libusb_devid_t *tdevid;
+	openusb_devid_t *tdevid;
 	int32_t devcnts=0;
 	
 	/* if *devid is not NULL, there will be possible memleaks */
 	if (!num_devids || !devids) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	*num_devids = 0;
@@ -564,7 +564,7 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if (busid == 0) {
 		/* get all devids */
@@ -576,13 +576,13 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 
 		if ( devcnts== 0) {
 			pthread_mutex_unlock(&usbi_devices.lock);
-			return LIBUSB_NULL_LIST;
+			return OPENUSB_NULL_LIST;
 		}
 
-		*devids = malloc((devcnts) * sizeof (libusb_devid_t));
+		*devids = malloc((devcnts) * sizeof (openusb_devid_t));
 		if (*devids == NULL) {
 			pthread_mutex_unlock(&usbi_devices.lock);
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 		}
 
 		tdevid = *devids;
@@ -596,18 +596,18 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 
 		pthread_mutex_unlock(&usbi_devices.lock);
 
-		return LIBUSB_SUCCESS;
+		return OPENUSB_SUCCESS;
 	}
 
 	ibus = usbi_find_bus_by_id(busid);
 	if (!ibus)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&ibus->devices.lock);
 
 	if (list_empty(&ibus->devices.head)) {
 		pthread_mutex_unlock(&ibus->devices.lock);
-		return LIBUSB_NULL_LIST;
+		return OPENUSB_NULL_LIST;
 	}
 
 	list_for_each_entry(idev, &ibus->devices.head, bus_list) {
@@ -617,13 +617,13 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 
 	if (devcnts == 0) {
 		pthread_mutex_unlock(&ibus->devices.lock);
-		return LIBUSB_NULL_LIST;
+		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc(devcnts * sizeof (libusb_devid_t));
+	*devids = malloc(devcnts * sizeof (openusb_devid_t));
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&ibus->devices.lock);
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	tdevid = *devids;
@@ -635,7 +635,7 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
 	*num_devids = devcnts;
 	pthread_mutex_unlock(&ibus->devices.lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 /*
@@ -643,13 +643,13 @@ int32_t libusb_get_devids_by_bus(libusb_handle_t handle, libusb_busid_t busid,
  *	vendor = -1, wild match, match any vendor
  *	product = -1, wild match, match any product
  */
-int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
-	int32_t product, libusb_devid_t **devids, uint32_t *num_devids)
+int32_t openusb_get_devids_by_vendor(openusb_handle_t handle, int32_t vendor,
+	int32_t product, openusb_devid_t **devids, uint32_t *num_devids)
 {
 	struct usbi_handle *hdl;
 	struct usbi_device *idev=NULL;
 	struct usbi_device *tdev;
-	libusb_devid_t *tdevid;
+	openusb_devid_t *tdevid;
 	struct list_head match_list;
 	int ret;
 
@@ -657,7 +657,7 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 
 	/* if *devid is not NULL, there will be possible memleaks */
 	if (!num_devids || !devids || *devids) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	*num_devids = 0;
@@ -666,11 +666,11 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if ((vendor < -1) || (vendor > 0xffff) || (product < -1) ||
 		(product > 0xffff))
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 
 	pthread_mutex_lock(&usbi_devices.lock);
 	list_for_each_entry_safe(idev, tdev, &usbi_devices.head, dev_list) {
@@ -679,7 +679,7 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 		uint16_t Product;
 
 		pthread_mutex_unlock(&usbi_devices.lock);
-		if ((ret = libusb_parse_device_desc(handle, idev->devid,
+		if ((ret = openusb_parse_device_desc(handle, idev->devid,
 				NULL, 0, &desc)) < 0) {
 
 			usbi_debug(hdl, 2, "get device desc for devid %d "
@@ -692,8 +692,8 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 
 		pthread_mutex_lock(&usbi_devices.lock);
 		
-		Vendor = libusb_le16_to_cpu(desc.idVendor);
-		Product = libusb_le16_to_cpu(desc.idProduct);
+		Vendor = openusb_le16_to_cpu(desc.idVendor);
+		Product = openusb_le16_to_cpu(desc.idProduct);
 		if (((vendor == -1) || (vendor == Vendor)) &&
 			((product == -1) || (product == Product))) {
 
@@ -704,13 +704,13 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 
 	if (*num_devids == 0) {
 		pthread_mutex_unlock(&usbi_devices.lock);
-		return LIBUSB_NULL_LIST;
+		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc((*num_devids) * sizeof (libusb_devid_t));
+	*devids = malloc((*num_devids) * sizeof (openusb_devid_t));
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&usbi_devices.lock);
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	tdevid = *devids;
@@ -721,7 +721,7 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
 	}
 	pthread_mutex_unlock(&usbi_devices.lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 /*
@@ -732,18 +732,18 @@ int32_t libusb_get_devids_by_vendor(libusb_handle_t handle, int32_t vendor,
  * NOTE: application must not pass a non-NULL devids, otherwise memory
  *	will leak
  */
-int32_t libusb_get_devids_by_class(libusb_handle_t handle, int16_t devclass,
-	int16_t subclass, int16_t protocol, libusb_devid_t **devids,
+int32_t openusb_get_devids_by_class(openusb_handle_t handle, int16_t devclass,
+	int16_t subclass, int16_t protocol, openusb_devid_t **devids,
 	uint32_t *num_devids)
 {
 	struct usbi_handle *hdl;
 	struct usbi_device *idev, *tdev;
-	libusb_devid_t *tdevid;
+	openusb_devid_t *tdevid;
 	struct list_head match_list;
 	
 	/* if *devid is not NULL, there will be possible memleaks */
 	if (!num_devids || !devids) /* || *devids)*/ {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	usbi_debug(NULL, 4, "class=%d, subclass=%d, protocol=%d",
@@ -755,11 +755,11 @@ int32_t libusb_get_devids_by_class(libusb_handle_t handle, int16_t devclass,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if ((devclass < -1) || (devclass > 0xff) || (subclass < -1) ||
 		(subclass > 0xff) || (protocol < -1) || (protocol > 0xff))
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 
 	pthread_mutex_lock(&usbi_devices.lock);
 	list_for_each_entry_safe(idev, tdev, &usbi_devices.head, dev_list) {
@@ -781,13 +781,13 @@ int32_t libusb_get_devids_by_class(libusb_handle_t handle, int16_t devclass,
 
 	if (*num_devids == 0) {
 		pthread_mutex_unlock(&usbi_devices.lock);
-		return LIBUSB_NULL_LIST;
+		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc((*num_devids) * sizeof (libusb_devid_t));
+	*devids = malloc((*num_devids) * sizeof (openusb_devid_t));
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&usbi_devices.lock);
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 
 	tdevid = *devids;
@@ -798,10 +798,10 @@ int32_t libusb_get_devids_by_class(libusb_handle_t handle, int16_t devclass,
 	}
 	pthread_mutex_unlock(&usbi_devices.lock);
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
-void libusb_free_devid_list(libusb_devid_t *devids)
+void openusb_free_devid_list(openusb_devid_t *devids)
 {
 	if (devids == NULL)
 		return;
@@ -811,10 +811,10 @@ void libusb_free_devid_list(libusb_devid_t *devids)
 
 #if 0
 /* return -1, when status != 0 or ret < 0 */
-int usbi_control_msg(libusb_dev_handle_t dev, int requesttype, int request,
+int usbi_control_msg(openusb_dev_handle_t dev, int requesttype, int request,
 	int value, int index, char *bytes, int size, int timeout)
 {
-	libusb_ctrl_request_t ctrl;
+	openusb_ctrl_request_t ctrl;
 	int ret;
 	
 	if (size < 0) {
@@ -835,7 +835,7 @@ int usbi_control_msg(libusb_dev_handle_t dev, int requesttype, int request,
 	ctrl.length = size;
 	ctrl.timeout = timeout;
 
-	ret = libusb_ctrl_xfer(dev, 0, 0, &ctrl);
+	ret = openusb_ctrl_xfer(dev, 0, 0, &ctrl);
 
 	if (ret < 0 || ctrl.result.status != 0) {
 		return -1;
@@ -843,7 +843,7 @@ int usbi_control_msg(libusb_dev_handle_t dev, int requesttype, int request,
 	return 0;
 }
 
-int usbi_get_descriptors(libusb_dev_handle_t dev, int type, int index,
+int usbi_get_descriptors(openusb_dev_handle_t dev, int type, int index,
 	char *buf, int size)
 {
 	 return(usb_control_msg(dev,
@@ -854,10 +854,10 @@ int usbi_get_descriptors(libusb_dev_handle_t dev, int type, int index,
 
 /* Descriptor operations 
  * Get raw descriptors of specified type/index 
- * buffer is allocated by libusb, buffer length is returned in buflen
+ * buffer is allocated by openusb, buffer length is returned in buflen
  */
-int32_t libusb_get_raw_desc(libusb_handle_t handle,
-	libusb_devid_t devid, uint8_t type, uint8_t descidx,
+int32_t openusb_get_raw_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t type, uint8_t descidx,
 	uint16_t langid, uint8_t **buffer, uint16_t *buflen)
 {
 	struct usbi_handle *hdl;
@@ -866,11 +866,11 @@ int32_t libusb_get_raw_desc(libusb_handle_t handle,
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	idev = usbi_find_device_by_id(devid);
 	if (!idev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 	
 	/*
 	 * backends should implement get_raw_desc interface. The get_raw_desc
@@ -883,11 +883,11 @@ int32_t libusb_get_raw_desc(libusb_handle_t handle,
 				buffer, buflen);
 		return ret;
 	} else {
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 }
 
-void libusb_free_raw_desc(uint8_t *buffer)
+void openusb_free_raw_desc(uint8_t *buffer)
 {
 	if (buffer == NULL)
 		return;
@@ -895,120 +895,120 @@ void libusb_free_raw_desc(uint8_t *buffer)
 	free(buffer);
 }
 
-int32_t libusb_parse_device_desc(libusb_handle_t handle,
-	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+int32_t openusb_parse_device_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
 	usb_device_desc_t *devdesc)
 {
 	struct usbi_handle *hdl;
 	uint8_t *tmpbuf;
 	uint16_t tmplen;
-	int ret = LIBUSB_SUCCESS;
+	int ret = OPENUSB_SUCCESS;
 	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 	
 	usbi_debug(hdl, 4, "devid = %d", (int)devid);
 
 	if (buffer == NULL) {
 		/* need to get raw desc internally */
-		ret = libusb_get_raw_desc(handle, devid, USB_DESC_TYPE_DEVICE,
+		ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_DEVICE,
 			0, 0, &tmpbuf, &tmplen);
 		if (ret < 0) {
-			usbi_debug(NULL, 1, "fail:%s", libusb_strerror(ret));
+			usbi_debug(NULL, 1, "fail:%s", openusb_strerror(ret));
 			return ret;
 		}
 	} else {
 		if (buflen < USBI_DEVICE_DESC_SIZE)
-			return LIBUSB_BADARG;
+			return OPENUSB_BADARG;
 
 		tmpbuf = buffer;
 		tmplen = buflen;
 	}
 
-	ret = libusb_parse_data("bbwbbbbwwwbbbb", tmpbuf, tmplen, devdesc,
+	ret = openusb_parse_data("bbwbbbbwwwbbbb", tmpbuf, tmplen, devdesc,
 		sizeof (usb_device_desc_t), &count);
 
 	if ((ret == 0) && (count < USBI_DEVICE_DESC_SIZE))
-		ret = LIBUSB_PARSE_ERROR;
+		ret = OPENUSB_PARSE_ERROR;
 
 	if (buffer == NULL)
-		libusb_free_raw_desc(tmpbuf);
+		openusb_free_raw_desc(tmpbuf);
 
 	return ret;
 }
 
-int32_t libusb_parse_config_desc(libusb_handle_t handle,
-	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+int32_t openusb_parse_config_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
 	uint8_t cfgidx, usb_config_desc_t *cfgdesc)
 {
 	struct usbi_handle *hdl;
 	uint8_t *tmpbuf;
 	uint16_t tmplen;
-	int ret = LIBUSB_SUCCESS;
+	int ret = OPENUSB_SUCCESS;
 	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if (buffer == NULL) {
 		/* need to get raw desc internally */
-		ret = libusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
+		ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
 			cfgidx, 0, &tmpbuf, &tmplen);
 		if (ret < 0)
 			return ret;
 	} else {
 		if (buflen < USBI_CONFIG_DESC_SIZE)
-			return LIBUSB_BADARG;
+			return OPENUSB_BADARG;
 
 		tmpbuf = buffer;
 		tmplen = buflen;
 	}
 
-	ret = libusb_parse_data("bbwbbbbb", tmpbuf, tmplen, cfgdesc,
+	ret = openusb_parse_data("bbwbbbbb", tmpbuf, tmplen, cfgdesc,
 		sizeof (usb_config_desc_t), &count);
 
 	if ((ret == 0) && (count < USBI_CONFIG_DESC_SIZE))
-		ret = LIBUSB_PARSE_ERROR;
+		ret = OPENUSB_PARSE_ERROR;
 
 	if (buffer == NULL)
-		libusb_free_raw_desc(tmpbuf);
+		openusb_free_raw_desc(tmpbuf);
 
 	return ret;
 }
 
-int32_t libusb_parse_interface_desc(libusb_handle_t handle,
-	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+int32_t openusb_parse_interface_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
 	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt,
 	usb_interface_desc_t *ifcdesc)
 {
 	struct usbi_handle *hdl;
 	uint8_t *tmpbuf, *sp;
 	uint16_t tmplen;
-	int ret = LIBUSB_PARSE_ERROR;
+	int ret = OPENUSB_PARSE_ERROR;
 	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if (buffer == NULL) {
 		/* need to get raw desc internally */
-		ret = libusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
+		ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
 			cfgidx, 0, &tmpbuf, &tmplen);
 		if (ret < 0)
 			return ret;
 	} else {
 		if (buflen < USBI_CONFIG_DESC_SIZE)
-			return LIBUSB_BADARG;
+			return OPENUSB_BADARG;
 
 		tmpbuf = buffer;
 		tmplen = buflen;
 	}
 	
-	ret = LIBUSB_PARSE_ERROR; /* otherwise, the remaining will return
+	ret = OPENUSB_PARSE_ERROR; /* otherwise, the remaining will return
 				   * success even if it never find a match
 				   * interface
 				   */
@@ -1017,10 +1017,10 @@ int32_t libusb_parse_interface_desc(libusb_handle_t handle,
 		if ((sp[1] == USB_DESC_TYPE_INTERFACE) &&
 			(sp[2] == ifcidx) &&
 			(sp[3] == alt)) {
-			ret = libusb_parse_data("bbbbbbbbb", sp, tmplen,
+			ret = openusb_parse_data("bbbbbbbbb", sp, tmplen,
 				ifcdesc, sizeof (usb_interface_desc_t), &count);
 			if ((ret == 0) && (count < USBI_INTERFACE_DESC_SIZE))
-				ret = LIBUSB_PARSE_ERROR;
+				ret = OPENUSB_PARSE_ERROR;
 			break;
 		}
 
@@ -1028,13 +1028,13 @@ int32_t libusb_parse_interface_desc(libusb_handle_t handle,
 			tmplen -= sp[0];
 			sp += sp[0];
 		} else {
-			ret = LIBUSB_PARSE_ERROR;
+			ret = OPENUSB_PARSE_ERROR;
 			break;
 		}
 	}
 
 	if (buffer == NULL)
-		libusb_free_raw_desc(tmpbuf);
+		openusb_free_raw_desc(tmpbuf);
 
 	return ret;
 }
@@ -1064,34 +1064,34 @@ static uint8_t *usbi_nth_desc(uint8_t *buffer, uint16_t buflen, uint8_t type,
 	return NULL;
 }
 
-int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
-	libusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+int32_t openusb_parse_endpoint_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
 	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt, uint8_t eptidx,
 	usb_endpoint_desc_t *eptdesc)
 {
 	struct usbi_handle *hdl;
 	uint8_t *tmpbuf, *sp1, *sp2;
 	uint16_t tmplen;
-	int ret = LIBUSB_PARSE_ERROR;
+	int ret = OPENUSB_PARSE_ERROR;
 	uint32_t count;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return LIBUSB_INVALID_HANDLE;
+		return OPENUSB_INVALID_HANDLE;
 
 	if (buffer == NULL) {
 		/* need to get raw desc internally */
-		ret = libusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
+		ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
 				cfgidx, 0, &tmpbuf, &tmplen);
 		if (ret < 0) {
 			usbi_debug(hdl, 1, "Get raw fail:%s",
-				libusb_strerror(ret));
+				openusb_strerror(ret));
 			return ret;
 		}
 	} else {
 		if (buflen < USBI_CONFIG_DESC_SIZE) {
 			usbi_debug(hdl, 1, "Invalid buffer length");
-			return LIBUSB_BADARG;
+			return OPENUSB_BADARG;
 		}
 
 		tmpbuf = buffer;
@@ -1106,7 +1106,7 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
 
 			if (eptidx >= sp1[4]) {
 				usbi_debug(hdl, 1, "Invalid endpoint:%d",eptidx);
-				ret = LIBUSB_BADARG;
+				ret = OPENUSB_BADARG;
 				break;
 			}
 
@@ -1115,15 +1115,15 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
 				USB_DESC_TYPE_ENDPOINT, eptidx,
 				USB_DESC_TYPE_INTERFACE)) == NULL) {
 
-				ret = LIBUSB_PARSE_ERROR;
+				ret = OPENUSB_PARSE_ERROR;
 				break;
 			}
 			tmplen -= (sp1 - sp2);
 
-			ret = libusb_parse_data("bbbbwb", sp1, tmplen,
+			ret = openusb_parse_data("bbbbwb", sp1, tmplen,
 				eptdesc, sizeof (usb_endpoint_desc_t), &count);
 			if ((ret == 0) && (count < USBI_ENDPOINT_DESC_SIZE))
-				ret = LIBUSB_PARSE_ERROR;
+				ret = OPENUSB_PARSE_ERROR;
 			break;
 		}
 
@@ -1131,22 +1131,22 @@ int32_t libusb_parse_endpoint_desc(libusb_handle_t handle,
 			tmplen -= sp1[0];
 			sp1 += sp1[0];
 		} else {
-			ret = LIBUSB_PARSE_ERROR;
+			ret = OPENUSB_PARSE_ERROR;
 			break;
 		}
 	}
 
 	if (buffer == NULL)
-		libusb_free_raw_desc(tmpbuf);
+		openusb_free_raw_desc(tmpbuf);
 
 	return ret;
 }
 
 
-int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
+int usbi_get_string(openusb_dev_handle_t dev, int index, int langid, char *buf,
     size_t buflen)
 {
-	libusb_ctrl_request_t ctrl;
+	openusb_ctrl_request_t ctrl;
 	
 	/* if index == 0, then the caller wants to get STRING descript Zero
 	 * for LANGIDs
@@ -1155,7 +1155,7 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
 		usbi_debug(NULL,1,
 			"usbi_get_string(): NULL handle or data");
 
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	memset(&ctrl, 0, sizeof(ctrl));
@@ -1172,7 +1172,7 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
 		index, langid, buflen);
 
 
-	if(libusb_ctrl_xfer(dev, 0, 0, &ctrl) == 0) {
+	if(openusb_ctrl_xfer(dev, 0, 0, &ctrl) == 0) {
 		return ctrl.result.transferred_bytes;
 	} else {
 		return -1;
@@ -1183,7 +1183,7 @@ int usbi_get_string(libusb_dev_handle_t dev, int index, int langid, char *buf,
  * 	> 0 string character numbers 
  *      < 0 errors
  */
-int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
+int usbi_get_string_simple(openusb_dev_handle_t dev, int index, char *buf,
     size_t buflen)
 {
 	char tbuf[256];
@@ -1193,14 +1193,14 @@ int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
 	
 	if (index == 0) {
 		usbi_debug(NULL, 1, "not a valid string index");
-		return (LIBUSB_BADARG);
+		return (OPENUSB_BADARG);
 	}
 
 	if ((buf == NULL) || (buflen == 0)) {
 		usbi_debug(NULL, 1,
 			"usbi_get_string_simple(): NULL handle or data\n");
 
-		return (LIBUSB_BADARG);
+		return (OPENUSB_BADARG);
 	}
 
 	(void) memset(buf, 0, buflen);
@@ -1259,17 +1259,17 @@ int usbi_get_string_simple(libusb_dev_handle_t dev, int index, char *buf,
 
 
 /* TODO */
-int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
-	uint32_t flags, libusb_dev_data_t **data)
+int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
+	uint32_t flags, openusb_dev_data_t **data)
 {
-	libusb_dev_data_t *pdata;
+	openusb_dev_data_t *pdata;
 	struct usbi_handle *plib;
 	struct usbi_device *pdev;
 	uint16_t datalen;
 	uint8_t *descdata;
 	int ret;
 	char strings[256];
-	libusb_dev_handle_t hdev;
+	openusb_dev_handle_t hdev;
 	struct usbi_dev_handle *devh, *dev_found=NULL;
 
 	usbi_debug(NULL, 4, "devid=%d, flags=%d",(int)devid, flags);
@@ -1277,19 +1277,19 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	plib = usbi_find_handle(handle);
 	if(!plib) {
 		usbi_debug(NULL, 1, "Can't find lib handle:%d ",handle);
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	pdev = usbi_find_device_by_id(devid);
 	if(!pdev) {
 		usbi_debug(NULL, 1, "Can't find device:%d ",devid);
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 
-	pdata = malloc(sizeof(libusb_dev_data_t));
+	pdata = malloc(sizeof(openusb_dev_data_t));
 	if(!pdata) {
-		return LIBUSB_NO_RESOURCES;
+		return OPENUSB_NO_RESOURCES;
 	}
 	memset(pdata, 0, sizeof(*pdata));
 
@@ -1306,7 +1306,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	/* since we're not allowed to cache device data internally,we'll have
 	 * to get raw descriptors
 	 */
-	ret = libusb_parse_device_desc(handle, devid, NULL, 0, &pdata->dev_desc);
+	ret = openusb_parse_device_desc(handle, devid, NULL, 0, &pdata->dev_desc);
 	if (ret != 0) {
 		usbi_debug(NULL, 1,"Get device desc fail");
 		free(pdata);
@@ -1322,7 +1322,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 #if 1
 	/* get manufacturer, product, serialnumber strings
 	 * Use 0x0409 US English as default LANGID. To get other
-	 * language strings, use libusb_get_raw_desc instead.
+	 * language strings, use openusb_get_raw_desc instead.
 	 */
 
 	/* find if we have already opened this device
@@ -1344,9 +1344,9 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 	/* not opened yet */
 		usbi_debug(NULL, 4, "device not opened");
 
-		ret = libusb_open_device(handle, devid, 0, &hdev);
+		ret = openusb_open_device(handle, devid, 0, &hdev);
 
-		if (ret == LIBUSB_NOT_SUPPORTED) {
+		if (ret == OPENUSB_NOT_SUPPORTED) {
 		/* this device, like root-hub, don't support get
 		 * descriptors, but it can provide other data. 
 		 * So we still proceed
@@ -1362,7 +1362,7 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 			usbi_debug(NULL, 1, "Fail to open device");
 
 			free(pdata);
-			return LIBUSB_PLATFORM_FAILURE;
+			return OPENUSB_PLATFORM_FAILURE;
 		}
 	} else {
 		usbi_debug(NULL, 4, "device already opened");
@@ -1379,8 +1379,8 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 		} else {
 			if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
 				free(pdata);
-				if (!dev_found) { libusb_close_device(hdev); }
-				return LIBUSB_NO_RESOURCES;
+				if (!dev_found) { openusb_close_device(hdev); }
+				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->manufacturer, strings, strings[0]);
 		}
@@ -1397,8 +1397,8 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 			if ((pdata->product= malloc(strings[0])) == NULL) {
 				free(pdata->manufacturer);
 				free(pdata);
-				if (!dev_found) { libusb_close_device(hdev); }
-				return LIBUSB_NO_RESOURCES;
+				if (!dev_found) { openusb_close_device(hdev); }
+				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->product, strings, strings[0]);
 		}
@@ -1415,20 +1415,20 @@ int32_t libusb_get_device_data(libusb_handle_t handle, libusb_devid_t devid,
 				free(pdata->product);
 				free(pdata->manufacturer);
 				free(pdata);
-				if (!dev_found) { libusb_close_device(hdev); }
-				return LIBUSB_NO_RESOURCES;
+				if (!dev_found) { openusb_close_device(hdev); }
+				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->serialnumber, strings, strings[0]);
 		}
 	}
 	
 	if (!dev_found) {
-		libusb_close_device(hdev);
+		openusb_close_device(hdev);
 	}
 #endif
 
 get_raw:
-	ret = libusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
+	ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
 			pdev->cur_config, 0, &descdata, &datalen);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Get raw config(%d) desc fail",
@@ -1436,7 +1436,7 @@ get_raw:
 		goto fail;
 	}
 
-	ret = libusb_parse_config_desc(handle, devid, descdata, datalen,
+	ret = openusb_parse_config_desc(handle, devid, descdata, datalen,
 			pdev->cur_config, &pdata->cfg_desc);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Parse config fail");
@@ -1446,14 +1446,14 @@ get_raw:
 
 	pdata->raw_cfg_desc = malloc(datalen);
 	if (!pdata->raw_cfg_desc) {
-		libusb_free_raw_desc(descdata);
-		ret = LIBUSB_NO_RESOURCES;
+		openusb_free_raw_desc(descdata);
+		ret = OPENUSB_NO_RESOURCES;
 		goto fail;
 	}
 
 	memcpy(pdata->raw_cfg_desc, descdata, datalen);
 
-	libusb_free_raw_desc(descdata);
+	openusb_free_raw_desc(descdata);
 
 	/* topological path such as 1.2.1 */
 	pdata->bus_path = strdup(pdev->bus_path);
@@ -1476,7 +1476,7 @@ fail:
 	return ret;
 }
 
-void libusb_free_device_data(libusb_dev_data_t *data)
+void openusb_free_device_data(openusb_dev_data_t *data)
 {
 	if (data == NULL)
 		return;
@@ -1502,27 +1502,27 @@ void libusb_free_device_data(libusb_dev_data_t *data)
 	free(data);
 }
 
-int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
-	libusb_busid_t bus, libusb_transfer_type_t type, uint32_t *bytes)
+int32_t openusb_get_max_xfer_size(openusb_handle_t handle,
+	openusb_busid_t bus, openusb_transfer_type_t type, uint32_t *bytes)
 {
 	struct usbi_bus		*ibus;
 	struct usbi_handle	*hdl;
 
 	hdl = usbi_find_handle(handle);
 	if (!hdl)
-		return (LIBUSB_INVALID_HANDLE);
+		return (OPENUSB_INVALID_HANDLE);
 
 	ibus = usbi_find_bus_by_id(bus);
 	if (!ibus)
-		return (LIBUSB_UNKNOWN_DEVICE);
+		return (OPENUSB_UNKNOWN_DEVICE);
 
 	if ((type <= USB_TYPE_ALL) || (type >= USB_TYPE_LAST)) {
 		usbi_debug(hdl,2,"Invalid transfer type");
-		return (LIBUSB_BADARG);
+		return (OPENUSB_BADARG);
 	}
 
 	if (bytes == NULL) {
-		return (LIBUSB_BADARG);
+		return (OPENUSB_BADARG);
 	}
 
 	/* return our value */
@@ -1530,7 +1530,7 @@ int32_t libusb_get_max_xfer_size(libusb_handle_t handle,
 	*bytes = ibus->max_xfer_size[type];
 	pthread_mutex_unlock(&ibus->lock);
 
-	return (LIBUSB_SUCCESS);
+	return (OPENUSB_SUCCESS);
 }
 
 

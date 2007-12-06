@@ -26,7 +26,7 @@ static struct list_head completions = { .prev = &completions,
 
 /* allocate usbi_io, caller must ensure arguments valid */
 struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
-		libusb_request_handle_t req, uint32_t timeout) 
+		openusb_request_handle_t req, uint32_t timeout) 
 {
 	struct usbi_io *io;
 	struct timeval tvc;
@@ -132,8 +132,8 @@ void usbi_free_io(struct usbi_io *io)
 /* Helper routine. To be called from the various ports */
 void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_bytes)
 {
-	libusb_request_result_t *result = NULL;
-	libusb_transfer_type_t type;
+	openusb_request_result_t *result = NULL;
+	openusb_transfer_type_t type;
 	struct usbi_dev_handle *hdev = io->dev;
 
 	pthread_mutex_lock(&io->lock);
@@ -196,7 +196,7 @@ int usbi_async_submit(struct usbi_io *io)
 {
 	struct usbi_dev_handle *dev;
 	int ret;
-	libusb_transfer_type_t type;
+	openusb_transfer_type_t type;
 	
 	pthread_mutex_lock(&io->lock);
 	type = io->req->type;
@@ -205,7 +205,7 @@ int usbi_async_submit(struct usbi_io *io)
   
 	dev = usbi_find_dev_handle(io->req->dev);
 	if (!dev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	if (type == USB_TYPE_CONTROL) {
 
@@ -233,7 +233,7 @@ int usbi_async_submit(struct usbi_io *io)
 		return ret;
 	}
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 /*
@@ -243,7 +243,7 @@ int usbi_async_submit(struct usbi_io *io)
  */
 int usbi_sync_submit(struct usbi_io *io)
 {
-	libusb_transfer_type_t type;
+	openusb_transfer_type_t type;
 	struct usbi_dev_handle *dev;
 	int ret;
 
@@ -264,7 +264,7 @@ int usbi_sync_submit(struct usbi_io *io)
 			ret = dev->idev->ops->bulk_xfer_wait(dev, io);
 			break;
 		default:
-			ret = LIBUSB_BADARG;
+			ret = OPENUSB_BADARG;
 	}
 
 	/* upon success, the return value on Solaris is >= 0 */
@@ -272,7 +272,7 @@ int usbi_sync_submit(struct usbi_io *io)
 		return ret;
 	}
 
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 #if 1
@@ -342,7 +342,7 @@ static void async_callback(struct usbi_io *io, int32_t status)
  * Otherwise, we have to convert backend's ASYNC xfer to SYNC mode in these
  * functions.
  */
-int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req)
+int usbi_io_sync(struct usbi_dev_handle *dev, openusb_request_handle_t req)
 {
 	int io_pattern, ret;
 
@@ -357,7 +357,7 @@ int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req)
 		iop = usbi_alloc_io(dev, req, timeout);
 		io = calloc(sizeof(*io), 1);
 		if (!iop || !io) {
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 		}
 
 		iop->callback = async_callback;
@@ -390,7 +390,7 @@ int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req)
 		return ret;
 	} else {
 
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 }
 
@@ -398,7 +398,7 @@ int usbi_io_sync(struct usbi_dev_handle *dev, libusb_request_handle_t req)
  * Some helper code for async I/O (Control, Interrupt and Bulk)
  */
 struct async_io {
-	libusb_transfer_type_t type;
+	openusb_transfer_type_t type;
 	void *request;
 	void *callback;
 	void *arg;
@@ -458,8 +458,8 @@ int usbi_io_async(struct usbi_io *iop)
 {
 	struct usbi_dev_handle *dev;
 	int io_pattern;
-	int ret = LIBUSB_PLATFORM_FAILURE;
-	libusb_transfer_type_t type;
+	int ret = OPENUSB_PLATFORM_FAILURE;
+	openusb_transfer_type_t type;
 
 	pthread_mutex_lock(&iop->lock);
 	dev = iop->dev;
@@ -467,14 +467,14 @@ int usbi_io_async(struct usbi_io *iop)
 	pthread_mutex_unlock(&iop->lock);
 
 	if (!dev)
-		return LIBUSB_UNKNOWN_DEVICE;
+		return OPENUSB_UNKNOWN_DEVICE;
 
 	pthread_mutex_lock(&dev->idev->bus->lock);
 	io_pattern = dev->idev->bus->ops->io_pattern;
 	pthread_mutex_unlock(&dev->idev->bus->lock);
 	
 	if (type < USB_TYPE_CONTROL || type > USB_TYPE_ISOCHRONOUS) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
 	if (io_pattern == PATTERN_ASYNC || io_pattern == PATTERN_BOTH) {
@@ -501,25 +501,25 @@ int usbi_io_async(struct usbi_io *iop)
 		ret = pthread_create(&thrid, NULL, io_submit, (void *)iop);
 
 		if (ret < 0) {
-			return LIBUSB_PLATFORM_FAILURE;
+			return OPENUSB_PLATFORM_FAILURE;
 		}
 
-		return LIBUSB_SUCCESS;
+		return OPENUSB_SUCCESS;
 	} else {
-		return LIBUSB_PLATFORM_FAILURE;
+		return OPENUSB_PLATFORM_FAILURE;
 	}
 }
 
-libusb_request_handle_t usbi_alloc_request_handle(void)
+openusb_request_handle_t usbi_alloc_request_handle(void)
 {
-	libusb_request_handle_t reqp;
+	openusb_request_handle_t reqp;
 
-	reqp = malloc(sizeof(struct libusb_request_handle));
+	reqp = malloc(sizeof(struct openusb_request_handle));
 	if (reqp == NULL) {
 		return NULL;
 	}
 
-	memset(reqp, 0, sizeof(struct libusb_request_handle));
+	memset(reqp, 0, sizeof(struct openusb_request_handle));
 	return reqp;
 }
 

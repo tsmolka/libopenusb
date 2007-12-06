@@ -14,11 +14,11 @@
 
 #include "usbi.h"
 
-int usbi_get_descriptor(libusb_dev_handle_t dev, unsigned char type,
+int usbi_get_descriptor(openusb_dev_handle_t dev, unsigned char type,
 	unsigned char index, void *buf, unsigned int buflen)
 {
 	int ret;
-	struct libusb_ctrl_request ctrl = {
+	struct openusb_ctrl_request ctrl = {
 		.setup.bmRequestType = USB_ENDPOINT_IN,
 		.setup.bRequest = USB_REQ_GET_DESCRIPTOR,
 		.setup.wValue = (type << 8) + index,
@@ -29,19 +29,19 @@ int usbi_get_descriptor(libusb_dev_handle_t dev, unsigned char type,
 	};
 
 	if (!buf || buflen == 0) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 
-	ret = libusb_ctrl_xfer(dev,0,0,&ctrl);
-	if (ret < 0 || ctrl.result.status != LIBUSB_SUCCESS) {
+	ret = openusb_ctrl_xfer(dev,0,0,&ctrl);
+	if (ret < 0 || ctrl.result.status != OPENUSB_SUCCESS) {
 		return -1;
 	}
 
 	return(ctrl.result.transferred_bytes);
 }
 
-/* FIXME: Should we return LIBUSB_NO_RESOURCES on buffer overflow? */
-int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
+/* FIXME: Should we return OPENUSB_NO_RESOURCES on buffer overflow? */
+int openusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 	void *dest, uint32_t destlen, uint32_t *count)
 {
 	unsigned char *sp = source, *dp = dest;
@@ -50,7 +50,7 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 	char *cp;
 
 	if (!format || !source || !dest || !count) {
-		return LIBUSB_BADARG;
+		return OPENUSB_BADARG;
 	}
 	for (cp = format; *cp; cp++) {
 		switch (*cp) {
@@ -59,14 +59,14 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 			break;
 		case 'b':   /* 8-bit byte */
 			if (sourcelen < 1 || destlen < 1)
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 
 			*dp++ = *sp++;
 			destlen--; sourcelen--;
 			break;
 		case 'w': /* 16-bit word, convert from little endian to CPU */
 			if (sourcelen < 2 || destlen < 2)
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 
 			w = (sp[1] << 8) | sp[0]; sp += 2;
 
@@ -77,7 +77,7 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 			break;
 		case 'd': /* 32-bit dword, convert from little endian to CPU */
 			if (sourcelen < 4 || destlen < 4)
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 
 			d = (sp[3] << 24) | (sp[2] << 16) |
 				(sp[1] << 8) | sp[0]; sp += 4;
@@ -93,7 +93,7 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 			 */
 		case 'W':   /* 16-bit word, keep CPU endianess */
 			if (sourcelen < 2 || destlen < 2)
-			return LIBUSB_NO_RESOURCES;
+			return OPENUSB_NO_RESOURCES;
 
 			/* Align to word boundary */
 			dp += ((unsigned long)dp & 1);
@@ -102,7 +102,7 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 			break;
 		case 'D':  /* 32-bit dword, keep CPU endianess */
 			if (sourcelen < 4 || destlen < 4)
-				return LIBUSB_NO_RESOURCES;
+				return OPENUSB_NO_RESOURCES;
 
 			/* Align to dword boundary */
 			dp += ((unsigned long)dp & 2);
@@ -113,7 +113,7 @@ int libusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 	}
 
 	*count = sp - source;
-	return LIBUSB_SUCCESS;
+	return OPENUSB_SUCCESS;
 }
 
 /*
@@ -140,12 +140,12 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 	int extra_len;
 
 	if (!buf || buflen <= 0){
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 
 	usbi_debug(NULL, 4, "parse ep buflen = %d, buf = %p", buflen, buf);
 
-	libusb_parse_data("bb", buf, buflen, &header, sizeof(header), &count);
+	openusb_parse_data("bb", buf, buflen, &header, sizeof(header), &count);
 
 	/*
 	 * Everything should be fine being passed into here,
@@ -173,10 +173,10 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 	}
 
 	if (header.bLength >= USBI_ENDPOINT_AUDIO_DESC_SIZE)
-		libusb_parse_data("bbbbwbbb", buf, buflen, &ep->desc,
+		openusb_parse_data("bbbbwbbb", buf, buflen, &ep->desc,
 				sizeof(ep->desc), &count);
 	else if (header.bLength >= USBI_ENDPOINT_DESC_SIZE)
-		libusb_parse_data("bbbbwb", buf, buflen, &ep->desc,
+		openusb_parse_data("bbbbwb", buf, buflen, &ep->desc,
 				sizeof(ep->desc), &count);
 	/* FIXME: Print error if descriptor is wrong size */
 
@@ -195,7 +195,7 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 	extra = (char *)buf;	
 	extra_len = 0;
 	while (buflen >= USBI_DESC_HEADER_SIZE) {
-		libusb_parse_data("bb", buf, buflen, &header,
+		openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 		if (header.bLength < USBI_DESC_HEADER_SIZE) {
@@ -282,7 +282,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 	int extra_len;
 
 	if (!buf || buflen <= 0){
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 
 	if (buf[1] != USB_DESC_TYPE_INTERFACE) {
@@ -308,13 +308,13 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 
 	while (buflen >= USBI_INTERFACE_DESC_SIZE) {
 
-		libusb_parse_data("bb", buf, buflen, &header,
+		openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 		as = intf->altsettings + intf->num_altsettings;
 		intf->num_altsettings++;
 
-		libusb_parse_data("bbbbbbbbb", buf, buflen, &as->desc,
+		openusb_parse_data("bbbbbbbbb", buf, buflen, &as->desc,
 				sizeof(as->desc), &count);
 		
 		usbi_debug(NULL, 4, "interface: num = %d, alt = %d, altno=%d",
@@ -334,7 +334,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		while (buflen >= USBI_DESC_HEADER_SIZE) {
 			uint8_t type;
 
-			libusb_parse_data("bb", buf, buflen, &header, 
+			openusb_parse_data("bb", buf, buflen, &header, 
 				sizeof(header), &count);
 
 			if (header.bLength < USBI_DESC_HEADER_SIZE) {
@@ -386,7 +386,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		}
 
 		/* Did we hit an unexpected descriptor? */
-		libusb_parse_data("bb", buf, buflen, &header,
+		openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 		if (buflen >= USBI_DESC_HEADER_SIZE &&
@@ -422,7 +422,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		as->num_endpoints = as->desc.bNumEndpoints;
 
 		for (i = 0; i < as->num_endpoints; i++) {
-			libusb_parse_data("bb", buf, buflen, &header,
+			openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 			if (header.bLength > buflen) {
@@ -459,7 +459,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		}
 
 		/* We check to see if it's an alternate to this one */
-		libusb_parse_data("bb", buf, buflen, &header,
+		openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 		alt_num = buf[3];
@@ -485,13 +485,13 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 	int numskipped = 0;
 	
 	if (!buf || buflen <= 0){
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 
-	libusb_parse_data("bb", buf, buflen, &header, sizeof(header), &count);
+	openusb_parse_data("bb", buf, buflen, &header, sizeof(header), &count);
 
 	/* parse configuration descriptor */
-	libusb_parse_data("bbwbbbbb", buf, buflen, &cfg->desc,
+	openusb_parse_data("bbwbbbbb", buf, buflen, &cfg->desc,
 			sizeof(cfg->desc), &count);
 
 	if (cfg->desc.bNumInterfaces > USBI_MAXINTERFACES) {
@@ -526,7 +526,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 	while (buflen >= USBI_DESC_HEADER_SIZE) {
 		uint8_t type;
 
-		libusb_parse_data("bb", buf, buflen, &header,
+		openusb_parse_data("bb", buf, buflen, &header,
 				sizeof(header), &count);
 
 		if (header.bLength > buflen ||
@@ -570,7 +570,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 		if (cfg->extra == NULL) {
 			/* free something */
 
-			return LIBUSB_PARSE_ERROR;
+			return OPENUSB_PARSE_ERROR;
 		}
 
 		memcpy(cfg->extra, extra, extra_len);
@@ -690,13 +690,13 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 	ret = usbi_get_descriptor(hdev->handle, USB_DESC_TYPE_DEVICE,
 		0, devbuf, USBI_DEVICE_DESC_SIZE);
 
-	ret = libusb_parse_data("bbwbbbbwwwbbbb", (uint8_t *)devbuf,
+	ret = openusb_parse_data("bbwbbbbwwwbbbb", (uint8_t *)devbuf,
 		USBI_DEVICE_DESC_SIZE, &dev->desc.device,
 		sizeof(dev->desc.device), &count);
 
 	if (ret < 0 || count < USBI_DEVICE_DESC_SIZE) {
 		usbi_debug(NULL, 4, "fail to parse device descr");
-		return LIBUSB_PARSE_ERROR;
+		return OPENUSB_PARSE_ERROR;
 	}
 
 	dev->desc.device_raw.data = calloc(count, 1);
@@ -759,7 +759,7 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 			goto err;
 		}
 
-		libusb_parse_data("bbw", buf, 8, &cfg_desc,
+		openusb_parse_data("bbw", buf, 8, &cfg_desc,
 			sizeof(cfg_desc), &count);
 
 		cfgr->len = cfg_desc.wTotalLength;

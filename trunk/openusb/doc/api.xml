@@ -13,6 +13,8 @@
   <chapter id="api-types">
     <title>Data Types</title>
 
-    <para>libusb tries to use standard C types wherever possible to avoid complicating things. Where standard C types are insufficient, libusb uses abstracted types to ensure portability and forward compatibility.</para>
+    <para>Openusb tries to use standard C types wherever possible to avoid complicating things.
+    Where standard C types are insufficient, libopenusb uses abstracted types to ensure portability
+    and forward compatibility.</para>
   </chapter>
 
