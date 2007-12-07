@@ -29,7 +29,7 @@ ifdef([AC_DIVERSION_NOTICE], [AC_DIVERT_PUSH(AC_DIVERSION_NOTICE)],
 #
 LIBOPENUSB_MAJOR_VERSION=1
 LIBOPENUSB_MINOR_VERSION=0
-LIBOPENUSB_MICRO_VERSION=0beta
+LIBOPENUSB_MICRO_VERSION=0
 LIBOPENUSB_INTERFACE_AGE=0
 LIBOPENUSB_BINARY_AGE=0
 LIBOPENUSB_VERSION=$LIBOPENUSB_MAJOR_VERSION.$LIBOPENUSB_MINOR_VERSION.$LIBOPENUSB_MICRO_VERSION
@@ -74,9 +74,6 @@ AC_DEFINE_UNQUOTED(LIBOPENUSB_BINARY_AGE, $LIBOPENUSB_BINARY_AGE)
 dnl Initialize libtool
 AM_PROG_LIBTOOL
 
-sed -e 's#^library_names_spec.*#library_names_spec="\\\${libname}\\\${shared_ext}\\\$versuffix \\\${libname}\\\${shared_ext}\\\$major \\\$libname\\\${shared_ext}"#g' -e 's#^soname_spec.*#soname_spec="\\\${libname}\\\${shared_ext}\\\$major"#g' libtool >libtool.new
-
-mv libtool.new libtool
 
 dnl Initialize maintainer mode
 AM_MAINTAINER_MODE
