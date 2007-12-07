@@ -64,7 +64,6 @@ include_HEADERS = libopenusb.h
 libopenusb_la_LIBADD = -ldl
 libopenusb_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
-	-release $(LT_RELEASE) \
 	-export-dynamic \
 	-lpthread \
 	$(LDADDS)
