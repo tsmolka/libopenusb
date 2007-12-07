@@ -46,6 +46,7 @@ AC_SUBST(LIBOPENUSB_BINARY_AGE)
 # libtool versioning
 # JR: Add support for MICRO_VERSION to be alpha-numeric. This will make
 # lt_current use the numeric part of MICRO_VERSION
+# see libtool manual section 6.3 for version rules.
 
 LIBOPENUSB_MICRO_VERSION_NUM=`echo $LIBOPENUSB_MICRO_VERSION | sed 's/[[a-zA-Z]]//g'`
 LT_RELEASE=$LIBOPENUSB_MAJOR_VERSION.$LIBOPENUSB_MINOR_VERSION
