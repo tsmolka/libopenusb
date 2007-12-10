@@ -1,5 +1,5 @@
-#ifndef __LIBOPENUSB_H__
-#define __LIBOPENUSB_H__
+#ifndef __OPENUSB_H__
+#define __OPENUSB_H__
 
 /*
  * Prototypes, structure definitions and macros.
@@ -1235,5 +1235,5 @@ int32_t openusb_stop(openusb_multi_request_handle_t handle);
 }
 #endif
 
-#endif /* __LIBOPENUSB_H__ */
+#endif /* __OPENUSB_H__ */
 

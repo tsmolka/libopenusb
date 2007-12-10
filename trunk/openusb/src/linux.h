@@ -20,7 +20,7 @@
 #include <dbus/dbus-glib.h>
 #include <libhal.h>
 
-#include "libopenusb.h"
+#include "openusb.h"
 #include "usbi.h"
 
 /*

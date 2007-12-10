@@ -222,7 +222,7 @@ AC_OUTPUT([
   src/Makefile
   tests/Makefile
   examples/Makefile
-  src/libopenusb.h
+  src/openusb.h
   openusb.spec
   openusb-config
   README

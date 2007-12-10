@@ -11,7 +11,7 @@
 
 #include <libdevinfo.h>
 #include <pthread.h>
-#include "libopenusb.h"
+#include "openusb.h"
 #include "usbi.h"
 
 #define	APID_NAMELEN		32 /* max len in cfgadm display */
