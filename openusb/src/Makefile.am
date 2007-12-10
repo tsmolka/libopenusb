@@ -59,7 +59,7 @@ endif
 libopenusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
 libopenusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/usb\"
 
-include_HEADERS = libopenusb.h
+include_HEADERS = openusb.h
 
 libopenusb_la_LIBADD = -ldl
 libopenusb_la_LDFLAGS = \

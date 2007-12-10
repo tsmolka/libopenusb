@@ -10,7 +10,7 @@
 #ifndef _USBI_H_
 #define _USBI_H_
 
-#include "libopenusb.h"
+#include "openusb.h"
 
 #include "list.h"
 #include "descr.h"
