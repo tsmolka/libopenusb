@@ -14,7 +14,7 @@ libopenusb_la_CFLAGS =
 
 lib_LTLIBRARIES = libopenusb.la
 
-usblibdir = $(libdir)/usb
+usblibdir = $(libdir)/openusb_backend
 
 if LINUX_API
 usblib_LTLIBRARIES = linux.la
@@ -57,7 +57,7 @@ libopenusb_la_CFLAGS += -I/usr/sfw/include
 endif
 
 libopenusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
-libopenusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/usb\"
+libopenusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/openusb_backend\"
 
 include_HEADERS = openusb.h
 
