@@ -1,19 +1,21 @@
 General Information
 ===================
 
-Openusb is an enhanced version of the openusb 0.1.* library which allows
-userspace application access to USB devices. The development work is still
-in progress. And the documentation has not been updated yet.
+Openusb is an enhanced version of the libusb 0.1.* library which allows
+userspace application access to USB devices. Documents can be found in
+the project's website.
 
 The official web site is:
   http://openusb.sourceforge.net/
 
 Installation
 ============
-
-We haven't tested install yet. Please avoid running "make install" at this
-moment. Use "LIBUSB_DRIVER_PATH" environment variable to specify the path
-of *.so which should be under the src/.libs directory.
+If you run "make install", the binaries will be installed to default path
+- /usr/local/lib. You may change this default path to a desired one with
+--prefix=path when running ./configure.
+If openusb backend is not in default path, use "OPENUSB_BACKEND_PATH"
+environment variable to specify the path of *.so to the install path or
+to the compile output path which should be under the src/.libs directory.
 
 How to report bugs
 ==================
