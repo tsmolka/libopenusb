@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <libopenusb.h>
+#include <openusb.h>
 
 /*
  * This test program depends heavily on EZUSB FX2. Some of the
