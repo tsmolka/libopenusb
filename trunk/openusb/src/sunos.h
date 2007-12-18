@@ -28,15 +28,16 @@ struct usb_dev_info {
 	struct usbi_dev_handle *claimed_interfaces[USBI_MAXINTERFACES];
 };
 
-struct usbk_isoc_pkt_header {
-	ushort_t isoc_pkts_count; /* pkt count of an isoc req */
-	uint_t isoc_pkts_length; /* length of all pkts */
-};
 
 struct usbk_isoc_pkt_descr {
 	ushort_t isoc_pkt_length;
 	ushort_t isoc_pkt_actual_length;
 	uint_t isoc_pkt_status;
+};
+
+struct usbk_isoc_pkt_header {
+	int	isoc_pkts_count; /* pkt count of an isoc req */
+	struct usbk_isoc_pkt_descr isoc_pkts_dsc[1]; /* length of all pkts */
 };
 
 struct usb_isoc_io {

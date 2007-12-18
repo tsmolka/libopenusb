@@ -1090,7 +1090,7 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 	}
 
 	if ((n = di_prop_lookup_ints(DDI_DEV_T_ANY, node,
-	    "usb-port-number", &nport_prop)) > 1) {
+	    "usb-number-ports", &nport_prop)) > 1) {
 		usbi_debug(NULL, 1, "invalid usb-port-number");
 		free(idev);
 
@@ -2203,126 +2203,6 @@ solaris_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	return (ret);
 }
 
-#if 0
-static void *
-isoc_read(void *arg)
-{
-	int ret;
-	struct usbi_dev_handle *hdev;
-	uint8_t ep_addr, ep_index;
-	struct usbi_io *io = (struct usbi_io *)arg, *newio;
-	struct openusb_isoc_packet *pkt;
-	int i, err_count = 0;
-	char *p;
-	struct usbk_isoc_pkt_descr *pkt_descr;
-	openusb_isoc_request_t *isoc;
-
-	isoc = io->phandle->req.isoc;
-	usbi_debug(NULL, 3, "isoc_read thread started, flag=%d, err_count=%d",
-	    isoc->flags, err_count);
-
-	ep_addr = io->endpoint;
-	ep_index = usb_ep_index(ep_addr);
-	hdev = io->dev;
-
-	while ((isoc->flags == 0) && (err_count < 10)) {
-		/* isoc in not stopped */
-		usbi_debug(NULL, 3, "isoc reading ...");
-		char *buf;
-
-		if ((buf = malloc(io->isoc_io.buflen)) == NULL) {
-			usbi_debug(NULL, 1, "malloc buf failed");
-			err_count++;
-
-			continue;
-		}
-
-		/*if ((newio = usbi_alloc_io(hdev->handle, io->type,
-		    io->endpoint, io->timeout)) == NULL) {
-		 */
-		if ((newio = usbi_alloc_io(hdev, io->phandle, 0)) == NULL) {
-			usbi_debug(NULL, 1, "malloc io failed");
-			free(buf);
-			err_count++;
-
-			continue;
-		}
-
-#if 1
-		memcpy(&newio->isoc, &io->isoc, sizeof (io->isoc));
-		newio->isoc.results = NULL;
-		newio->isoc_io.buflen = io->isoc_io.buflen;
-		newio->isoc_io.buf = buf;
-		memset(buf, 0, newio->isoc_io.buflen);
-#endif
-		newio->isoc.results = (struct openusb_isoc_result *)malloc(
-		    newio->isoc.num_packets *
-		    sizeof (struct openusb_isoc_result));
-		if (newio->isoc.results == NULL) {
-			usbi_debug(NULL, 1, "malloc isoc results failed");
-			free(buf);
-			usbi_free_io(newio);
-			err_count++;
-
-			continue;
-		}
-
-		ret = usb_do_io(hdev->ep_fd[ep_index],
-		    hdev->ep_status_fd[ep_index], (char *)newio->isoc_io.buf,
-		    newio->isoc_io.buflen, READ);
-
-		if (ret < 0) {
-			usbi_debug(NULL, 1, "isoc read %d bytes failed",
-			    newio->isoc_io.buflen);
-			usbi_free_io(newio);
-			free(buf);
-			err_count++;
-
-			continue;
-		} else {
-			usbi_debug(NULL, 3, "isoc read %d bytes", ret);
-
-			pkt = newio->isoc.request->packets;
-			p = ((char *)newio->isoc_io.buf) +
-			    newio->isoc.num_packets *
-			    sizeof (struct usbk_isoc_pkt_descr);
-			for (i = 0; i < newio->isoc.num_packets; i++) {
-				memcpy(pkt[i].buf, (void *)p, pkt[i].buflen);
-			}
-
-			pkt_descr =
-			    (struct usbk_isoc_pkt_descr *)newio->isoc_io.buf;
-			for (i = 0; i < newio->isoc.num_packets; i++) {
-				newio->isoc.results[i].status =
-				    pkt_descr[i].isoc_pkt_status;
-				newio->isoc.results[i].transferred_bytes =
-				    pkt_descr[i].isoc_pkt_actual_length;
-			}
-			pthread_mutex_lock(&cb_io_lock);
-			list_add(&newio->list, &cb_ios);
-			pthread_cond_signal(&cb_io_cond);
-			pthread_mutex_unlock(&cb_io_lock);
-
-			err_count = 0;
-		}
-	}
-
-	/* XXX: need to free buf when closing ep */
-	if (io->isoc.request->flags == 1) {
-		/* isoc in stopped by caller */
-		usbi_free_io(io);
-		(void) close(hdev->ep_fd[ep_index]);
-		(void) close(hdev->ep_status_fd[ep_index]);
-		hdev->ep_fd[ep_index] = -1;
-		hdev->ep_status_fd[ep_index] = -1;
-	} else {
-		/* too many continuous errors, notify caller */
-		usbi_io_complete(io, OPENUSB_PLATFORM_FAILURE, 0);
-	}
-	return (NULL);
-}
-#endif
-
 
 /*
  * isoc data = isoc pkt header + isoc pkt desc + isoc pkt desc ...+ data
@@ -2388,11 +2268,11 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 	if (ep_addr & USB_ENDPOINT_DIR_MASK) {
 	/* IN pipe, only header length + desc length */
-		len = sizeof (struct usbk_isoc_pkt_header) +
+		len = sizeof (int) +
 		    sizeof (struct usbk_isoc_pkt_descr) * n_pkt;
 	} else {
 	/* OUT pipe, len = header length + desc length + data length */
-		len = pkts_len + sizeof (struct usbk_isoc_pkt_header)
+		len = pkts_len + sizeof (int)
 		    + sizeof (struct usbk_isoc_pkt_descr) * n_pkt;
 	}
 
@@ -2411,10 +2291,9 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	/* isoc packet header */
 	header = (struct usbk_isoc_pkt_header *)buf;
 	header->isoc_pkts_count = n_pkt;
-	header->isoc_pkts_length = pkts_len;
 
 	/* isoc packet descs */
-	p = buf + sizeof (struct usbk_isoc_pkt_header);
+	p = buf + sizeof (int);
 	pkt_descr = (struct usbk_isoc_pkt_descr *)p;
 
 	/* data */
@@ -2446,16 +2325,53 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		hdev->priv->eps[ep_index].statfd, (char *)buf, len, WRITE,
 		&isoc->isoc_status);
 
-
-	free(buf);
-
 	if (ret < 0) {
 		usbi_debug(hdev->lib_hdl, 1, "write isoc ep failed %d TID=%d",
 			ret, pthread_self());
 
 		pthread_mutex_unlock(&hdev->lock);
+		free(buf);
+
 		return (OPENUSB_PLATFORM_FAILURE);
 	}
+
+	/* Read an OUT request's packets status */
+	if ((ep_addr & USB_ENDPOINT_DIR_MASK) == 0) {
+		ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
+			hdev->priv->eps[ep_index].statfd, (char *)buf,
+			sizeof (struct usbk_isoc_pkt_descr) * n_pkt,
+			READ, &isoc->isoc_status);
+
+		if (ret < 0) {
+			usbi_debug(hdev->lib_hdl, 1,
+				"get status failed %d TID=%d",
+				ret, pthread_self());
+
+			pthread_mutex_unlock(&hdev->lock);
+
+			free(buf);
+
+			return (OPENUSB_PLATFORM_FAILURE);
+
+		}
+
+		pkt_descr = (struct usbk_isoc_pkt_descr *)buf;
+
+		packet = isoc->pkts.packets;
+
+		p = pkt_descr; 
+
+		for(pkt = 0; pkt < n_pkt; pkt++) {
+			usbi_debug(hdev->lib_hdl, 4, "packet: %d, len: %d",
+				pkt, packet[pkt].length);
+			isoc->isoc_results[pkt].status = 
+				pkt_descr[pkt].isoc_pkt_status;
+			isoc->isoc_results[pkt].transferred_bytes = 
+				pkt_descr[pkt].isoc_pkt_actual_length;
+		}
+	}
+
+	free(buf);
 
 	if (ep_addr & USB_ENDPOINT_DIR_MASK) {
 
@@ -2474,12 +2390,10 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		/* packet descr at beginning */
 		pkt_descr = (struct usbk_isoc_pkt_descr *)buf;
 
-		/*pthread_mutex_lock(&hdev->lock);*/
 		ret = usb_do_io(hdev->priv->eps[ep_index].datafd, 
 			hdev->priv->eps[ep_index].statfd,
 			(char *)buf, len, READ, &isoc->isoc_status);
 
-		/*pthread_mutex_unlock(&hdev->lock);*/
 
 		if (ret < 0) {
 			usbi_debug(hdev->lib_hdl, 1, "read isoc ep failed %d",
@@ -2514,33 +2428,8 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		(void) close(hdev->priv->eps[ep_index].datafd);
 		(void) close(hdev->priv->eps[ep_index].statfd);
 
-//		pthread_mutex_lock(&hdev->lock);
 		hdev->priv->eps[ep_index].datafd = -1;
 		hdev->priv->eps[ep_index].statfd = -1;
-//		pthread_mutex_unlock(&hdev->lock);
-
-#if 0
-		pthread_t thrid;
-
-		len = sizeof (struct usbk_isoc_pkt_descr) * n_pkt + pkts_len;
-		io->isoc.num_packets = n_pkt;
-		io->isoc_io.buf = NULL;
-		io->isoc_io.buflen = len;
-
-		ret = pthread_create(&thrid, NULL, isoc_read, (void *)io);
-		if (ret < 0) {
-			usbi_debug(NULL, 1, 
-				"create isoc read thread failed ret=%d", ret);
-
-			/* close the endpoint so we stop polling now */
-			(void) close(hdev->ep_fd[ep_index]);
-			(void) close(hdev->ep_status_fd[ep_index]);
-			hdev->ep_fd[ep_index] = -1;
-			hdev->ep_status_fd[ep_index] = -1;
-
-			return (OPENUSB_PLATFORM_FAILURE);
-		}
-#endif
 	}
 
 	pthread_mutex_unlock(&hdev->lock);
