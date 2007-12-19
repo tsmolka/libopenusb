@@ -1863,7 +1863,9 @@ usb_do_io(int fd, int stat_fd, char *data, size_t size, int flag, int *status)
 			*status = ugen_lc2libstat(error);
 		}
 
-		return (-save_errno);
+		/* The errno is not dependable in a muli-thread application */
+		return (*status);
+
 	} else if (status) {
 		*status = 0;
 	}
@@ -1874,89 +1876,7 @@ usb_do_io(int fd, int stat_fd, char *data, size_t size, int flag, int *status)
 	return (ret);
 }
 
-static int
-solaris_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
-{
-	int ret=-1;
-	unsigned char data[USBI_CONTROL_SETUP_LEN];
-	openusb_ctrl_request_t *ctrl;
 
-	ctrl = io->req->req.ctrl;
-	data[0] = ctrl->setup.bmRequestType;
-	data[1] = ctrl->setup.bRequest;
-	data[2] = ctrl->setup.wValue & 0xFF;
-	data[3] = (ctrl->setup.wValue >> 8) & 0xFF;
-	data[4] = ctrl->setup.wIndex & 0xFF;
-	data[5] = (ctrl->setup.wIndex >> 8) & 0xFF;
-	data[6] = ctrl->length & 0xFF;
-	data[7] = (ctrl->length >> 8) & 0xFF;
-
-	usbi_debug(hdev->lib_hdl, 4, "ep0:data%d ,stat%d",
-		hdev->priv->eps[0].datafd,
-		hdev->priv->eps[0].statfd);
-
-	if (hdev->priv->eps[0].datafd == -1) {
-		usbi_debug(hdev->lib_hdl, 1, "ep0 not opened");
-
-		return (OPENUSB_NOACCESS);
-	}
-
-	if ((data[0] & USB_REQ_DIR_MASK) == USB_REQ_DEV_TO_HOST) {
-		ret = usb_do_io(hdev->priv->eps[0].datafd,
-		    hdev->priv->eps[0].statfd, (char *)data,
-		    USBI_CONTROL_SETUP_LEN, WRITE,
-		    &ctrl->result.status);
-	} else {
-		char *buf;
-
-		if ((buf = malloc(ctrl->length+ USBI_CONTROL_SETUP_LEN)) ==
-		    NULL) {
-			usbi_debug(hdev->lib_hdl, 1,
-				"alloc for ctrl out failed");
-
-			return (OPENUSB_NO_RESOURCES);
-		}
-		(void) memcpy(buf, data, USBI_CONTROL_SETUP_LEN);
-		(void) memcpy(buf + USBI_CONTROL_SETUP_LEN, ctrl->payload,
-		    ctrl->length);
-
-		ret = usb_do_io(hdev->priv->eps[0].datafd,
-			hdev->priv->eps[0].statfd, buf,
-			ctrl->length + USBI_CONTROL_SETUP_LEN, WRITE,
-			&ctrl->result.status);
-
-		free(buf);
-	}
-
-	if (ret < USBI_CONTROL_SETUP_LEN) {
-		usbi_debug(hdev->lib_hdl, 1, "error sending control msg: %d",
-			ret);
-		
-		ctrl->result.status = ret;
-		ctrl->result.transferred_bytes = 0;
-		io->status = USBI_IO_COMPLETED;
-		return (OPENUSB_PLATFORM_FAILURE);
-	}
-
-	ret -= USBI_CONTROL_SETUP_LEN;
-
-	/* Read the remaining bytes for IN request */
-	if ((ctrl->length) && ((data[0] & USB_REQ_DIR_MASK) ==
-	    USB_REQ_DEV_TO_HOST)) {
-		ret = usb_do_io(hdev->priv->eps[0].datafd,
-			hdev->priv->eps[0].statfd, (char *)ctrl->payload,
-			ctrl->length, READ,
-			&ctrl->result.status);
-	}
-
-	usbi_debug(NULL, 4, "send ctrl bytes %d", ret);
-	io->status = USBI_IO_COMPLETED;
-	if (ret >= 0) {
-		ctrl->result.transferred_bytes = ret;
-	}
-
-	return (ret);
-}
 
 static int
 usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
@@ -2101,6 +2021,150 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 	return (0);	
 }
 
+/*
+ * submit control request on default endpoint 0
+ */
+static int
+solaris_submit_ctrl_on_default(struct usbi_dev_handle *hdev, struct usbi_io *io)
+{
+	int ret=-1;
+	unsigned char data[USBI_CONTROL_SETUP_LEN];
+	openusb_ctrl_request_t *ctrl;
+
+	ctrl = io->req->req.ctrl;
+	data[0] = ctrl->setup.bmRequestType;
+	data[1] = ctrl->setup.bRequest;
+	data[2] = ctrl->setup.wValue & 0xFF;
+	data[3] = (ctrl->setup.wValue >> 8) & 0xFF;
+	data[4] = ctrl->setup.wIndex & 0xFF;
+	data[5] = (ctrl->setup.wIndex >> 8) & 0xFF;
+	data[6] = ctrl->length & 0xFF;
+	data[7] = (ctrl->length >> 8) & 0xFF;
+
+	usbi_debug(hdev->lib_hdl, 4, "ep0:data%d ,stat%d",
+		hdev->priv->eps[0].datafd,
+		hdev->priv->eps[0].statfd);
+
+	if (hdev->priv->eps[0].datafd == -1) {
+		usbi_debug(hdev->lib_hdl, 1, "ep0 not opened");
+
+		return (OPENUSB_NOACCESS);
+	}
+
+	if ((data[0] & USB_REQ_DIR_MASK) == USB_REQ_DEV_TO_HOST) {
+		ret = usb_do_io(hdev->priv->eps[0].datafd,
+		    hdev->priv->eps[0].statfd, (char *)data,
+		    USBI_CONTROL_SETUP_LEN, WRITE,
+		    &ctrl->result.status);
+	} else {
+		char *buf;
+
+		if ((buf = malloc(ctrl->length+ USBI_CONTROL_SETUP_LEN)) ==
+		    NULL) {
+			usbi_debug(hdev->lib_hdl, 1,
+				"alloc for ctrl out failed");
+
+			return (OPENUSB_NO_RESOURCES);
+		}
+		(void) memcpy(buf, data, USBI_CONTROL_SETUP_LEN);
+		(void) memcpy(buf + USBI_CONTROL_SETUP_LEN, ctrl->payload,
+		    ctrl->length);
+
+		ret = usb_do_io(hdev->priv->eps[0].datafd,
+			hdev->priv->eps[0].statfd, buf,
+			ctrl->length + USBI_CONTROL_SETUP_LEN, WRITE,
+			&ctrl->result.status);
+
+		free(buf);
+	}
+
+	if (ret < USBI_CONTROL_SETUP_LEN) {
+		usbi_debug(hdev->lib_hdl, 1, "error sending control msg: %d",
+			ret);
+		
+		ctrl->result.status = ret;
+		ctrl->result.transferred_bytes = 0;
+		io->status = USBI_IO_COMPLETED;
+		return (OPENUSB_PLATFORM_FAILURE);
+	}
+
+	ret -= USBI_CONTROL_SETUP_LEN;
+
+	/* Read the remaining bytes for IN request */
+	if ((ctrl->length) && ((data[0] & USB_REQ_DIR_MASK) ==
+	    USB_REQ_DEV_TO_HOST)) {
+		ret = usb_do_io(hdev->priv->eps[0].datafd,
+			hdev->priv->eps[0].statfd, (char *)ctrl->payload,
+			ctrl->length, READ,
+			&ctrl->result.status);
+	}
+
+	usbi_debug(NULL, 4, "send ctrl bytes %d", ret);
+	io->status = USBI_IO_COMPLETED;
+	if (ret >= 0) {
+		ctrl->result.transferred_bytes = ret;
+	}
+
+	return (ret);
+}
+
+static int
+solaris_submit_ctrl_non_default(struct usbi_dev_handle *hdev,
+	struct usbi_io *io)
+{
+	int ret;
+	uint8_t ep_addr, ep_index;
+	openusb_ctrl_request_t *ctrl;
+
+	ctrl = io->req->req.ctrl;
+
+	ep_addr = io->req->endpoint;
+	ep_index = usb_ep_index(ep_addr);
+
+	pthread_mutex_lock(&hdev->lock);
+
+	if ((ret = usb_check_device_and_status_open(hdev, io->req->interface,
+	    ep_addr, USB_ENDPOINT_TYPE_BULK)) != 0) {
+		usbi_debug(hdev->lib_hdl, 1,
+			"check_device_and_status_open for ep %d failed",
+			ep_addr);
+
+		pthread_mutex_unlock(&hdev->lock);
+		return (OPENUSB_NOACCESS);
+	}
+
+	if (ep_addr & USB_ENDPOINT_DIR_MASK) {
+		ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
+		    hdev->priv->eps[ep_index].statfd, (char *)ctrl->payload,
+		    ctrl->length, READ, &ctrl->result.status);
+	} else {
+		ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
+		    hdev->priv->eps[ep_index].statfd, (char *)ctrl->payload,
+		    ctrl->length, WRITE, &ctrl->result.status);
+		    
+	}
+	if (ret >= 0) {
+		ctrl->result.transferred_bytes = ret;
+	}
+
+	pthread_mutex_unlock(&hdev->lock);
+
+	usbi_debug(hdev->lib_hdl, 4, "send ctrl bytes %d", ret);
+	io->status = USBI_IO_COMPLETED;
+
+	return (ret);
+}
+
+static int
+solaris_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
+{
+	if (io->req->endpoint == 0) {
+		return (solaris_submit_ctrl_on_default(hdev, io));
+	} else {
+		return (solaris_submit_ctrl_non_default(hdev, io));
+	}
+}
+
 static int
 solaris_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
@@ -2233,7 +2297,6 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	ep_addr = io->req->endpoint;
 	ep_index = usb_ep_index(ep_addr);
 
-	/*FIXME: bulk,intr,ctrl should also add lock protection */
 	/* have to globally lock this function to prevent multi thread enter
 	 * the same code and access the same device. Maybe every pipe should 
 	 * have a lock.
@@ -2437,7 +2500,8 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	return (0);
 }
 
-/* arguments validity already checked at frontend
+/*
+ * arguments validity already checked at frontend
  * We may safely assume all arguments are valid here
  */
 static int
@@ -2501,40 +2565,6 @@ solaris_io_cancel(struct usbi_io *io)
 	return (OPENUSB_SUCCESS);
 }
 
-#if 0
-static void *
-polling_cbs(void *arg)
-{
-	pthread_mutex_lock(&cb_io_lock);
-	while (1) {
-		struct list_head *tmp;
-		char *buf;
-
-		pthread_cond_wait(&cb_io_cond, &cb_io_lock);
-
-		tmp = cb_ios.next;
-		while (tmp != &cb_ios) {
-			struct usbi_io *io;
-			io = list_entry(tmp, struct usbi_io, list);
-			buf = io->isoc_io.buf;
-			list_del(&io->list);
-			pthread_mutex_unlock(&cb_io_lock);
-
-			usbi_debug(NULL,4, "received a cb");
-			usbi_io_complete(io, 0, 0);
-			if (buf != NULL) {
-				free(buf);
-			}
-
-			pthread_mutex_lock(&cb_io_lock);
-			tmp = cb_ios.next;
-		}
-	}
-
-	return (NULL);
-}
-#endif
-
 static int
 solaris_init(struct usbi_handle *hdl, uint32_t flags )
 {
@@ -2542,7 +2572,8 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 	
 	usbi_debug(NULL, 4, "Begin");
 
-	if(solaris_back_inited != 0) {/*already inited */
+	if(solaris_back_inited != 0) {
+	/*already inited */
 		usbi_debug(NULL, 1, "Already inited");
 		solaris_back_inited++; /* openusb_init gets called once more */
 		return 0;
@@ -2563,17 +2594,6 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 		return (OPENUSB_PLATFORM_FAILURE);
 	}
 
-#if 0
-	ret = pthread_create(&cb_thread, NULL, polling_cbs, NULL);
-	if (ret < 0) {
-		usbi_debug(NULL, 1, "unable to create polling callback thread"
-		    "(ret = %d)", ret);
-		pthread_cond_destroy(&cb_io_cond);
-		pthread_mutex_destroy(&cb_io_lock);
-
-		return (OPENUSB_PLATFORM_FAILURE);
-	}
-#endif
 
 #if 1 //hal
 	if (!g_thread_supported ())
