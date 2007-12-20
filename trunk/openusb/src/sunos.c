@@ -2108,6 +2108,10 @@ solaris_submit_ctrl_on_default(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	return (ret);
 }
 
+/*
+ * submit control request on non-zero control pipe
+ * FIXME: don't have a device to test this function
+ */
 static int
 solaris_submit_ctrl_non_default(struct usbi_dev_handle *hdev,
 	struct usbi_io *io)
@@ -2313,8 +2317,6 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		return (OPENUSB_NOACCESS);
 	}
 
-	/* pthread_mutex_unlock(&hdev->lock); */
-
 	n_pkt = isoc->pkts.num_packets;
 	packet = isoc->pkts.packets;
 	for (pkt = 0; pkt < n_pkt; pkt++) {
@@ -2421,8 +2423,6 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		pkt_descr = (struct usbk_isoc_pkt_descr *)buf;
 
 		packet = isoc->pkts.packets;
-
-		p = pkt_descr; 
 
 		for(pkt = 0; pkt < n_pkt; pkt++) {
 			usbi_debug(hdev->lib_hdl, 4, "packet: %d, len: %d",
