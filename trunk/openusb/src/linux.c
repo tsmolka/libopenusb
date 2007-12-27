@@ -1493,7 +1493,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 				}
 
 				pthread_mutex_unlock(&io->lock);
-				return (OPENUSB_SYS_FUNC_FAILURE);
+				continue;
 			}
 
 			/* clear out the buffer if we allocated (only on a control req) */
@@ -1539,13 +1539,13 @@ int32_t linux_io_cancel(struct usbi_io *io)
 		/* if this is the case we won't receive a cancel in poll_io, so send the
 		 * cancel here */
 		usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
-		return OPENUSB_SUCCESS;
+		return (OPENUSB_SUCCESS);
 	}
 
 	/* Always do this to avoid race conditions */
 	wakeup_io_thread(io->dev, WAKEUP);
 
-	return OPENUSB_SUCCESS;
+	return (OPENUSB_SUCCESS);
 }
 
 
