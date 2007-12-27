@@ -1483,9 +1483,15 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 			ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 			if (ret < 0) {
 				/* If this failed, then we haven't submitted the request to usbfs
-				* yet. So let's log it and delete the request */
+				 * yet. So let's log it and delete the request */
 				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
 				list_del(&io->list);
+				
+				/* clear out the buffer if we allocated (only on a control req) */
+				if (io->req->type == USB_TYPE_CONTROL) {
+					if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
+				}
+
 				pthread_mutex_unlock(&io->lock);
 				return (OPENUSB_SYS_FUNC_FAILURE);
 			}
@@ -1529,11 +1535,11 @@ int32_t linux_io_cancel(struct usbi_io *io)
 		/* If this fails then we probably haven't submitted the request to usbfs.
 		 * So we'll just log the error and continue on as normal */
 		usbi_debug(io->dev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
-	}
-
-	/* clear out the buffer if we allocated (only on a control req) */
-	if (io->req->type == USB_TYPE_CONTROL) {
-		if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
+		
+		/* if this is the case we won't receive a cancel in poll_io, so send the
+		 * cancel here */
+		usbi_io_complete(io, LIBUSB_IO_CANCELED, 0);
+		return LIBUSB_SUCCESS;
 	}
 
 	/* Always do this to avoid race conditions */
@@ -1640,6 +1646,10 @@ void *poll_io(void *devhdl)
 			continue;
 		}
 
+		/* see if we need to leave */
+		pthread_testcancel();
+
+		/* Get the current time of day, for timeout processing */
 		gettimeofday(&tvc, NULL);
 
 		/* if there is data to be read on the event pipe read it and discard */
@@ -1653,6 +1663,9 @@ void *poll_io(void *devhdl)
 			}
 		}
 
+		/* lock the device while we do this */
+		pthread_mutex_lock(&hdev->lock);
+		
 		/* If there is data to be read on the frontend's even pipe, read it.
 		 * Even though the Linux backend doesn't use the frontend's timeout
 		 * thread, the frontend will write to the even pipe everytime a request
@@ -1662,9 +1675,6 @@ void *poll_io(void *devhdl)
 		if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
 			read(hdev->event_pipe[0], buf, sizeof(buf));
 		}
-
-		/* lock the device while we do this */
-		pthread_mutex_lock(&hdev->lock);
 
 		/* now that we've waited for select, determine what action to take */
 		/* Have any io requests completed? */
@@ -1680,9 +1690,6 @@ void *poll_io(void *devhdl)
 
 		/* unlock the device */
 		pthread_mutex_unlock(&hdev->lock);
-		
-		/* see if we need to leave */
-		pthread_testcancel();
 	}
 
 	return (NULL);
