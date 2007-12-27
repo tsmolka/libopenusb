@@ -166,7 +166,7 @@ int32_t check_usb_path(const char *dirname);
 int32_t translate_errno(int errnum);
 int32_t wakeup_io_thread(struct usbi_dev_handle *hdev, uint8_t command);
 int32_t linux_get_driver(struct usbi_dev_handle *hdev, uint8_t interface,
-												 char *name, size_t namelen);
+												 char *name, uint32_t namelen);
 int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
 																	 uint8_t interface);
 int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
