@@ -177,7 +177,7 @@ AC_CHECK_FUNCS(memmove)
 
 
 dnl
-dnl Check for glib, gthread, dbus, dbus-glib, hal
+dnl Check for glib, gthread, dbus, dbus-glib, hal, libusb
 dnl
 PKG_CHECK_MODULES(GLIB, glib-2.0, HAVE_GLIB="yes")
 AC_SUBST(GLIB_CFLAGS)
@@ -198,6 +198,10 @@ AC_SUBST(DBUSGLIB_LIBS)
 PKG_CHECK_MODULES(HAL, hal, HAVE_HAL="yes")
 AC_SUBST(HAL_CFLAGS)
 AC_SUBST(HAL_LIBS)
+
+PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
+AC_SUBST(LIBUSB_CFLAGS)
+AC_SUBST(LIBUSB_LIBS)
 
 
 if test "$os_support" = "bsd"; then
