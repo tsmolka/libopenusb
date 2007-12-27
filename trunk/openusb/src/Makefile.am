@@ -20,10 +20,10 @@ if LINUX_API
 usblib_LTLIBRARIES = linux.la
 
 #to use hal for hotplug event support
-linux_la_CFLAGS = $(GLIB_CFLAGS) $(GTHREADS_LIBS) $(DBUSGLIB_CFLAGS) $(HAL_CFLAGS)
+linux_la_CFLAGS = $(GLIB_CFLAGS) $(GTHREADS_CFLAGS) $(DBUSGLIB_CFLAGS) $(HAL_CFLAGS)
 linux_la_SOURCES = linux.c linux.h
 linux_la_LDFLAGS = -avoid-version -module -L.libs
-linux_la_LIBADD = -lusb $(GLIB_LIBS) $(GTHREADS_LIBS) $(DBUSGLIB_LIBS) $(HAL_LIBS)
+linux_la_LIBADD = -lopenusb $(GLIB_LIBS) $(GTHREADS_LIBS) $(DBUSGLIB_LIBS) $(HAL_LIBS)
 endif
 
 if BSD_API
