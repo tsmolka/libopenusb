@@ -10,8 +10,6 @@
 #ifndef __LINUX_H__
 #define __LINUX_H__
 
-#define DBUS_API_SUBJECT_TO_CHANGE
-
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
