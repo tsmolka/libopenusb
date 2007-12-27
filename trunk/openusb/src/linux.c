@@ -508,7 +508,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
 	if (conn == NULL) {
 		usbi_debug(hdl, 1, "error: dbus_bus_get: %s: %s", error.name, error.message);
-		LIBHAL_FREE_DBUS_ERROR (&error);
+		dbus_error_free(&error);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -533,7 +533,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		if (dbus_error_is_set(&error)) {
 			usbi_debug(hdl, 1, "error: libhal_ctx_init: %s: %s",
 								 error.name, error.message);
-			LIBHAL_FREE_DBUS_ERROR (&error);
+			dbus_error_free(&error);
 		}
 		usbi_debug(hdl, 1, "Could not initialize connection to hald. \
 												Normally this mean the HAL daemon (hald) is \
@@ -571,7 +571,7 @@ void linux_fini(struct usbi_handle *hdl)
 
 	/* Now shutdown our HAL/D-Bus connections */
 	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE)
-		LIBHAL_FREE_DBUS_ERROR(&error);
+		dbus_error_free(&error);
 	libhal_ctx_free(hal_ctx);
 
 	dbus_connection_close(conn);
@@ -1538,8 +1538,8 @@ int32_t linux_io_cancel(struct usbi_io *io)
 		
 		/* if this is the case we won't receive a cancel in poll_io, so send the
 		 * cancel here */
-		usbi_io_complete(io, LIBUSB_IO_CANCELED, 0);
-		return LIBUSB_SUCCESS;
+		usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
+		return OPENUSB_SUCCESS;
 	}
 
 	/* Always do this to avoid race conditions */
@@ -2126,7 +2126,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 	/* Get an array of all the devices on the system */
 	device_names = libhal_get_all_devices (hal_ctx, &num_devices, &error);
 	if (device_names == NULL) {
-		LIBHAL_FREE_DBUS_ERROR (&error);
+		dbus_error_free(&error);
 		usbi_debug(NULL, 1, "Couldn't obtain list of devices\n");
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
