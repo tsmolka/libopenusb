@@ -21,7 +21,7 @@ endif
 if SUNOS_API
 XMLDCL = /usr/share/sgml/xml.dcl
 else
-XMLDCL = xml.dcl
+XMLDCL = /usr/share/sgml/openjade/xml.dcl 
 endif
 
 all: $(MANUALS)
