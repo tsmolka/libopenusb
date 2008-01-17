@@ -1,7 +1,7 @@
 /*
  * Linux USB support
  *
- *	Copyright 2007 Michael Lewis <milewis1@gmail.com>
+ *	Copyright 2007-2008 Michael Lewis <milewis1@gmail.com>
  *	Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
  *
  *	This library is covered by the LGPL, read LICENSE for details.
@@ -170,7 +170,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	pthread_join(hdev->priv->io_thread, NULL);
 
 	/* If we've already closed the file, we're done */
-	if (hdev->priv->fd < 0) {
+	if (hdev->priv->fd <= 0) {
 		free(hdev->priv);
 		return (OPENUSB_SUCCESS);
 	}
@@ -1485,15 +1485,6 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 				/* If this failed, then we haven't submitted the request to usbfs
 				 * yet. So let's log it and delete the request */
 				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
-				list_del(&io->list);
-				
-				/* clear out the buffer if we allocated (only on a control req) */
-				if (io->req->type == USB_TYPE_CONTROL) {
-					if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
-				}
-
-				pthread_mutex_unlock(&io->lock);
-				continue;
 			}
 
 			/* clear out the buffer if we allocated (only on a control req) */
