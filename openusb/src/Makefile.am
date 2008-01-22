@@ -53,6 +53,10 @@ sunos_la_LIBADD = -ldevinfo -ldbus-1 -lhal -ldbus-glib-1 -lglib-2.0 -lgthread-2.
 sunos_la_CFLAGS = -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/hal
 
 libopenusb_la_CFLAGS += -I/usr/sfw/include
+
+# add libopenusb.so as a dependency for sunos.so, to avoid parallel building errors
+sunos_la_DEPENDENCIES = $(lib_LTLIBRARIES)
+
 endif
 
 libopenusb_la_SOURCES = usb.c devices.c usbi.h list.c descriptors.c api.c io.c emulation.c list.h descr.h
