@@ -172,6 +172,7 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 {
 	struct usbi_handle *handle, *thdl;
 
+	usbi_debug(NULL, 4, "add a new device");
 	/* FIXME: Handle devid rollover gracefully? */
 	idev->devid = cur_device_id++;
 
@@ -239,6 +240,18 @@ void usbi_rescan_devices(void)
 
 	pthread_mutex_lock(&usbi_buses.lock);
 
+	/* 
+	 * FIXME:
+	 * OpenUSB doesn't process coldplug events properly. This routine
+	 * is called in openusb_init() and will add all USB devices to the
+	 * global list, as well as USB_ATTACH event for each device,
+	 * so-called coldplug events. But at this moment,
+	 * openusb_set_event_callback() isn't called, therefore the application
+	 * can't get a notifcation of these coldplug events. We need to find
+	 * a way to trigger coldplug events only after application's callback
+	 * is set. 
+	 */
+
 	list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
 		pthread_mutex_unlock(&usbi_buses.lock);
 
@@ -250,86 +263,6 @@ void usbi_rescan_devices(void)
 	pthread_mutex_unlock(&usbi_buses.lock);
 }
 
-#if 1 /* this internal interfaces defined, but not used */
-int usbi_get_child_count(openusb_devid_t devid, unsigned char *count)
-{
-	struct usbi_device *idev;
-
-	idev = usbi_find_device_by_id(devid);
-	if (!idev)
-		return OPENUSB_UNKNOWN_DEVICE;
-
-	*count = idev->nports;
-
-	return OPENUSB_SUCCESS;
-}
-
-int usbi_get_child_device_id(openusb_devid_t hub_devid, int port,
-	openusb_devid_t *child_devid)
-{
-  struct usbi_device *idev;
-
-  idev = usbi_find_device_by_id(hub_devid);
-  if (!idev)
-    return OPENUSB_UNKNOWN_DEVICE;
-
-  port--;	/* 1-indexed */
-  if (port < 0 || port > idev->nports)
-    return OPENUSB_BADARG;
-
-  if (!idev->children[port])
-    return OPENUSB_BADARG;
-
-  *child_devid = idev->children[port]->devid;
-
-  return OPENUSB_SUCCESS;
-}
-
-int usbi_get_parent_device_id(openusb_devid_t child_devid,
-	openusb_devid_t *hub_devid)
-{
-  struct usbi_device *idev;
-
-  idev = usbi_find_device_by_id(child_devid);
-  if (!idev)
-    return OPENUSB_UNKNOWN_DEVICE;
-
-  if (!idev->parent)
-    return OPENUSB_BADARG;
-
-  *hub_devid = idev->parent->devid;
-
-  return OPENUSB_SUCCESS;
-}
-
-int usbi_get_bus_id(openusb_devid_t devid, openusb_busid_t *busid)
-{
-	struct usbi_device *idev;
-
-	idev = usbi_find_device_by_id(devid);
-	if (!idev)
-		return OPENUSB_UNKNOWN_DEVICE;
-
-	pthread_mutex_lock(&idev->bus->lock);
-	*busid = idev->bus->busid;
-	pthread_mutex_unlock(&idev->bus->lock);
-
-	return OPENUSB_SUCCESS;
-}
-
-int usbi_get_devnum(openusb_devid_t devid, unsigned char *devnum)
-{
-  struct usbi_device *idev;
-
-  idev = usbi_find_device_by_id(devid);
-  if (!idev)
-    return OPENUSB_UNKNOWN_DEVICE;
-
-  *devnum = idev->devnum;
-
-  return OPENUSB_SUCCESS;
-}
-#endif
 
 int32_t openusb_get_busid_list(openusb_handle_t handle, openusb_busid_t **busids,
 	uint32_t *num_busids)
