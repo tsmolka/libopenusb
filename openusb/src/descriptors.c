@@ -14,6 +14,9 @@
 
 #include "usbi.h"
 
+/*
+ * Get device descriptors through the Default endpoint
+ */
 int usbi_get_descriptor(openusb_dev_handle_t dev, unsigned char type,
 	unsigned char index, void *buf, unsigned int buflen)
 {
