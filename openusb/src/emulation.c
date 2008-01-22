@@ -168,8 +168,6 @@ int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 		}
 		memcpy(dev->filename, idev->sys_path, PATH_MAX);
 		dev->bus = bus;
-		memcpy(&dev->descriptor, &idev->desc.device, 
-			sizeof(struct usb_device_desc));
 
 		dev->config = NULL; 
 		dev->dev = NULL;
