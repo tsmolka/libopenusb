@@ -49,32 +49,13 @@ struct usb_isoc_io {
 #define SUNOS_BUS_OHCI 0x02
 #define SUNOS_BUS_UHCI 0x03
 
-#if 0
-#define USBI_BUS_PRIVATE \
-	char filename[PATH_MAX + 1]; \
-	struct usbi_device *dev_by_num[USB_MAX_DEVICES_PER_BUS]; \
-	di_node_t node;\
-	unsigned char model; /* ehci, uhci, or ohci */
-
-#define USBI_DEVICE_PRIVATE \
-	char devpath[PATH_MAX + 1]; /* physical path of usb device */ \
-	char *devlink; /* device link */ \
-	char *ugenpath; /* path to ugen node directory */ \
-	char *ap_ancestry; /* ancestry string for cfgadm ap_id for hub */ \
-	time_t mtime; /* modify time to detect dev changes */		\
-	int found; /* flag to denote if we saw this dev during rescan */ \
-	struct usb_dev_info info; /* stored file descrs of eps */
-#endif
 
 struct usbi_bus_private {
-//	char filename[PATH_MAX + 1];
-//	struct usbi_device *dev_by_num[USB_MAX_DEVICES_PER_BUS];
 	di_node_t node;
 	unsigned char model; /* ehci, uhci, or ohci */
 };
 
 struct usbi_dev_private {
-//	char devpath[PATH_MAX + 1]; /* physical path of usb device */
 	char *devlink; /* device link */
 	char *ugenpath; /* path to ugen node directory */
 	char *ap_ancestry; /* ancestry string for cfgadm ap_id for hub */
@@ -92,22 +73,15 @@ struct ep {
 
 #define	USBI_MAXENDPOINTS	32
 
-#if 0
-#define	USBI_DEV_HANDLE_PRIVATE \
-	int config_value; /*the current configuration */ \
-	int config_index; /*index of the current config in desc->configs[] */\
-	struct ep eps[USBI_MAXENDPOINTS]; /* opened endpoints */ \
-	int ep_interface[USBI_MAXENDPOINTS]; \
-	pthread_t pollthr;\
-	pthread_t timeout_thr;
-#endif
 
 struct usbi_dev_hdl_private{
-//	int config_value; /*the current configuration */
 	int config_index; /*index of the current config in desc->configs[] */
 	struct ep eps[USBI_MAXENDPOINTS]; /* opened endpoints */
 	int ep_interface[USBI_MAXENDPOINTS];
+
+	int	statfd; /* devstat fd, to be polled for device hotplug events */
 	pthread_t pollthr;
+
 	pthread_t timeout_thr;
 };
 
