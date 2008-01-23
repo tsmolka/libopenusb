@@ -1206,7 +1206,7 @@ int32_t linux_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		return (OPENUSB_BADARG);
 	}
 
-	pthread_mutex_unlock(&io->lock);
+	pthread_mutex_lock(&io->lock);
 	
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
@@ -1259,7 +1259,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		return (OPENUSB_BADARG);
 	}
 
-	pthread_mutex_unlock(&io->lock);
+	pthread_mutex_lock(&io->lock);
 	
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
