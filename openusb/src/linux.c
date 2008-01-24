@@ -29,10 +29,8 @@ static char						device_dir[PATH_MAX + 1] = "";
 
 /* For HAL/D-Bus Support */
 static LibHalContext	*hal_ctx;
-static DBusConnection	*conn;
 static GMainLoop 			*event_loop;
-static GMainContext		*context;
-static char 					*show_device = NULL;
+static DBusConnection	*conn;
 
 
 
@@ -132,11 +130,6 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 		usbi_debug(NULL, 1, "unable to create io polling thread (ret = %d)", ret);
 		return (OPENUSB_NO_RESOURCES);
 	}
-
-	/* Start up the timeout thread */
-	//if(linux_create_timeout_thread(hdev) != 0) {
-	//	return OPENUSB_SYS_FUNC_FAILURE;
-	//}
 
 	/* usbfs has set the configuration to 0, so make sure we note that */
 	hdev->idev->cur_config = 0;
@@ -465,7 +458,7 @@ int32_t openusb_clear_halt(struct usbi_dev_handle *hdev, uint8_t ept)
 int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 {
 	int32_t 				ret;
-	DBusError 			error;
+	DBusError				error;
 
 	/* Validate... */
 	if (!hdl)
@@ -498,49 +491,38 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		usbi_debug(hdl, 1, "no USB device directory found");
 	}
 
-	/* Now we need to set ourselves up to use HAL/D-Bus for device detection */
-	usbi_debug(hdl, 4, "start HAL/D-Bus setup");
-	
-	context = g_main_context_new();
+	/* Initialize the error structure */
 	dbus_error_init(&error);
-
-	/* Connect to the system bus */
+	
 	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
 	if (conn == NULL) {
-		usbi_debug(hdl, 1, "error: dbus_bus_get: %s: %s", error.name, error.message);
+		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name, error.message);
 		dbus_error_free(&error);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
-	/* Setup the connection with gmain */
-	dbus_connection_setup_with_g_main (conn, context);
-
-	/* create the HAL context */
+	/* Create & Initialize the HAL context */
 	if ((hal_ctx = libhal_ctx_new()) == NULL) {
-		usbi_debug(hdl, 1, "error: libhal_ctx_new");
-		return (OPENUSB_NO_RESOURCES);
+		usbi_debug(NULL, 1, "error: libhal_ctx_new");
+		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-
-	/* setup the connection with HAL */
 	if (!libhal_ctx_set_dbus_connection (hal_ctx, conn)) {
-		usbi_debug(hdl, 1, "error: libhal_ctx_set_dbus_connection: %s: %s",
+		usbi_debug(NULL, 1, "error: libhal_ctx_set_dbus_connection: %s: %s\n",
 							 error.name, error.message);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-	
-	/* Initialize the HAL context */
 	if (!libhal_ctx_init (hal_ctx, &error)) {
 		if (dbus_error_is_set(&error)) {
-			usbi_debug(hdl, 1, "error: libhal_ctx_init: %s: %s",
+			usbi_debug(NULL, 1, "error: libhal_ctx_init: %s: %s\n",
 								 error.name, error.message);
 			dbus_error_free(&error);
 		}
-		usbi_debug(hdl, 1, "Could not initialize connection to hald. \
-												Normally this mean the HAL daemon (hald) is \
-												not running or not ready.\n");
+		usbi_debug(NULL, 1, "Could not initialise connection to hald.");
+		usbi_debug(NULL, 1, "Normally this means the HAL daemon (hald) is");
+		usbi_debug(NULL, 1, "not running or not ready.");
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-
+	
 	/* Start up thread for polling events */
 	ret = 0;
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread, (void*)NULL);
@@ -560,28 +542,14 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  */
 void linux_fini(struct usbi_handle *hdl)
 {
-	DBusError 			error;
-
-	/* Initialize the error struct */
-	dbus_error_init(&error);
-
 	/* Stop polling for events (connect/disconnect) */
-	pthread_cancel(event_thread);
+	usbi_debug(NULL, 4, "stop hotplug thread");
+	g_main_loop_quit(event_loop);
 	pthread_join(event_thread, NULL);
 
-	/* Now shutdown our HAL/D-Bus connections */
-	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE)
-		dbus_error_free(&error);
-	libhal_ctx_free(hal_ctx);
-
-	dbus_connection_close(conn);
-	dbus_connection_unref(conn);
+	/* The DBUS connection and HAL context will be close/disconnected in
+	 * hal_hotplug_event_thread rather than here */
 	
-	g_main_context_unref(context);
-	g_main_context_release(context);
-	
-	if (show_device)	free(show_device);
-
 	return;
 }
 
@@ -1391,11 +1359,11 @@ struct usbi_io* isoc_io_clone(struct usbi_io *io)
  */
 int32_t io_complete(struct usbi_dev_handle *hdev)
 {
-	struct usbk_urb						*urb;
-	struct usbi_io						*io;
-	struct usbi_io						*new_io;
+	struct usbk_urb							*urb;
+	struct usbi_io							*io;
+	struct usbi_io							*new_io;
 	struct openusb_isoc_packet	*packets;
-	int 											ret, i, offset = 0;
+	int 												ret, i, offset = 0;
 
 	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb)) >= 0) {
 		io = urb->usercontext;
@@ -1636,9 +1604,6 @@ void *poll_io(void *devhdl)
 			usbi_debug(hdev->lib_hdl, 1, "select() call failed: %s", strerror(errno));
 			continue;
 		}
-
-		/* see if we need to leave */
-		pthread_testcancel();
 
 		/* Get the current time of day, for timeout processing */
 		gettimeofday(&tvc, NULL);
@@ -2410,24 +2375,47 @@ void device_removed(LibHalContext *ctx, const char *udi)
  */
 void *hal_hotplug_event_thread(void *unused)
 {
-	usbi_debug(NULL, 4, "start hotplug thread");
+	GMainContext		*context;
+	DBusError				error;
 
-	/* setup our callback for devices that are added and removed */
+	usbi_debug(NULL, 4, "start hotplug thread");
+	
+	/* Initialize the error structure */
+	dbus_error_init(&error);
+
+	/* Create the glib context and event loop */
+	context = g_main_context_new();
+	event_loop = g_main_loop_new(context, FALSE);
+
+	/* setup the glib/DBUS connection */
+	dbus_connection_setup_with_g_main(conn, context);
+
+	/* Set the events we want to be notified of */
 	libhal_ctx_set_device_added (hal_ctx, device_added);
 	libhal_ctx_set_device_removed (hal_ctx, device_removed);
 
-	/* Initialize the event loop */
-	event_loop = g_main_loop_new(context, FALSE);
-
 	/* run the main loop */
 	if (event_loop != NULL) {
-
 		usbi_debug(NULL, 4, "hotplug thread running");
 		g_main_loop_run (event_loop);
-
 	}
 
-	return (NULL);
+	if (libhal_ctx_shutdown(hal_ctx, &error) == FALSE) {
+		dbus_error_free(&error);
+	}
+
+	/* Free the HAL context */
+	libhal_ctx_free (hal_ctx);
+
+	/* Close the DBUS connection */
+	dbus_connection_close(conn);
+	dbus_connection_unref(conn);
+
+	/* Release the glib context */
+	g_main_context_unref(context);
+	g_main_context_release(context);
+	
+	return (NULL);	
 }
 
 
