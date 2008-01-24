@@ -713,6 +713,9 @@ int32_t openusb_xfer_aio(openusb_request_handle_t req)
 	int32_t timeout;
 	struct usbi_handle *plib;
 
+	usbi_debug(NULL, 4, "Begin: ifc=%d ept=%x type=%d", req->interface,
+						 req->endpoint, req->type);
+	
 	if (!req) {
 		return OPENUSB_BADARG;
 	}
@@ -1040,6 +1043,8 @@ int32_t multi_req_callback(openusb_request_handle_t req)
 		return(mreq->cb(mreq, idx, result));
 	}
 
+	free(result);
+	
 	return 0;
 }
 
