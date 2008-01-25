@@ -33,6 +33,7 @@ int testloop = 0;
 int testmulti = 0;
 int testsync = 0;
 int testasync = 0;
+int testhotplug = 0;
 
 #define ISOC_PKT_NUM 12
 #define ISOC_PKT_LEN 128
@@ -163,8 +164,26 @@ void print_device(openusb_devid_t devid, int indent)
 void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		openusb_event_t event, void *arg)
 {
-	printf("CALLBACK: lib(%llu) device(%llu) get a event(%d) with arg=%p\n",
-			handle, devid, event, arg);
+	char *evstring;
+	switch(event) {
+	case USB_ATTACH:
+		evstring = "USB_ATTACH";
+		break;
+	case USB_REMOVE:
+		evstring = "USB_REMOVE";
+		break;
+	case USB_SUSPEND:
+		evstring = "USB_SUSPEND";
+		break;
+	case USB_RESUME:
+		evstring = "USB_RESUME";
+		break;
+	default:
+		evstring = "Unknown";
+		break;
+	}
+	printf("CALLBACK: lib(%llu) device(%llu) get a event(%s) with arg=%p\n",
+		handle, devid, evstring, arg);
 }
 
 int convert_string(char *buf, usb_string_desc_t *st, int buflen)
@@ -1193,7 +1212,7 @@ int advance_xfer_test(void)
 	}
 	printf("Lib handle = %llu\n",libh);
 
-#if 0  /* multi xfer test */
+#if 1  /* multi xfer test */
 	ret = multi_xfer_test(devh);
 	if(ret !=0) {
 		openusb_free_devid_list(devids);
@@ -1297,13 +1316,15 @@ void usage(char *prog)
 
 	printf("OR Advanced Xfer Test\n");
 
-	printf("%s [-t <intr|isoc|bulk|ctrl>] [-l] [-m] [-a] [-s]\n", prog);
+	printf("%s [-t <intr|isoc|bulk|ctrl>] [-l] [-m] [-a] [-s] [-p]\n",
+		prog);
 	printf("Where:\n");
 	printf("\t-t transfer type\n"
 		"\t-l loop test\n"
 		"\t-m multi request test\n"
 		"\t-a async xfer test\n"
-		"\t-s sync xfer test\n");
+		"\t-s sync xfer test\n"
+		"\t-p hotplug test\n");
 }
 
 
@@ -1336,6 +1357,9 @@ int parse_option(int argc, char *argv[])
 			case 'a':
 				testasync = 1;
 				break;
+			case 'p':
+				testhotplug = 1;
+				break;
 			case 's':
 				testsync = 1;
 				break;
@@ -1367,13 +1391,27 @@ int basic_test(void)
 	int ret;
 	uint32_t flags = 0;
 
-	ret = openusb_init(flags,&libhandle);
+	ret = openusb_init(flags, &libhandle);
 	if(ret < 0) {
 		printf("error init\n");
 		exit(1);
 	}
 	printf("lib handle=%llu \n",libhandle);
 	printf("openusb_init PASS\n");
+
+	ret = openusb_set_event_callback(libhandle, USB_ATTACH, event_cb, NULL);
+	if(ret) {
+		printf("set event callback error: %s\n",openusb_strerror(ret));
+		return -1;
+	}
+
+	ret = openusb_set_event_callback(libhandle, USB_REMOVE, event_cb, NULL);
+	if(ret) {
+		printf("set event callback error: %s\n",openusb_strerror(ret));
+		return -1;
+	}
+	printf("openusb_set_event_callback: PASS\n");
+
 
 	ret = openusb_set_default_timeout(libhandle,USB_TYPE_CONTROL,10);
 	if(ret) {
@@ -1382,13 +1420,6 @@ int basic_test(void)
 	}
 
 	printf("openusb_set_default_timeout : PASS\n");
-
-	ret = openusb_set_event_callback(libhandle,USB_REMOVE,event_cb,NULL);
-	if(ret) {
-		printf("set event callback error: %s\n",openusb_strerror(ret));
-		return -1;
-	}
-	printf("openusb_set_event_callback: PASS\n");
 
 	/*get buses */
 	ret = openusb_get_busid_list(libhandle,&bus,&busnum);
@@ -1426,6 +1457,11 @@ int main(int argc, char *argv[])
 	}
 
 	advance_xfer_test();
+
+	/* FIXME: add a signal handler for ^C in this case */
+	if (testhotplug == 1) {
+		pause();
+	}
 
 	cleanup();	
 
