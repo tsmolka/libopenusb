@@ -508,7 +508,6 @@ int32_t check_req_valid(openusb_request_handle_t req,
 int32_t openusb_xfer_wait(openusb_request_handle_t req)
 {
 	struct usbi_dev_handle *dev=NULL;
-	int32_t ret;
 	int32_t	io_pattern;
 
 	usbi_debug(NULL, 4, "Begin: ifc=%d ept=%x type=%d", req->interface,
@@ -533,7 +532,7 @@ int32_t openusb_xfer_wait(openusb_request_handle_t req)
 	pthread_mutex_lock(&dev->lock);
 	pthread_mutex_lock(&dev->idev->bus->lock);
 
-  	io_pattern = dev->idev->bus->ops->io_pattern;
+	io_pattern = dev->idev->bus->ops->io_pattern;
 
 	pthread_mutex_unlock(&dev->idev->bus->lock);
 	pthread_mutex_unlock(&dev->lock);
@@ -547,15 +546,7 @@ int32_t openusb_xfer_wait(openusb_request_handle_t req)
 	 *    OUT - if data length > 0 and buf=NULL, then it's invalid
 	 *    IN  - if buf=NULL, then invalid
 	 */
-
-	ret = usbi_io_sync(dev, req);
-	if (ret < 0) {
-		return OPENUSB_PLATFORM_FAILURE;
-	}
-
-	ret = OPENUSB_SUCCESS;
-
-	return ret;
+	return (usbi_io_sync(dev, req));
 }
 
 int32_t openusb_ctrl_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
