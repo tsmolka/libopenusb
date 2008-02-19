@@ -117,11 +117,6 @@ void usbi_free_io(struct usbi_io *io)
 		pthread_mutex_lock(&io->lock);
 		pthread_cond_broadcast(&io->cond);
 		pthread_mutex_unlock(&io->lock);
-
-		/* FIXME: Would be better to yield here, but there is no
-		 * POSIX yield()
-		 */
-		sleep(1);
 	}
 
 	pthread_mutex_destroy(&io->lock);
