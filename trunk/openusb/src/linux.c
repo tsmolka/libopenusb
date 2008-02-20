@@ -159,7 +159,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	pthread_mutex_unlock(&hdev->lock);
 
 	/* Stop the IO processing (polling) thread */
-	wakeup_io_thread(hdev, WAKEUPANDEXIT);
+	wakeup_io_thread(hdev);
 	pthread_cancel(hdev->priv->io_thread);
 	pthread_join(hdev->priv->io_thread, NULL);
 
@@ -530,12 +530,12 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		usbi_debug(NULL, 1, "not running or not ready.");
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-	
+
 	/* Start up thread for polling events */
 	ret = 0;
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
-		usbi_debug(hdl, 1, "unable to create event polling thread (ret = %d)", ret);
+		usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
 	}
 
 	return (OPENUSB_SUCCESS);
@@ -550,17 +550,18 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  */
 void linux_fini(struct usbi_handle *hdl)
 {
-	DBusError	error;
+	DBusError error;
 
 	/* Initialize the error structure */
 	dbus_error_init(&error);
 
-	/* Stop polling for events (connect/disconnect) */
+	/* Stop the event (connect/disconnect) thread */
 	usbi_debug(NULL, 4, "stop hotplug thread");
 	g_main_loop_quit(event_loop);
 	g_main_context_wakeup(context);
+	pthread_cancel(event_thread);
 	pthread_join(event_thread, NULL);
-
+	
 	/* Shutdown the HAL context */
 	if (libhal_ctx_shutdown(hal_ctx, &error) == FALSE) {
 		dbus_error_free(&error);
@@ -1052,7 +1053,7 @@ int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	}
 
 	/* Always do this to avoid race conditions */
-	wakeup_io_thread(hdev, WAKEUP);
+	wakeup_io_thread(hdev);
 
 	return (OPENUSB_SUCCESS);
 }
@@ -1393,9 +1394,9 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 	int 												ret, i, offset = 0;
 
 	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb)) >= 0) {
+
 		io = urb->usercontext;
 
-		pthread_mutex_lock(&io->lock);
 		/* if this was a control request copy the payload */
 		if (io->req->type == USB_TYPE_CONTROL) {
 			memcpy(io->req->req.ctrl->payload, urb->buffer + USBI_CONTROL_SETUP_LEN, io->req->req.ctrl->length);
@@ -1409,7 +1410,6 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 			io->req->req.isoc->isoc_results = (openusb_request_result_t *)malloc(io->req->req.isoc->pkts.num_packets * sizeof(openusb_request_result_t));
 			if(io->req->req.isoc->isoc_results == NULL) {
 				io->status = USBI_IO_COMPLETED_FAIL;
-				pthread_mutex_unlock(&io->lock);
 				usbi_free_io(io);
 				continue;
 			}
@@ -1436,11 +1436,9 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 		/* urb->status == -2, indicates that the URB was discarded, aka canceled */
 		if (urb->status == -2) {
 			io->status = USBI_IO_CANCEL;
-			pthread_mutex_unlock(&io->lock);
 			usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
 		} else {
 			io->status = USBI_IO_COMPLETED;
-			pthread_mutex_unlock(&io->lock);
 			usbi_io_complete(io, OPENUSB_SUCCESS, urb->actual_length);
 		}
 	}
@@ -1464,12 +1462,11 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 	/* check each entry in the io list to find out if it's timed out */
 	list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
 
-		pthread_mutex_lock(&io->lock);
-		
-		/*currently, isochronous io doesn't consider timeout issue*/
-		if(io->req->type == USB_TYPE_ISOCHRONOUS) {
-			pthread_mutex_unlock(&io->lock);
-			continue;
+		/* currently, isochronous io doesn't consider timeout issue and we don't want
+		 * to process any requests that aren't in progress */
+		if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
+				(io->status != USBI_IO_INPROGRESS) ) {
+				continue;
 		}
 
 		if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
@@ -1489,12 +1486,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 
 			/* Set the status */
 			io->status = USBI_IO_TIMEOUT;
-
-			pthread_mutex_unlock(&io->lock);
-
 			usbi_io_complete(io, OPENUSB_IO_TIMEOUT, 0);
-		} else {
-			pthread_mutex_unlock(&io->lock);
 		}
 	}
 
@@ -1529,7 +1521,7 @@ int32_t linux_io_cancel(struct usbi_io *io)
 	}
 
 	/* Always do this to avoid race conditions */
-	wakeup_io_thread(io->dev, WAKEUP);
+	wakeup_io_thread(io->dev);
 
 	return (OPENUSB_SUCCESS);
 }
@@ -1551,7 +1543,7 @@ void *poll_io(void *devhdl)
 	struct usbi_dev_handle  *hdev = (struct usbi_dev_handle*)devhdl;
 	struct timeval					tvc, tvo, tvNext;
 	fd_set									readfds, writefds;
-	int											i, ret, maxfd;
+	int											ret, maxfd;
 	struct usbi_io					*io;
 	uint8_t 								buf[16];
 	
@@ -1568,6 +1560,7 @@ void *poll_io(void *devhdl)
 		/* We need to check our private event pipe, our device's file, and the
 		 * event pipe used by the frontend's timeout thread (which the Linux
 		 * backened doesn't use). */
+		pthread_mutex_lock(&hdev->lock);
 		FD_SET(hdev->priv->event_pipe[0], &readfds);
 		FD_SET(hdev->event_pipe[0], &readfds);
 		FD_SET(hdev->priv->fd, &writefds);
@@ -1581,6 +1574,7 @@ void *poll_io(void *devhdl)
 		if (hdev->event_pipe[0] > maxfd) {
 			maxfd = hdev->event_pipe[0];
 		}
+		pthread_mutex_unlock(&hdev->lock);
 
 		/* get the time so that we can determine if any timeouts have passed */
 		gettimeofday(&tvc, NULL);
@@ -1590,8 +1584,11 @@ void *poll_io(void *devhdl)
 		/* loop through the pending io requests and find our next soonest timeout */
 		pthread_mutex_lock(&hdev->lock);
 		list_for_each_entry(io, &hdev->io_head, list) {
-			/* skip the timeout calculation if it's an isochronous request */
-			if(io->req->type == USB_TYPE_ISOCHRONOUS) {
+			/* skip the timeout calculation if it's an isochronous request, or if
+			 * the IO is not in progress (to avoid processing aborted requests) */
+			pthread_mutex_unlock(&hdev->lock);
+			if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
+					(io->status != USBI_IO_INPROGRESS) ) {
 				continue;
 			}
 			
@@ -1600,6 +1597,7 @@ void *poll_io(void *devhdl)
 				/* new soonest timeout */
 				memcpy(&tvo, &io->tvo, sizeof(tvo));
 			}
+			pthread_mutex_lock(&hdev->lock);
 		}
 		pthread_mutex_unlock(&hdev->lock);
 
@@ -1640,15 +1638,15 @@ void *poll_io(void *devhdl)
 			memset(buf,0,sizeof(buf));
 			read(hdev->priv->event_pipe[0], buf, sizeof(buf));
 
-			/* exit if that's the command we got */
-			for (i = 0; i < sizeof(buf); i++) {
-				if (buf[0] == WAKEUPANDEXIT) { return (0); }
+			pthread_mutex_lock(&hdev->lock);
+			if(hdev->state == USBI_DEVICE_CLOSING) {
+				/* device is closing, exit this thread */
+				pthread_mutex_unlock(&hdev->lock);
+				return NULL;
 			}
+			pthread_mutex_unlock(&hdev->lock);
 		}
 
-		/* lock the device while we do this */
-		pthread_mutex_lock(&hdev->lock);
-		
 		/* If there is data to be read on the frontend's even pipe, read it.
 		 * Even though the Linux backend doesn't use the frontend's timeout
 		 * thread, the frontend will write to the even pipe everytime a request
@@ -1657,7 +1655,17 @@ void *poll_io(void *devhdl)
 		 * fill up. */
 		if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
 			read(hdev->event_pipe[0], buf, sizeof(buf));
+
+			pthread_mutex_lock(&hdev->lock);
+			if(hdev->state == USBI_DEVICE_CLOSING) {
+				/* device is closing, exit this thread */
+				pthread_mutex_unlock(&hdev->lock);
+				return NULL;
+			}
+			pthread_mutex_unlock(&hdev->lock);
 		}
+
+		pthread_mutex_lock(&hdev->lock);	
 
 		/* now that we've waited for select, determine what action to take */
 		/* Have any io requests completed? */
@@ -1671,7 +1679,6 @@ void *poll_io(void *devhdl)
 			io_timeout(hdev, &tvc);
 		}
 
-		/* unlock the device */
 		pthread_mutex_unlock(&hdev->lock);
 	}
 
@@ -1821,17 +1828,14 @@ int32_t check_usb_path(const char *dirname)
  *
  *  Write data to the event pipe to wakeup the io thread
  */
-int32_t wakeup_io_thread(struct usbi_dev_handle *hdev, uint8_t command)
+int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 {
 	uint8_t buf[1];
-
-	/* fill in the command */
-	buf[0] = command;
 
 	if (write(hdev->priv->event_pipe[1], buf, 1) < 1) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s", strerror(errno));
 		return translate_errno(errno);
-		}
+	}
 
 	return OPENUSB_SUCCESS;
 }
@@ -2403,7 +2407,7 @@ void device_removed(LibHalContext *ctx, const char *udi)
 void *hal_hotplug_event_thread(void *unused)
 {
 	usbi_debug(NULL, 4, "start hotplug thread");
-	
+
 	/* Set the events we want to be notified of */
 	libhal_ctx_set_device_added (hal_ctx, device_added);
 	libhal_ctx_set_device_removed (hal_ctx, device_removed);
