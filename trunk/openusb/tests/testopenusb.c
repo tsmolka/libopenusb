@@ -1331,7 +1331,7 @@ void usage(char *prog)
 int parse_option(int argc, char *argv[])
 {
 	char c;
-	while((c = getopt(argc, argv, "t:lmas")) != -1) {
+	while((c = getopt(argc, argv, "t:lmaps")) != -1) {
 		switch (c) {
 			case 't':
 				if (strcmp(optarg, "ctrl") == 0) {
