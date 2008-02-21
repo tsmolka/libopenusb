@@ -32,6 +32,9 @@ static pthread_cond_t cb_io_cond;
 static struct list_head cb_ios = {.prev = &cb_ios, .next = &cb_ios};
 static int32_t solaris_back_inited;
 
+int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
+                uint16_t langid,uint8_t **buffer, uint16_t *buflen);
+
 /* fake root hub descriptors */
 static usb_device_desc_t fs_root_hub_dev_descr = {
 	0x12,   /* Length */
@@ -130,7 +133,15 @@ static int ugen_lc2libstat(int lc)
 	return OPENUSB_PLATFORM_FAILURE;
 }
 
-#if 1 /* hal */
+#define OPENUSB_USE_HAL
+#ifdef OPENUSB_USE_HAL /* hal */
+/*
+ * Use HAL for USB device hotplug events monitoring.
+ * But HAL introduces too many dependencies for OpenUSB. Though
+ * we don't like it, we have to depends on it, unless we find a
+ * better way. Enclose this code segment in a conditional compiling
+ * flag.
+ */
 
 #include <glib.h>
 #include <dbus/dbus-glib-lowlevel.h>
@@ -201,6 +212,7 @@ set_device_udi(void)
 	char *devpath;
 	struct usbi_device *idev;
 
+	usbi_debug(NULL, 1, "Begin");
 
 	dbus_error_init (&error);
 
@@ -212,7 +224,6 @@ set_device_udi(void)
 		return;
 	}
 
-
 	for (i = 0;i < num_devices;i++) {
 
 		devpath = libhal_device_get_property_string (hal_ctx,
@@ -221,7 +232,8 @@ set_device_udi(void)
 		if (dbus_error_is_set (&error)) {
 			/* Free the error (which include a dbus_error_init())
 			   This should prevent errors if a call above fails */
-			usbi_debug(NULL, 4, "get device syspath error");
+			usbi_debug(NULL, 4, "get device syspath error: %s",
+				device_names[i]);
 			dbus_error_free (&error);
 			continue;
 		}
@@ -265,6 +277,7 @@ void process_new_device(const char *udi)
 	devpath = libhal_device_get_property_string(hal_ctx,
 			udi, "solaris.devfs_path", &error);
 	if (dbus_error_is_set(&error)) {
+		usbi_debug(NULL, 2, "Get devfs_path fail");
 		dbus_error_free(&error);
 		return;
 	}
@@ -272,6 +285,7 @@ void process_new_device(const char *udi)
 	subsys = libhal_device_get_property_string(hal_ctx,
 			udi, "info.subsystem", &error);
 	if (dbus_error_is_set(&error)) {
+		usbi_debug(NULL, 2, "Get info.subsystem fail");
 		libhal_free_string(devpath);
 		dbus_error_free(&error);
 		return;
@@ -281,6 +295,7 @@ void process_new_device(const char *udi)
 
 	if (strcmp(subsys, "usb_device") != 0) {
 	/* we only care usb device */
+		usbi_debug(NULL, 4, "subsys = %s", subsys);
 		libhal_free_string(subsys);
 		dbus_error_free(&error);
 		return;
@@ -295,15 +310,20 @@ void process_new_device(const char *udi)
 		return;
 	}
 
-	usbi_debug(NULL, 4, "parent: %s",parent);
+	usbi_debug(NULL, 4, "parent: %s", parent);
 	
 	pidev = find_device_by_udi(parent); /* get parent's usbi_device */
 	if (!pidev) {
+		usbi_debug(NULL, 4, "Can't find parent's usbi_device");
 		goto add_fail;
 	}
 
+	/*
+	 * get descriptors, add device to global list,
+	 * add event callback. Refresh device list on the bus. 
+	 * This func can simplify such case when a hub is hotplugged.
+	 */
 	solaris_refresh_devices(pidev->bus);
-
 
 add_fail:
 	libhal_free_string(parent);
@@ -312,7 +332,7 @@ add_fail:
 }
 
 /*
- * Invoked when a device is added to the Global Device List.
+ * Invoked when a device is added to the Global Device List of HAL.
  *
  */
 static void
@@ -347,7 +367,7 @@ device_added (LibHalContext *ctx, const char *udi)
 
 
 /*
- * Invoked when a device is removed from the Global Device List.
+ * Invoked when a device is removed from the Global Device List of HAL.
  *
  */
 static void
@@ -425,7 +445,8 @@ hal_hotplug_event_thread(void)
 		return 1;
 	}
 
-	set_device_udi();
+	set_device_udi(); /* set and initialize all devices' udi */
+	sleep(1); /* wait a while till all device udi being set */
 
 	libhal_ctx_set_device_added (hal_ctx, device_added);
 	libhal_ctx_set_device_removed (hal_ctx, device_removed);
@@ -447,13 +468,13 @@ hal_hotplug_event_thread(void)
 	
 	g_main_context_unref(context);
 	g_main_context_release(context);
-	
+
 	if (show_device)
 		free(show_device);
 
 	return 0;
 }
-#endif
+#endif /* OPENUSB_USE_HAL */
 
 
 /*
@@ -483,6 +504,9 @@ static int solaris_poll_devstat(void *arg)
 		return(errno); /* errno may not reflect the real error */
 	}
 
+	/* remember it, so that we can close this device upon thread_cancel */
+	hdev->priv->statfd = statfd;
+
 	fds[0].fd = statfd;
 	fds[0].events = POLLIN;
 	while(1) {
@@ -497,6 +521,7 @@ static int solaris_poll_devstat(void *arg)
 			switch(status) {
 				case USB_DEV_STAT_DISCONNECTED: 
 				/*device is disconnected */
+					usbi_debug(NULL, 4, "STAT_DISCONNECT");
 					usbi_add_event_callback(hdev->lib_hdl,
 						idev->devid, USB_REMOVE);
 
@@ -516,6 +541,7 @@ static int solaris_poll_devstat(void *arg)
 		}
 	}
 
+	close(statfd);
 }
 
 /*
@@ -553,192 +579,26 @@ static int solaris_create_timeout_thread(struct usbi_dev_handle *hdev)
 
 }
 
-static int
-get_dev_descr(struct usbi_device *idev)
-{
-	int i, ret;
-	int fd = -1;
-	char ap_id[PATH_MAX + 1];
-	struct usbi_device *pdev;
-	char port[4], *portstr;
-	struct hubd_ioctl_data ioctl_data;
-	uint32_t size;
-	usb_device_desc_t *descrp;
 
-	if ((pdev = idev->parent) == NULL) {
-
-		goto err1;
-	}
-
-	if ((strlen(pdev->sys_path) == 0) || (pdev->priv->ap_ancestry == NULL)) {
-
-		goto err1;
-	}
-
-	if (idev->pport == 0) {
-
-		goto err1;
-	}
-
-	port[3] = '\0';
-	portstr = lltostr((long long)idev->pport, &port[3]);
-	sprintf(ap_id, "%s:%s%s", pdev->sys_path, pdev->priv->ap_ancestry, portstr);
-	usbi_debug(NULL, 4, "ap_id: %s", ap_id);
-
-	if ((fd = open(ap_id, O_RDONLY)) == -1) {
-		usbi_debug(NULL, 1, "failed open device %s", ap_id);
-
-		goto err1;
-	}
-
-	/* get device descriptor */
-	descrp = malloc(USBI_DEVICE_DESC_SIZE);
-	if (descrp == NULL) {
-		usbi_debug(NULL, 1,
-			"unable to allocate memory for device descriptor");
-
-		goto err2;
-	}
-
-	ioctl_data.cmd = USB_DESCR_TYPE_DEV;
-	ioctl_data.port = idev->pport;
-	ioctl_data.misc_arg = 0;
-	ioctl_data.get_size = B_FALSE;
-	ioctl_data.buf = (caddr_t)descrp;
-	ioctl_data.bufsiz = USBI_DEVICE_DESC_SIZE;
-
-	if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-		usbi_debug(NULL, 1, "failed to get device descriptor");
-		free(descrp);
-
-		goto err2;
-	}
-
-	idev->desc.device_raw.len = USBI_DEVICE_DESC_SIZE;
-	memcpy(&(idev->desc.device), descrp,USBI_DEVICE_DESC_SIZE);
-
-	usbi_debug(NULL, 4, "device descriptor: vid=%x pid=%x\n",
-		descrp->idVendor,descrp->idProduct);
-
-	free(descrp);
-
-	/* get config descriptors */
-	if ((idev->desc.device.bNumConfigurations > USBI_MAXCONFIG) ||
-	    (idev->desc.device.bNumConfigurations < 1)) {
-		usbi_debug(NULL, 1, "invalid config number");
-
-		goto err2;
-	}
-
-	idev->desc.num_configs = idev->desc.device.bNumConfigurations;
-
-	usbi_debug(NULL, 4, " numConfiguration %x\n",idev->desc.num_configs);
-
-	idev->desc.configs_raw = malloc(idev->desc.num_configs *
-	    sizeof (struct usbi_raw_desc));
-	if (idev->desc.configs_raw == NULL) {
-		usbi_debug(NULL, 1, "unable to allocate memory for raw config "
-		    "descriptor structures");
-
-		goto err2;
-	}
-
-	memset(idev->desc.configs_raw, 0,
-	    idev->desc.num_configs * sizeof (struct usbi_raw_desc));
-
-	idev->desc.configs = malloc(idev->desc.num_configs *
-	    sizeof (struct usbi_config));
-	if (idev->desc.configs == NULL) {
-		usbi_debug(NULL, 1, "unable to allocate memory for config "
-		    "descriptors");
-
-		goto err3;
-	}
-
-	memset(idev->desc.configs, 0,
-	    idev->desc.num_configs * sizeof(struct usbi_config));
-
-	for (i = 0; i < idev->desc.num_configs; i++) {
-		struct usbi_raw_desc *cfgr = idev->desc.configs_raw + i;
-
-		ioctl_data.cmd = USB_DESCR_TYPE_CFG;
-		ioctl_data.misc_arg = i;
-		ioctl_data.get_size = B_TRUE;
-		ioctl_data.buf = (caddr_t)&size;
-		ioctl_data.bufsiz = sizeof (size);
-
-		if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-			usbi_debug(NULL, 1, 
-				"failed to get config descr %d size", i);
-
-			goto err4;
-		}
-
-		usbi_debug(NULL, 4, "Config size = %d\n",size);
-
-		cfgr->len = size;
-		cfgr->data = malloc(size);
-		if (cfgr->data == NULL) {
-			usbi_debug(NULL, 1, 
-				"failed to alloc raw config descriptor %d", i);
-
-			goto err4;
-		}
-
-		ioctl_data.get_size = B_FALSE;
-		ioctl_data.buf = (caddr_t)cfgr->data;
-		ioctl_data.bufsiz = size;
-
-		if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-			usbi_debug(NULL, 1, "failed to get config descr %d", i);
-
-			goto err4;
-		}
-
-		ret = usbi_parse_configuration(idev->desc.configs + i,
-		    cfgr->data, cfgr->len);
-		if (ret > 0) {
-			usbi_debug(NULL, 4,
-				"%d bytes of descriptor data still left", ret);
-		} else if (ret < 0) {
-			usbi_debug(NULL, 1, "unable to parse descriptor %d", i);
-
-			goto err4;
-		}
-		usbi_debug(NULL, 4, "configs(%d): type = %x", i,
-			idev->desc.configs[i].desc.bDescriptorType);
-	}
-
-	return (0);
-
-err4:
-	for (i = 0; i < idev->desc.num_configs; i++) {
-		if (idev->desc.configs_raw->data != NULL) {
-			free(idev->desc.configs_raw->data);
-		}
-	}
-	free(idev->desc.configs);
-	idev->desc.configs = NULL;
-err3:
-	free(idev->desc.configs_raw);
-	idev->desc.configs_raw = NULL;
-err2:
-	close(fd);
-err1:
-	return (-1);
-}
-
+/*
+ * Get device descriptors through libdevinfo, instead of by reading
+ * control endpoint. This is for cases where a device doesn't export
+ * a ugen node.
+ */
 int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
                 uint16_t langid,uint8_t **buffer, uint16_t *buflen)
 {
-	int fd = -1;
-	char ap_id[PATH_MAX + 1];
 	struct usbi_device *pdev;
-	char port[4], *portstr;
-	struct hubd_ioctl_data ioctl_data;
-	uint32_t size;
-	usb_device_desc_t *descrp;
+	char *descrp;
 	uint8_t model;
+	usb_device_desc_t *pd;
+
+	int ret;
+	di_node_t devnode;
+	int proplen;
+	unsigned char *rdata;
+	char *path;
+	unsigned char *prop_data;
 
 	if ((pdev = idev->parent) == NULL) {
 		usbi_debug(NULL, 4, "Null parent, root hub");
@@ -771,121 +631,110 @@ int solaris_get_raw_desc(struct usbi_device *idev,uint8_t type,uint8_t descidx,
 			memcpy(*buffer, &root_hub_config_descriptor,
 				*buflen);
 		} else {
-			goto err1;
+			return (OPENUSB_PLATFORM_FAILURE);
 		}
+
 		return 0;
 	}
 
-	if ((strlen(pdev->sys_path) == 0) || (pdev->priv->ap_ancestry == NULL)) {
+	if ((strlen(idev->sys_path)) == 0) {
+		usbi_debug(NULL, 4, "NULL path");
+		return (OPENUSB_BADARG);
+	}
+	
+	path = idev->sys_path + 8; /* skip leading /devices */
 
-		goto err1;
+	usbi_debug(NULL, 4, "init node for %s", pdev->sys_path);
+
+	devnode = di_init(path, DINFOCPYALL);
+	if (devnode == DI_NODE_NIL) {
+		usbi_debug(NULL, 4, "Can't init node for %s", idev->sys_path);
+		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
-	if (idev->pport == 0) {
-		usbi_debug(NULL, 1, "Pport zero");
-		goto err1;
+	if (di_prop_lookup_bytes(DDI_DEV_T_ANY, devnode, "root-hub",
+		&prop_data) == 0) {
+
+		return (DI_WALK_CONTINUE);
 	}
 
-	port[3] = '\0';
-	portstr = lltostr((long long)idev->pport, &port[3]);
-	sprintf(ap_id, "%s:%s%s", pdev->sys_path, pdev->priv->ap_ancestry, portstr);
+	ret = OPENUSB_SUCCESS;
 
-	usbi_debug(NULL, 4, "ap_id: %s", ap_id);
+	switch (type) {
+	case USB_DESC_TYPE_DEVICE:
+		proplen = di_prop_lookup_bytes(DDI_DEV_T_ANY, devnode,
+			"usb-dev-descriptor", &rdata);
+		if (proplen <= 0) {
+			usbi_debug(NULL, 4,
+				"Fail to get usb-dev-descriptor property"
+				"for %s(%s)",
+				path, strerror(errno));
 
-	if ((fd = open(ap_id, O_RDONLY)) == -1) {
-		usbi_debug(NULL, 1, "failed open device %s", ap_id);
+			di_fini(devnode);
+			return (OPENUSB_SYS_FUNC_FAILURE);
+		}
 
-		goto err1;
-	}
-
-	switch(type) {
-
-		case USB_DESC_TYPE_DEVICE:
-
-			usbi_debug(NULL, 4, "Get device descriptor");
-
-			descrp = malloc(USBI_DEVICE_DESC_SIZE);
-			if (descrp == NULL) {
-
-				usbi_debug(NULL, 1, "unable to allocate memory"
+		pd = (usb_device_desc_t *)rdata;
+		descrp = calloc(1, USBI_DEVICE_DESC_SIZE);
+		if (!descrp) {
+			usbi_debug(NULL, 1, "unable to allocate memory"
 					" for device descriptor");
 
-				goto err2;
-			}
+			di_fini(devnode);
+			return OPENUSB_NO_RESOURCES;
+		}
 
-			ioctl_data.cmd = USB_DESCR_TYPE_DEV;
-			ioctl_data.port = idev->pport;
-			ioctl_data.misc_arg = 0;
-			ioctl_data.get_size = B_FALSE;
-			ioctl_data.buf = (caddr_t)descrp;
-			ioctl_data.bufsiz = USBI_DEVICE_DESC_SIZE;
+		/*
+		 * usb dev descriptor is parsed in kernel.
+		 * It has to be converted back to raw data.
+		 */
+		pd->bcdUSB = openusb_cpu_to_le16(pd->bcdUSB);
+		pd->idVendor = openusb_cpu_to_le16(pd->idVendor);
+		pd->idProduct = openusb_cpu_to_le16(pd->idProduct);
+		pd->bcdDevice = openusb_cpu_to_le16(pd->bcdDevice);
 
-			if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-				usbi_debug(NULL, 1,
-					"failed to get device descriptor");
-				free(descrp);
+		memcpy(descrp, pd, USBI_DEVICE_DESC_SIZE);
 
-				goto err2;
-			}
+		*buffer = (char *)descrp;
+		*buflen = USBI_DEVICE_DESC_SIZE;	
 
-			*buffer = (char *)descrp;
-			*buflen = USBI_DEVICE_DESC_SIZE;
+		break;
 
-			close(fd);
-			return 0;
+	case USB_DESC_TYPE_CONFIG:
 
-		case USB_DESC_TYPE_CONFIG:
-			usbi_debug(NULL, 4, "Get config descriptor:%d",descidx);
+		proplen = di_prop_lookup_bytes(DDI_DEV_T_ANY, devnode,
+			"usb-raw-cfg-descriptors", &rdata);
+		if (proplen <= 0) {
+			usbi_debug(NULL, 4,
+				"Fail to get usb-raw-cfg-descriptor"
+				" property for %s(%s)",
+				path, strerror(errno));
 
-			ioctl_data.cmd = USB_DESCR_TYPE_CFG;
-			ioctl_data.port = idev->pport;
-			ioctl_data.misc_arg = descidx;
-			ioctl_data.get_size = B_TRUE;
-			ioctl_data.buf = (caddr_t)&size;
-			ioctl_data.bufsiz = sizeof (size);
+			di_fini(devnode);
+			return (OPENUSB_SYS_FUNC_FAILURE);
+		}
 
-			if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-				usbi_debug(NULL, 1,
-					"failed to get config descr %d size %s",
-					descidx, strerror(errno));
+		descrp = calloc(1, proplen);
+		if (!descrp) {
+			usbi_debug(NULL, 1, "unable to allocate memory"
+					" for device descriptor");
 
-				goto err2;
-			}
+			di_fini(devnode);
+			return OPENUSB_NO_RESOURCES;
+		}
+		memcpy(descrp, rdata, proplen);
+		*buffer = (char *)descrp;
+		*buflen = proplen;
 
-			*buffer = malloc(size);
-			if (*buffer == NULL) {
-				usbi_debug(NULL, 1, "failed to alloc raw config"
-					" descriptor %d", descidx);
-
-				goto err2;
-			}
-
-			ioctl_data.get_size = B_FALSE;
-			ioctl_data.buf = *buffer;
-			ioctl_data.bufsiz = size;
-
-			if (ioctl(fd, DEVCTL_AP_CONTROL, &ioctl_data) != 0) {
-				usbi_debug(NULL, 1,
-					"failed to get config descr %d-%s", 
-					descidx, strerror(errno));
-				free(*buffer);
-
-				goto err2;
-			}
-			*buflen = size;
-
-			close(fd);
-			return 0;
-
-		case USB_DESC_TYPE_STRING:
-			break;
-		default:
-			return -1;
+		break;
+	default:
+		usbi_debug(NULL, 4, "Unknown descriptor type");
+		ret = OPENUSB_PLATFORM_FAILURE;
 	}
-err2:
-	close(fd); 
-err1:
-	return (-1);
+	
+	di_fini(devnode);
+
+	return (ret);
 
 }
 
@@ -1090,7 +939,7 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 	}
 
 	if ((n = di_prop_lookup_ints(DDI_DEV_T_ANY, node,
-	    "usb-number-ports", &nport_prop)) > 1) {
+	    "usb-port-count", &nport_prop)) > 1) {
 		usbi_debug(NULL, 1, "invalid usb-port-number");
 		free(idev);
 
@@ -1123,9 +972,8 @@ create_new_device(di_node_t node, struct usbi_device *pdev,
 
 	get_minor_node_link(node, idev);
 
-	if (node != ibus->priv->node) {
-		(void) get_dev_descr(idev);
-	}
+	usbi_debug(NULL, 4, "priv node: %s", di_devfs_path(ibus->priv->node));
+
 
 	if (node == ibus->priv->node) {
 		ibus->root = idev;
@@ -1188,6 +1036,7 @@ solaris_refresh_devices(struct usbi_bus *ibus)
 
 	ibus->priv->node = root_node;
 
+	usbi_debug(NULL, 4, "root node: %s", di_devfs_path(root_node));
 	create_new_device(root_node, NULL, ibus);
 
 	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
@@ -1449,10 +1298,11 @@ solaris_open(struct usbi_dev_handle *hdev)
 		return (OPENUSB_PLATFORM_FAILURE);
 	}
 
+#ifndef OPENUSB_USE_HAL  /* depends merely on HAL of hotplug events */
 	if(solaris_create_polling_thread(hdev) != 0) {
 		return OPENUSB_SYS_FUNC_FAILURE;
 	}
-	
+#endif
 	if(solaris_create_timeout_thread(hdev) != 0) {
 		return OPENUSB_SYS_FUNC_FAILURE;
 	}
@@ -1675,9 +1525,12 @@ solaris_close(struct usbi_dev_handle *hdev)
 {
 	int i;
 
+#ifndef OPENUSB_USE_HAL /* depends on HAL */
 	/* terminate all working threads of this handle */
 	pthread_cancel(hdev->priv->pollthr);
+	close(hdev->priv->statfd);
 	pthread_join(hdev->priv->pollthr, NULL);
+#endif
 
 	pthread_cancel(hdev->priv->timeout_thr);
 
@@ -2595,7 +2448,7 @@ solaris_init(struct usbi_handle *hdl, uint32_t flags )
 	}
 
 
-#if 1 //hal
+#ifdef OPENUSB_USE_HAL /* hal */
 	if (!g_thread_supported ())
 		g_thread_init (NULL);
 
@@ -2624,13 +2477,14 @@ void solaris_fini(struct usbi_handle *hdl)
 	if(solaris_back_inited == 0) { /*already fini */
 		return;
 	}
-	pthread_cancel(cb_thread); /*stop this thread */
+	/* pthread_cancel(cb_thread); *//*stop this thread */
 	pthread_mutex_destroy(&cb_io_lock);
 	pthread_cond_destroy(&cb_io_cond);
 
 	if (solaris_back_inited == 1) {
 		usbi_debug(NULL, 4, "stop hotplug thread");
-		g_main_loop_quit(event_loop);
+		g_main_loop_quit(event_loop); /* quit loop, free resources */
+		pthread_cancel(hotplug_thread); /* stop the hotplug thread */
 		pthread_join(hotplug_thread, NULL);
 	}
 	solaris_back_inited--;
