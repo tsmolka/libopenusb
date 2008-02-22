@@ -1,7 +1,7 @@
 /* 
  * Solaris backend
  *
- * Copyright (c) 2007 Sun Microsystems, Inc. All rights reserved
+ * Copyright (c) 2007-2008 Sun Microsystems, Inc. All rights reserved
  * Use is subject to license terms.
  *
  * This library is covered by the LGPL, read LICENSE for details.

@@ -1,7 +1,7 @@
 /*
  * descriptors structures
  *
- * Copyright (c) 2007 Sun Microsystems, Inc. All rights reserved
+ * Copyright (c) 2007-2008 Sun Microsystems, Inc. All rights reserved
  * Use is subject to license terms.
  * Copyright 2001-2005 Johannes Erdfelt <johannes@erdfelt.com>
  *
