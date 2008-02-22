@@ -49,7 +49,7 @@ Please make sure to include:
 Patches
 =======
 
-Patches can be sent to openusb-devel@lists.sourceforge.net.
+Patches can be sent to libusb-devel@lists.sourceforge.net.
 
 If the patch fixes a bug, it is usually a good idea to include
 all the information described in "How to Report Bugs".
