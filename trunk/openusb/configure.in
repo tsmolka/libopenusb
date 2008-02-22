@@ -20,18 +20,25 @@ ifdef([AC_DIVERSION_NOTICE], [AC_DIVERT_PUSH(AC_DIVERSION_NOTICE)],
 # treated with the same interface and binary age.
 #
 # Making releases:
+# if only bugfixes get integrated, which also means only internal changes
 #   LIBOPENUSB_MICRO_VERSION += 1;
 #   LIBOPENUSB_INTERFACE_AGE += 1;
 #   LIBOPENUSB_BINARY_AGE += 1;
-# if any functions have been added, set LIBOPENUSB_INTERFACE_AGE to 0.
-# if backwards compatibility has been broken,
-# set LIBOPENUSB_BINARY_AGE _and_ LIBOPENUSB_INTERFACE_AGE to 0.
+#
+# else if any functions have been added,
+# 	LIBOPENUSB_MICRO_VERSION += 1;
+#	set LIBOPENUSB_INTERFACE_AGE to 0.
+#
+# else if backwards compatibility has been broken,
+#	 set LIBOPENUSB_BINARY_AGE _and_ LIBOPENUSB_INTERFACE_AGE to 0.
+#
+# see libtool manual section 6.3 for version rules.
 #
 LIBOPENUSB_MAJOR_VERSION=1
 LIBOPENUSB_MINOR_VERSION=0
-LIBOPENUSB_MICRO_VERSION=0
-LIBOPENUSB_INTERFACE_AGE=0
-LIBOPENUSB_BINARY_AGE=0
+LIBOPENUSB_MICRO_VERSION=1
+LIBOPENUSB_INTERFACE_AGE=1
+LIBOPENUSB_BINARY_AGE=1
 LIBOPENUSB_VERSION=$LIBOPENUSB_MAJOR_VERSION.$LIBOPENUSB_MINOR_VERSION.$LIBOPENUSB_MICRO_VERSION
 dnl
 AC_DIVERT_POP()dnl
@@ -199,9 +206,9 @@ PKG_CHECK_MODULES(HAL, hal, HAVE_HAL="yes")
 AC_SUBST(HAL_CFLAGS)
 AC_SUBST(HAL_LIBS)
 
-PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
-AC_SUBST(LIBUSB_CFLAGS)
-AC_SUBST(LIBUSB_LIBS)
+#PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
+#AC_SUBST(LIBUSB_CFLAGS)
+#AC_SUBST(LIBUSB_LIBS)
 
 
 if test "$os_support" = "bsd"; then
