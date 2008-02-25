@@ -1754,7 +1754,7 @@
     BULK transfers. Application should allocate and fill a openusb_bulk_request:
     <programlisting>
 
-    struct openusb_isoc_request {
+    struct openusb_bulk_request {
 	    uint8_t                 *payload;                                                                                    
 	    uint32_t                length;                                                                                      
 	    uint32_t                timeout;                                                                                     
