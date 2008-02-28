@@ -398,6 +398,7 @@ void usbi_remove_device(struct usbi_device *idev);
 void usbi_free_device(struct usbi_device *idev);
 void usbi_rescan_devices(void);
 struct usbi_device *usbi_find_device_by_id(openusb_devid_t devid);
+struct usbi_bus *usbi_find_bus_by_num(unsigned int busnum);
 int usbi_get_string(openusb_dev_handle_t dev, int index, int langid, char *buf,
     size_t buflen);
 int usbi_get_string_simple(openusb_dev_handle_t dev, int index, char *buf,
