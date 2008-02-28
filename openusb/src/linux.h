@@ -27,13 +27,13 @@
  */
 struct usbk_ctrltransfer {
   /* keep in sync with usb.h:usb_proc_ctrltransfer */
-  u_int8_t  bRequestType;
-  u_int8_t  bRequest;
-  u_int16_t wValue;
-  u_int16_t wIndex;
-  u_int16_t wLength;
+  uint8_t  bRequestType;
+  uint8_t  bRequest;
+  uint16_t wValue;
+  uint16_t wIndex;
+  uint16_t wLength;
 
-  u_int32_t timeout;	/* in milliseconds */
+  uint32_t timeout;	/* in milliseconds */
 
   /* pointer to data */
   void *data;
@@ -172,7 +172,7 @@ int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
 int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 																	 uint8_t interface);
 struct usbi_device *find_device_by_udi(const char *udi);
-void process_new_device(const char *udi);
+void process_new_device(LibHalContext *ctx, const char *udi, struct usbi_bus *ibus);
 void device_added(LibHalContext *ctx, const char *udi);
 void device_removed(LibHalContext *ctx, const char *udi);
 
