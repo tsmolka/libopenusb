@@ -118,13 +118,12 @@ void usbi_add_event_callback(struct usbi_handle *hdl, openusb_devid_t devid,
 	list_init(&cb->list);
 
 	pthread_mutex_lock(&event_callbacks.lock);
-	
+
 	list_add(&cb->list, &event_callbacks.head);
 
 	pthread_cond_signal(&event_callback_cond);
-	
-	if (callback_queue_full == 0)
-		callback_queue_full = 1;
+
+	callback_queue_full++;
 
 	pthread_mutex_unlock(&event_callbacks.lock);
 }
@@ -184,10 +183,10 @@ static void *process_event_callbacks(void *unused)
 
 			/* don't reference any element of cb after this */
 			free(cb);
-		}
 
-		/* the list should be empty here */
-		callback_queue_full = 0;
+			/* the list should be empty here */
+			callback_queue_full--;
+		}
 
 		pthread_mutex_unlock(&event_callbacks.lock);
 	}
