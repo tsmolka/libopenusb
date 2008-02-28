@@ -91,6 +91,31 @@ struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
 	return NULL;
 }
 
+
+struct usbi_bus *usbi_find_bus_by_num(unsigned int busnum)
+{
+	struct usbi_bus *ibus;
+
+	/* FIXME: We should probably index the device id in
+	 * a rbtree or something
+	 */
+	pthread_mutex_lock(&usbi_buses.lock);
+	list_for_each_entry(ibus, &usbi_buses.head, list) {
+	/* safe */
+		pthread_mutex_lock(&ibus->lock);
+		if (ibus->busnum == busnum) {
+			pthread_mutex_unlock(&ibus->lock);
+			pthread_mutex_unlock(&usbi_buses.lock);
+			return ibus;
+		}
+		pthread_mutex_unlock(&ibus->lock);
+	}
+	pthread_mutex_unlock(&usbi_buses.lock);
+
+	return NULL;
+}
+
+
 static void refresh_bus(struct usbi_backend *backend)
 {
 	struct list_head busses;
@@ -172,7 +197,6 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 {
 	struct usbi_handle *handle, *thdl;
 
-	usbi_debug(NULL, 4, "add a new device");
 	/* FIXME: Handle devid rollover gracefully? */
 	idev->devid = cur_device_id++;
 
@@ -188,9 +212,7 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
-		/* every openusb instance should get notification
-		 * of this event
-		 */
+		/* every openusb instance should get notification of this event */
 		usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
 	}
 	pthread_mutex_unlock(&usbi_handles.lock);
