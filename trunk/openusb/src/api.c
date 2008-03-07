@@ -10,6 +10,7 @@
  */
 #include <string.h>
 #include <pthread.h>
+#include <assert.h>
 #include "usbi.h"
 
 #define USB_EP_TYPE_MASK 0x03
@@ -523,6 +524,44 @@ int32_t openusb_xfer_wait(openusb_request_handle_t req)
 		usbi_debug(NULL, 1, "Can't find device handle:%llu",req->dev);
 		return OPENUSB_INVALID_HANDLE;
 	}
+
+	/* Make sure the request is not too large (if the max size is zero then
+	 * there is no maximum size */
+	if (dev->idev->bus->max_xfer_size[req->type] != 0) {
+		switch(req->type) {
+			default:
+				usbi_debug(dev->lib_hdl, 1, "Invalid request type: %d", req->type);
+				return (OPENUSB_BADARG);
+				
+			case USB_TYPE_CONTROL:
+				if (req->req.ctrl->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.ctrl->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+
+			case USB_TYPE_INTERRUPT:
+				if (req->req.intr->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.intr->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+
+			case USB_TYPE_BULK:
+				if (req->req.bulk->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.bulk->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+				
+			case USB_TYPE_ISOCHRONOUS:
+				/* FIXME: is there a good way to check the length here? */
+				break;
+		} /* end switch(req->type) { */
+	} /* end if (dev->idev->bus->max_xfer_size[req->type] != 0) { */
 	
 	if (check_req_valid(req, dev) < 0) {
 		usbi_debug(dev->lib_hdl, 1, "Not a valid request");
@@ -716,6 +755,44 @@ int32_t openusb_xfer_aio(openusb_request_handle_t req)
 		usbi_debug(NULL, 1, "Can't find device");
 		return OPENUSB_BADARG;
 	}
+
+	/* Make sure the request is not too large (if the max size is zero then
+	* there is no maximum size */
+	if (dev->idev->bus->max_xfer_size[req->type] != 0) {
+		switch(req->type) {
+			default:
+				usbi_debug(dev->lib_hdl, 1, "Invalid request type: %d", req->type);
+				return (OPENUSB_BADARG);
+				
+			case USB_TYPE_CONTROL:
+				if (req->req.ctrl->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.ctrl->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+
+			case USB_TYPE_INTERRUPT:
+				if (req->req.intr->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.intr->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+
+			case USB_TYPE_BULK:
+				if (req->req.bulk->length > dev->idev->bus->max_xfer_size[req->type]) {
+					usbi_debug(dev->lib_hdl, 1, "Request too large (%u), max_xfer_size=%u",
+										 req->req.bulk->length, dev->idev->bus->max_xfer_size[req->type]);
+					return (OPENUSB_IO_REQ_TOO_BIG);
+				}
+				break;
+				
+			case USB_TYPE_ISOCHRONOUS:
+				/* FIXME: is there a good way to check the length here? */
+				break;
+		} /* end switch(req->type) { */
+	} /* end if (dev->idev->bus->max_xfer_size[req->type] != 0) { */
 
 	ret = check_req_valid(req, dev);
 	if (ret < 0) {

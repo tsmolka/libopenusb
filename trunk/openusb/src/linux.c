@@ -575,12 +575,13 @@ int32_t linux_find_buses(struct list_head *buses)
 			return (OPENUSB_NO_RESOURCES);
 		}
 
-
-		/* setup the maximum transfer sizes */
+		/* setup the maximum transfer sizes - these are determined by usbfs and
+		 * NOT by the bus (as with other oses) so they will always be the same */
 		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4088;
 		ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = 16384;
 		ibus->max_xfer_size[USB_TYPE_BULK]        = 16384;
-
+		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = 16384;
+		
 		pthread_mutex_init(&ibus->lock, NULL);
 		pthread_mutex_init(&ibus->devices.lock, NULL);
 
