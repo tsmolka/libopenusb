@@ -1521,6 +1521,7 @@ void *poll_io(void *devhdl)
 			 * the IO is not in progress (to avoid processing aborted requests) */
 			if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
 					(io->status != USBI_IO_INPROGRESS) ) {
+				pthread_mutex_lock(&hdev->lock);
 				continue;
 			}
 			
@@ -1568,7 +1569,6 @@ void *poll_io(void *devhdl)
 
 		/* if there is data to be read on the event pipe read it and discard */
 		if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
-			memset(buf,0,sizeof(buf));
 			while (read(hdev->priv->event_pipe[0], buf, sizeof(buf)) >= sizeof(buf)) {
 				if(hdev->state == USBI_DEVICE_CLOSING) {
 					/* device is closing, exit this thread */
