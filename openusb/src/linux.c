@@ -156,7 +156,13 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	wakeup_io_thread(hdev);
 	pthread_cancel(hdev->priv->io_thread);
 	pthread_join(hdev->priv->io_thread, NULL);
-
+	
+	/* close the event pipes */
+	if (hdev->priv->event_pipe[0] > 0)
+		close(hdev->priv->event_pipe[0]);
+	if (hdev->priv->event_pipe[1] > 0)
+		close(hdev->priv->event_pipe[1]);
+	
 	/* If we've already closed the file, we're done */
 	if (hdev->priv->fd <= 0) {
 		free(hdev->priv);
@@ -233,14 +239,19 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
                                openusb_init_flag_t flags)
 {
 	int32_t ret;
-	int			interface = (int)ifc;
+	int		interface = (int)ifc;
 
   /* Validate... */
 	if (!hdev) {
 		return (OPENUSB_BADARG);
 	}
 
-	usbi_debug(hdev->lib_hdl, 4, "claiming interface %d", ifc);
+	/* keep track of the fact that this interface was claimed */
+	if (hdev->claimed_ifs[ifc].clm == USBI_IFC_CLAIMED) {
+		return OPENUSB_SUCCESS;
+	}
+
+	usbi_debug(hdev->lib_hdl, 2, "claiming interface %d", ifc);
 	ret = ioctl(hdev->priv->fd, IOCTL_USB_CLAIMINTF, &interface);
 	if (ret < 0) {
 		usbi_debug(hdev->lib_hdl, 1, "could not claim interface %d: %s", ifc, strerror(errno));
@@ -284,7 +295,7 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
 
 	/* There's no usbfs IOCTL for querying the current alternate setting, we'll
 	 * leave it up to the user to set later. */
-	return (OPENUSB_SUCCESS);
+	return (ret);
 }
 
 
@@ -298,7 +309,7 @@ int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
 {
 	int32_t ret;
 	int			interface = (int)ifc;
-
+	
 	/* Validate... */
 	if (!hdev) {
 		return OPENUSB_BADARG;
@@ -939,10 +950,16 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
  */
 void linux_free_device(struct usbi_device *idev)
 {
-	/* Free the sysfs path, udi and the private data structure */
-	if (idev->priv->udi) { free(idev->priv->udi); idev->priv->udi = NULL; }
-	if (idev->priv) { free(idev->priv); idev->priv = NULL; }
-	
+	/* Free the udi and the private data structure */
+	if (idev->priv) {
+		if (idev->priv->udi) {
+			free(idev->priv->udi);
+			idev->priv->udi = NULL;
+		}
+		free(idev->priv);
+		idev->priv = NULL;
+	}
+
 	return;
 }
 
@@ -961,7 +978,7 @@ void linux_free_device(struct usbi_device *idev)
  */
 int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
-	int ret;
+	int32_t ret;
 
 	/* Validate ... */
 	if ((!hdev) || (!io)) {
@@ -1075,7 +1092,7 @@ int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
 	openusb_intr_request_t	*intr;
 	int32_t								ret;
-	
+
 	/* Validate... */
 	if ((!hdev) || (!io)) {
 		return (OPENUSB_BADARG);
@@ -1106,7 +1123,7 @@ int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	
 	/* lock the device */
 	pthread_mutex_lock(&hdev->lock);
-	
+
 	/* submit the URB */
 	ret = urb_submit(hdev, io);
 
@@ -1327,11 +1344,19 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 
 	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb)) >= 0) {
 
+		io = urb->usercontext;
+
+		/* Check for failures or cancels before anything else */
 		if (urb->status == -2) { /* this IO was canceled, skip processing */
+			usbi_debug(hdev->lib_hdl, 1, "received cancelled urb: %d",urb->actual_length);
+			usbi_io_complete(io,OPENUSB_IO_CANCELED,0);
+			continue;
+		} else if (urb->status < 0) {
+			io->status = USBI_IO_COMPLETED_FAIL;
+			/* FIXME: not sure what the best error code to use here is */
+			usbi_io_complete(io, OPENUSB_PLATFORM_FAILURE, 0);
 			continue;
 		}
-		
-		io = urb->usercontext;
 
 		/* if this was a control request copy the payload */
 		if (io->req->type == USB_TYPE_CONTROL) {
@@ -1369,14 +1394,9 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 			}
 		}
 
-		if (urb->status >= 0) {
-			io->status = USBI_IO_COMPLETED;
-			usbi_io_complete(io, OPENUSB_SUCCESS, urb->actual_length);
-		} else {
-			io->status = USBI_IO_COMPLETED_FAIL;
-			/* FIXME: not sure what the best error code to use here is */
-			usbi_io_complete(io, OPENUSB_PLATFORM_FAILURE, 0);
-		}
+		/* If we get here then we were successful */
+		io->status = USBI_IO_COMPLETED;
+		usbi_io_complete(io, OPENUSB_SUCCESS, urb->actual_length);
 	}
 
 	return (OPENUSB_SUCCESS);
@@ -1443,20 +1463,19 @@ int32_t linux_io_cancel(struct usbi_io *io)
 {
 	int ret;
 
+	io->status = USBI_IO_CANCEL;
+	
 	/* Discard/Cancel the URB */
 	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 	if (ret < 0) {
 		/* If this fails then we probably haven't submitted the request to usbfs.
 		 * So we'll just log the error and continue on as normal */
-		usbi_debug(io->dev->lib_hdl, 1, "error cancelling URB: %s", strerror(errno));
+		usbi_debug(io->dev->lib_hdl, 1, "error canceling URB: %s", strerror(errno));
+		usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
 	}
 
 	/* Always do this to avoid race conditions */
-	//wakeup_io_thread(io->dev);
-
-	/* We'll always cal usbi_io_complete here, and we'll just throw away the canceled
-	 * request when we see it in io_complete() */
-	usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
+	wakeup_io_thread(io->dev);
 
 	return (OPENUSB_SUCCESS);
 }
@@ -1569,11 +1588,10 @@ void *poll_io(void *devhdl)
 
 		/* if there is data to be read on the event pipe read it and discard */
 		if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
-			while (read(hdev->priv->event_pipe[0], buf, sizeof(buf)) >= sizeof(buf)) {
-				if(hdev->state == USBI_DEVICE_CLOSING) {
-					/* device is closing, exit this thread */
-					return NULL;
-				}
+			read(hdev->priv->event_pipe[0], buf, 1);
+			if(hdev->state == USBI_DEVICE_CLOSING) {
+				/* device is closing, exit this thread */
+				return NULL;
 			}
 		}
 
@@ -1584,11 +1602,10 @@ void *poll_io(void *devhdl)
 		 * longer be able to submit io requests (because the file buffer will
 		 * fill up. */
 		if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
-			while (read(hdev->event_pipe[0], buf, sizeof(buf)) >= sizeof(buf)) {
-				if(hdev->state == USBI_DEVICE_CLOSING) {
-					/* device is closing, exit this thread */
-					return NULL;
-				}
+			read(hdev->event_pipe[0], buf, 1);
+			if(hdev->state == USBI_DEVICE_CLOSING) {
+				/* device is closing, exit this thread */
+				return NULL;
 			}
 		}
 
@@ -1973,6 +1990,9 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		return (OPENUSB_BADARG);
 	}
 
+	/* Lock the bus */
+	pthread_mutex_lock(&ibus->lock);
+	
 	/* Initialize the error struct... */
 	dbus_error_init (&error);
 
@@ -2027,9 +2047,6 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
-	/* Lock the bus */
-	pthread_mutex_lock(&ibus->lock);
-	
 	/* Loops through the devices that were found and look for usb devices to
 	 * add to our list of known devices */
 	for (i = 0;i < num_devices;i++) {
@@ -2228,9 +2245,17 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi, struct usbi_bus
 		
 		/* copy the udi */
 		idev->priv->udi = strdup(udi);
-
+		
 		/* add the device */
 		usbi_add_device(ibus, idev);
+
+		/* Setup the parent relationship, if this device is new */
+		if (idev->priv->pdevnum) {
+			idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
+		} else {
+			ibus->root = idev;
+		}
+
 	}
 
 	/* Mark the device as found */
@@ -2238,13 +2263,6 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi, struct usbi_bus
 
 	/* free the property strings */
 	libhal_free_string(bus);
-
-	/* Setup the parent relationship */
-	if (idev->priv->pdevnum) {
-		idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
-	} else {
-		ibus->root = idev;
-	}
 
 	return;
 }
