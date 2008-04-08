@@ -220,9 +220,13 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 
 void usbi_free_device(struct usbi_device *idev)
 {
-	if (idev->children)
+	if (idev->children) {
 		free(idev->children);
+		idev->children = NULL;
+	}
+
 	usbi_destroy_configuration(idev);
+
 	if (idev->bus->ops->free_device)
 		idev->bus->ops->free_device(idev);
 
@@ -239,7 +243,7 @@ void usbi_remove_device(struct usbi_device *idev)
 
 	list_del(&idev->bus_list);
 	list_del(&idev->dev_list);
-
+	
 	usbi_free_device(idev);
 
 	pthread_mutex_lock(&usbi_handles.lock);
