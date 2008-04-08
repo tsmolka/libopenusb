@@ -653,6 +653,14 @@ void openusb_fini(openusb_handle_t handle)
 		/* last openusb instance, destroy lock */
 		pthread_mutex_unlock(&usbi_lock);
 		pthread_mutex_destroy(&usbi_lock);
+
+		/* last openusb instance, unload the backends */
+		list_for_each_entry_safe(backend, tbackend, &backends, list) {
+			/* safe */
+			if(backend->ops->fini)
+				dlclose(backend->handle);/* call each backend's fini */
+		}
+
 		return;
 	}
 	pthread_mutex_unlock(&usbi_lock);
@@ -761,7 +769,7 @@ int32_t openusb_set_default_timeout(openusb_handle_t handle,
 
 /* find an opened device's usbi_dev_handle by its openusb_dev_handle */
 struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev)
-{ 
+{
 	struct usbi_dev_handle *hdev;
 
 	/* fail if openusb is not inited */
@@ -773,7 +781,7 @@ struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev)
 	pthread_mutex_unlock(&usbi_lock);
 
 	/* FIXME: We should probably index the device id in a rbtree or
-	 * something 
+	 * something
 	 */
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
@@ -788,9 +796,9 @@ struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev)
 		pthread_mutex_unlock(&hdev->lock);
 	}
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
-	
+
 	return NULL;
-}   
+}
 
 /* find a device's usbi_device struct by its devid */
 struct usbi_device *usbi_find_device_by_id(openusb_devid_t devid)
