@@ -64,7 +64,10 @@ void usbi_free_bus(struct usbi_bus *ibus)
 
 void usbi_remove_bus(struct usbi_bus *ibus)
 {
+	pthread_mutex_lock(&usbi_buses.lock);
 	list_del(&ibus->list);
+	pthread_mutex_unlock(&usbi_buses.lock);
+	
 	usbi_free_bus(ibus);
 }
 
@@ -241,8 +244,12 @@ void usbi_remove_device(struct usbi_device *idev)
 
 	openusb_devid_t devid = idev->devid;
 
+	pthread_mutex_lock(&usbi_buses.lock);
+	pthread_mutex_lock(&usbi_devices.lock);
 	list_del(&idev->bus_list);
 	list_del(&idev->dev_list);
+	pthread_mutex_unlock(&usbi_buses.lock);
+	pthread_mutex_unlock(&usbi_devices.lock);
 	
 	usbi_free_device(idev);
 
