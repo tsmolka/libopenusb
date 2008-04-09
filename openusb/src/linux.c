@@ -1348,7 +1348,7 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 
 		/* Check for failures or cancels before anything else */
 		if (urb->status == -2) { /* this IO was canceled, skip processing */
-			usbi_debug(hdev->lib_hdl, 1, "received cancelled urb: %d",urb->actual_length);
+			usbi_debug(hdev->lib_hdl, 4, "received cancelled urb: %d",urb->actual_length);
 			usbi_io_complete(io,OPENUSB_IO_CANCELED,0);
 			continue;
 		} else if (urb->status < 0) {
@@ -1469,7 +1469,7 @@ int32_t linux_io_cancel(struct usbi_io *io)
 	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
 	if (ret < 0) {
 		/* If this fails then we probably haven't submitted the request to usbfs.
-		 * So we'll just log the error and continue on as normal */
+		 * So we'll log an error, and notify the library the the IO was canceled */
 		usbi_debug(io->dev->lib_hdl, 1, "error canceling URB: %s", strerror(errno));
 		usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
 	}
