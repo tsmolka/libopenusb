@@ -59,13 +59,13 @@
     <refsect1>
     <title> Return Value </title>
     <para>Upon successful initialization of a openusb instance, the <function>openusb_init()
-    </function> function will return LIBUSB_SUCCESS. Otherwise, a failure will be returned.
+    </function> function will return OPENUSB_SUCCESS. Otherwise, a failure will be returned.
     </para>
-    <para>LIBUSB_PLATFORM_FAILURE  --    Unspecified kernel/driver failure. </para>
+    <para>OPENUSB_PLATFORM_FAILURE  --    Unspecified kernel/driver failure. </para>
 
-    <para>LIBUSB_BADARG            --   An invalid argument is passed in. handle is invalid</para>
+    <para>OPENUSB_BADARG            --   An invalid argument is passed in. handle is invalid</para>
 
-    <para>LIBUSB_NO_RESOURCES       --  Memory allocation failure. </para>
+    <para>OPENUSB_NO_RESOURCES       --  Memory allocation failure. </para>
 
     </refsect1>
 
@@ -203,13 +203,13 @@
     <title> Return Value </title>
     <para> <function>openusb_set_event_callback</function> returns 0 if succeed. Otherwise, a openusb
     error will be returned.</para>
-    <para> LIBUSB_SUCCESS    -  Callback was successfully set. </para>
+    <para> OPENUSB_SUCCESS    -  Callback was successfully set. </para>
 
-    <para>LIBUSB_BADARG      - Invalid arguments, either invalid type or callback. </para>
+    <para>OPENUSB_BADARG      - Invalid arguments, either invalid type or callback. </para>
 
-    <para> LIBUSB_INVALID_HANDLE  -     Invalid handle. </para>
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid handle. </para>
 
-    <para> LIBUSB_NO_RESOURCES - Memory allocation failure. </para>
+    <para> OPENUSB_NO_RESOURCES - Memory allocation failure. </para>
 
 
     </refsect1>
@@ -273,11 +273,11 @@
 
     <refsect1>
     <title> Return Value </title>
-    <para> LIBUSB_SUCCESS     -  New timeout was successfully set. </para>
+    <para> OPENUSB_SUCCESS     -  New timeout was successfully set. </para>
 
-    <para> LIBUSB_INVALID_HANDLE  -     Invalid openusb handle. </para>
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid openusb handle. </para>
 
-    <para>LIBUSB_BADARG     -  Invalid argument. Type is not a valid transfer type. </para>
+    <para>OPENUSB_BADARG     -  Invalid argument. Type is not a valid transfer type. </para>
 
 
     </refsect1>
@@ -345,16 +345,16 @@
     <refsect1>
     <title> Return Value </title>
     <para> <function>openusb_get_busid_list</function> may have the following return values, </para>
-    <para> LIBUSB_SUCCESS    -  Callback was successfully set. </para>
+    <para> OPENUSB_SUCCESS    -  Callback was successfully set. </para>
 
-    <para>LIBUSB_BADARG      - Invalid argument. busids or num_busids is NULL. Or,
+    <para>OPENUSB_BADARG      - Invalid argument. busids or num_busids is NULL. Or,
                         (*busids) is NOT null, otherwise it will cause memory
                         leak.. </para>
 
-    <para> LIBUSB_INVALID_HANDLE  -     Invalid handle. </para>
-    <para> LIBUSB_NULL_LIST   - The busids list is empty. </para>
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid handle. </para>
+    <para> OPENUSB_NULL_LIST   - The busids list is empty. </para>
 
-    <para> LIBUSB_NO_RESOURCES - Memory allocation failure. </para>
+    <para> OPENUSB_NO_RESOURCES - Memory allocation failure. </para>
 
 
     </refsect1>
@@ -476,24 +476,24 @@
     </para>
 
      <para>
-    LIBUSB_SUCCESS   -   Success.
+    OPENUSB_SUCCESS   -   Success.
     </para>
 
      <para>
-    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
     </para>
 
      <para>
-    LIBUSB_BADARG      - Invalid argument. devids or num_devids is NULL;
+    OPENUSB_BADARG      - Invalid argument. devids or num_devids is NULL;
                         busid is invalid; vendor or product is out of range;
                         class, subclass or product is out of range.
      </para>
     <para>
-    LIBUSB_NULL_LIST   - The devids list is empty.
+    OPENUSB_NULL_LIST   - The devids list is empty.
     </para>
 
     <para>
-    LIBUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    OPENUSB_INVALID_HANDLE  -     Libusb handle is invalid.
     </para>
 
     </refsect1>
@@ -603,23 +603,23 @@
     </para>
 
      <para>
-    LIBUSB_SUCCESS   -   Success.
+    OPENUSB_SUCCESS   -   Success.
     </para>
 
      <para>
-    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
     </para>
 
      <para>
-    LIBUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+    OPENUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
      </para>
     <para>
-    LIBUSB_PARSE_ERROR - Libusb fails to get device, configuration or
+    OPENUSB_PARSE_ERROR - Libusb fails to get device, configuration or
                                 string descriptors of this device.
     </para>
 
     <para>
-    LIBUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    OPENUSB_INVALID_HANDLE  -     Libusb handle is invalid.
     </para>
 
     </refsect1>
@@ -705,30 +705,30 @@
     </para>
 
      <para>
-    LIBUSB_SUCCESS   -   Success.
+    OPENUSB_SUCCESS   -   Success.
     </para>
 
      <para>
-    LIBUSB_NO_RESOURCES - Memory allocation failure.
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
     </para>
 
      <para>
-    LIBUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+    OPENUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
      </para>
     <para>
-    LIBUSB_SYS_FUNC_FAILURE - System function fails.
+    OPENUSB_SYS_FUNC_FAILURE - System function fails.
     </para>
 
     <para>
-    LIBUSB_INVALID_HANDLE  -     Libusb <parameter>handle</parameter> is invalid.
+    OPENUSB_INVALID_HANDLE  -     Libusb <parameter>handle</parameter> is invalid.
     </para>
 
     <para>
-    LIBUSB_PLATFORM_FAILURE -    Unspecified kernel/driver failure. 
+    OPENUSB_PLATFORM_FAILURE -    Unspecified kernel/driver failure. 
     </para>
 
     <para>
-    LIBUSB_IO_* -    USB host controller errors
+    OPENUSB_IO_* -    USB host controller errors
     </para>
     </refsect1>
 
@@ -793,11 +793,11 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS - No errors.</para>
+    <para>OPENUSB_SUCCESS - No errors.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter> is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter> is not valid</para>
 
-    <para>LIBUSB_BADARG - <parameter>Devid</parameter> address is not
+    <para>OPENUSB_BADARG - <parameter>Devid</parameter> address is not
     valid</para>
   </refsect1>
 
@@ -855,11 +855,11 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS - No errors.</para>
+    <para>OPENUSB_SUCCESS - No errors.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter>is not valid.</para>
+    <para>OPENUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter>is not valid.</para>
 
-    <para>LIBUSB_BADARG - <parameter>lib_handle</parameter> is an invalid address</para>
+    <para>OPENUSB_BADARG - <parameter>lib_handle</parameter> is an invalid address</para>
   </refsect1>
 
   <refsect1>
@@ -919,21 +919,21 @@
   <refsect1>
     <title>Return Value</title>
 
-    <para><function>openusb_get_max_xfer_size()</function> returns LIBUSB_SUCCESS on success.
+    <para><function>openusb_get_max_xfer_size()</function> returns OPENUSB_SUCCESS on success.
     Otherwise, a openusb error is returned.</para>
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS - No errors.</para>
+    <para>OPENUSB_SUCCESS - No errors.</para>
 
-    <para>LIBUSB_INVALID_HANDLE - Invalid openusb handle.</para>
+    <para>OPENUSB_INVALID_HANDLE - Invalid openusb handle.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE - Bus id<parameter>bus</parameter> is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE - Bus id<parameter>bus</parameter> is not valid</para>
 
-    <para>LIBUSB_BADARG - <parameter>type</parameter> is not valid or
+    <para>OPENUSB_BADARG - <parameter>type</parameter> is not valid or
     <parameter>bytes</parameter> is NULL.</para>
 
-    <para>LIBUSB_NOT_SUPPORTED - Operation is not supported.</para>
+    <para>OPENUSB_NOT_SUPPORTED - Operation is not supported.</para>
 
   </refsect1>
 
@@ -1002,11 +1002,11 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_BADARG         <parameter>cfg</parameter> is an invalid address for openusb_get_configuration(), or not a valid bConfigurationValue for openusb_set_configuration()</para>
+    <para>OPENUSB_BADARG         <parameter>cfg</parameter> is an invalid address for openusb_get_configuration(), or not a valid bConfigurationValue for openusb_set_configuration()</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
 
 
   </refsect1>
@@ -1088,13 +1088,13 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_BADARG         <parameter>ifc</parameter> is not valid.</para>
+    <para>OPENUSB_BADARG         <parameter>ifc</parameter> is not valid.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
 
-    <para>LIBUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+    <para>OPENUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
 
  
   </refsect1>
@@ -1171,15 +1171,15 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_BADARG         <parameter>ifc</parameter> or <parameter>alt</parameter> is not valid.</para>
+    <para>OPENUSB_BADARG         <parameter>ifc</parameter> or <parameter>alt</parameter> is not valid.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
 
-    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
 
-    <para>LIBUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+    <para>OPENUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
 
  
   </refsect1>
@@ -1235,13 +1235,13 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS No errors.</para>
+    <para>OPENUSB_SUCCESS No errors.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE Device handle is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE Device handle is not valid</para>
 
-    <para>LIBUSB_NOT_SUPPORTED  Device reset is not supported.  </para>
+    <para>OPENUSB_NOT_SUPPORTED  Device reset is not supported.  </para>
 
-    <para>LIBUSB_IO_*	USB host controller errors </para>
+    <para>OPENUSB_IO_*	USB host controller errors </para>
   </refsect1>
 
   <refsect1>
@@ -1404,19 +1404,19 @@
   <refsect1>
   <title> Return Values </title>
 
-   <para> LIBUSB_SUCCESS	Success. </para>
+   <para> OPENUSB_SUCCESS	Success. </para>
 
-<para>    LIBUSB_UNKNOWN_DEVICE	Can't find the device specified by devid. </para>
+<para>    OPENUSB_UNKNOWN_DEVICE	Can't find the device specified by devid. </para>
 
-   <para> LIBUSB_INVALID_HANDLE	Invalid openusb handle. </para>
+   <para> OPENUSB_INVALID_HANDLE	Invalid openusb handle. </para>
 
-   <para> LIBUSB_NO_RESOURCES		Memory allocation failure. </para>
+   <para> OPENUSB_NO_RESOURCES		Memory allocation failure. </para>
 
-   <para> LIBUSB_PARSE_ERROR		Fail to parse descriptors. </para>
+   <para> OPENUSB_PARSE_ERROR		Fail to parse descriptors. </para>
 
-   <para> LIBUSB_PLATFORM_FAILURE	Kernel/driver failure. </para>
+   <para> OPENUSB_PLATFORM_FAILURE	Kernel/driver failure. </para>
 
-   <para> LIBUSB_BADARG		Invalid arguments. devdesc, cfgdesc, ifcdesc or
+   <para> OPENUSB_BADARG		Invalid arguments. devdesc, cfgdesc, ifcdesc or
     				eptdesc is NULL. buflen is invalid if buffer is
 				not NULL. </para>
     </refsect1>
@@ -1508,11 +1508,11 @@
   <refsect1>
     <title>Return Value</title>
 
-    <para>LIBUSB_SUCCESS -	Parse data successfully.</para>
+    <para>OPENUSB_SUCCESS -	Parse data successfully.</para>
 
-    <para>LIBUSB_PARSE_ERROR -	Error happened during parsing.</para>
+    <para>OPENUSB_PARSE_ERROR -	Error happened during parsing.</para>
 
-    <para>LIBUSB_BADARG -	Invalid argument. <parameter>Format, data, structure or count</parameter> is
+    <para>OPENUSB_BADARG -	Invalid argument. <parameter>Format, data, structure or count</parameter> is
     			NULL pointer.</para>
 
 
@@ -1620,20 +1620,20 @@
 
     <para></para>
 
-    <para><errorname>LIBUSB_SUCCESS</errorname>  - No errors.</para>
+    <para><errorname>OPENUSB_SUCCESS</errorname>  - No errors.</para>
 
-    <para><errorname>LIBUSB_BADARG </errorname>  - <varname>handle</varname> or elements
+    <para><errorname>OPENUSB_BADARG </errorname>  - <varname>handle</varname> or elements
     				in <varname>handle</varname> is not valid.</para>
 
-    <para><errorname>LIBUSB_UNKNOWN_DEVICE</errorname>  -   Device handle
+    <para><errorname>OPENUSB_UNKNOWN_DEVICE</errorname>  -   Device handle
     			<varname>dev </varname>is not valid.</para>
 
-    <para><errorname>LIBUSB_PLATFORM_FAILURE</errorname> -  Unspecified kernel/driver
+    <para><errorname>OPENUSB_PLATFORM_FAILURE</errorname> -  Unspecified kernel/driver
     			failure.</para>
 
-    <para><errorname>LIBUSB_NO_RESOURCES</errorname> -  Memory allocation failure.</para>
+    <para><errorname>OPENUSB_NO_RESOURCES</errorname> -  Memory allocation failure.</para>
 
-    <para><errorname>LIBUSB_IO_* </errorname>  -    USB host controller errors.</para>
+    <para><errorname>OPENUSB_IO_* </errorname>  -    USB host controller errors.</para>
 
  
   </refsect1>
@@ -1824,18 +1824,18 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_BADARG         <parameter>handle</parameter> or elements in <parameter>handle</parameter>
+    <para>OPENUSB_BADARG         <parameter>handle</parameter> or elements in <parameter>handle</parameter>
     				is not valid.</para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE     Device handle <parameter>dev </parameter>is not valid</para>
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle <parameter>dev </parameter>is not valid</para>
 
-    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
 
-    <para>LIBUSB_NO_RESOURCES       Memory allocation failure</para>
+    <para>OPENUSB_NO_RESOURCES       Memory allocation failure</para>
 
-    <para>LIBUSB_IO_*               USB host controller errors</para>
+    <para>OPENUSB_IO_*               USB host controller errors</para>
 
  
   </refsect1>
@@ -1891,13 +1891,13 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_INVALID_HANDLE         <parameter>handle</parameter> is not valid.</para>
+    <para>OPENUSB_INVALID_HANDLE         <parameter>handle</parameter> is not valid.</para>
 
-    <para>LIBUSB_NO_RESOURCES           Memory allocation failure. </para>
+    <para>OPENUSB_NO_RESOURCES           Memory allocation failure. </para>
     
-    <para>LIBUSB_IO_*                   USB host controller errors. </para>
+    <para>OPENUSB_IO_*                   USB host controller errors. </para>
 
  
   </refsect1>
@@ -1986,20 +1986,20 @@
 
     <para></para>
 
-    <para>LIBUSB_SUCCESS     No errors.</para>
+    <para>OPENUSB_SUCCESS     No errors.</para>
 
-    <para>LIBUSB_BADARG         <parameter>handles</parameter> or <parameter>handle</parameter>
+    <para>OPENUSB_BADARG         <parameter>handles</parameter> or <parameter>handle</parameter>
     				is not valid. Either they are NULL or some member of request is
 				invalid.
     </para>
 
-    <para>LIBUSB_UNKNOWN_DEVICE     Can't find the device specified in request.</para>
+    <para>OPENUSB_UNKNOWN_DEVICE     Can't find the device specified in request.</para>
 
-    <para>LIBUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
 
-    <para>LIBUSB_NO_RESOURCES       Memory allocation failure</para>
+    <para>OPENUSB_NO_RESOURCES       Memory allocation failure</para>
 
-    <para>LIBUSB_IO_*               USB host controller errors</para>
+    <para>OPENUSB_IO_*               USB host controller errors</para>
 
  
   </refsect1>
