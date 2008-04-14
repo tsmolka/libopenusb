@@ -154,7 +154,6 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
 	/* Stop the IO processing (polling) thread */
 	wakeup_io_thread(hdev);
-	pthread_cancel(hdev->priv->io_thread);
 	pthread_join(hdev->priv->io_thread, NULL);
 	
 	/* close the event pipes */
@@ -1591,6 +1590,7 @@ void *poll_io(void *devhdl)
 			read(hdev->priv->event_pipe[0], buf, 1);
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
+				pthread_mutex_unlock(&hdev->lock);
 				return NULL;
 			}
 		}
@@ -1605,6 +1605,7 @@ void *poll_io(void *devhdl)
 			read(hdev->event_pipe[0], buf, 1);
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
+				pthread_mutex_unlock(&hdev->lock);
 				return NULL;
 			}
 		}
