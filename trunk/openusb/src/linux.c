@@ -23,9 +23,10 @@
 #include "linux.h"
 
 static pthread_t	event_thread;
-static int				resubmit_flag = RESUBMIT;
+static int32_t		resubmit_flag = RESUBMIT;
 static char				device_dir[PATH_MAX + 1] = "";
-GMainLoop					*event_loop;
+static GMainLoop	*event_loop;
+static int32_t		linux_backend_inited = 0;
 
 
 
@@ -468,6 +469,13 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	if (!hdl)
 		return (OPENUSB_BADARG);
 
+	if(linux_backend_inited != 0) {
+		/*already inited */
+		usbi_debug(hdl, 1, "Linux backend already initialized");
+		linux_backend_inited++; /* openusb_init gets called once more */
+		return (OPENUSB_SUCCESS);
+	}
+
 	/* Find the path to the directory tree with the device nodes */
 	if (getenv("USB_PATH")) {
 		if (check_usb_path(getenv("USB_PATH"))) {
@@ -495,11 +503,17 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		usbi_debug(hdl, 1, "no USB device directory found");
 	}
 
+	/* Initialize thread support in GLib (if it's not already) */
+	if (!g_thread_supported()) g_thread_init(NULL);
+	
 	/* Start up thread for polling events */
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
 	}
+
+	/* we're initialized */
+	linux_backend_inited++;
 
 	return (OPENUSB_SUCCESS);
 }
@@ -513,11 +527,29 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  */
 void linux_fini(struct usbi_handle *hdl)
 {
+	
+	/* If we're not initailized, don't bother */
+	if (!linux_backend_inited) {
+		return;
+	}
+
+	/* If this is not our last instance, decrement the count and leave */
+	if (linux_backend_inited > 1) {
+		linux_backend_inited--;
+		return;
+	}
+
+	/* If we're here this is our last instance */
 	/* Stop the event (connect/disconnect) thread */
-	usbi_debug(NULL, 4, "stopping the hotplug thread...");
-	g_main_loop_quit(event_loop);
-	pthread_cancel(event_thread);
-	pthread_join(event_thread, NULL);
+	if (g_main_loop_is_running(event_loop)) {
+		usbi_debug(hdl, 4, "stopping the hotplug thread...");
+		g_main_loop_quit(event_loop);
+		g_main_context_wakeup(g_main_loop_get_context(event_loop));
+		pthread_join(event_thread, NULL);
+	}
+	
+	/* Decrement the count */
+	linux_backend_inited--;
 
 	return;
 }
@@ -1335,13 +1367,13 @@ struct usbi_io* isoc_io_clone(struct usbi_io *io)
  */
 int32_t io_complete(struct usbi_dev_handle *hdev)
 {
-	struct usbk_urb							*urb;
-	struct usbi_io							*io;
-	struct usbi_io							*new_io;
-	struct openusb_isoc_packet	*packets;
+	struct usbk_urb							*urb     = NULL;
+	struct usbi_io							*io      = NULL;
+	struct usbi_io							*new_io  = NULL;
+	struct openusb_isoc_packet	*packets = NULL;
 	int 												ret, i, offset = 0;
 
-	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void *)&urb)) >= 0) {
+	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void*)&urb)) >= 0) {
 
 		io = urb->usercontext;
 
@@ -1539,7 +1571,6 @@ void *poll_io(void *devhdl)
 			 * the IO is not in progress (to avoid processing aborted requests) */
 			if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
 					(io->status != USBI_IO_INPROGRESS) ) {
-				pthread_mutex_lock(&hdev->lock);
 				continue;
 			}
 			
@@ -1715,7 +1746,7 @@ int32_t check_usb_path(const char *dirname)
  */
 int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 {
-	uint8_t buf[1];
+	uint8_t buf[1] = {1};
 
 	if (write(hdev->priv->event_pipe[1], buf, 1) < 1) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s", strerror(errno));
@@ -2333,7 +2364,7 @@ void *hal_hotplug_event_thread(void *unused)
 	DBusConnection	*conn;
 	DBusError				error;
 	GMainContext		*gmaincontext;
-
+	
 	usbi_debug(NULL, 4, "starting hotplug thread...");
 
 	/* Create the gmaincontext and the event loop */
