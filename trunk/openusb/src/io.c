@@ -30,7 +30,7 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 {
 	struct usbi_io *io;
 	struct timeval tvc;
-	char buf[2];
+	char buf[2] = {1, 1};
 
 	io = malloc(sizeof(*io));
 	if (!io)

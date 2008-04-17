@@ -30,7 +30,6 @@
  */
 
 static int32_t openusb_global_debug_level = 0;
-
 static openusb_handle_t cur_handle = 1; /* protected by usbi_lock */
 static openusb_dev_handle_t cur_dev_handle = 1; /* protected by usbi_lock */
 
@@ -48,6 +47,8 @@ static struct usbi_list event_callbacks;
 /* the background thread processing events */
 static pthread_t event_callback_thread;
 static pthread_cond_t event_callback_cond;
+static volatile int32_t event_callback_exit = 0;
+
 
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 	uint32_t line, char *fmt, ...)
@@ -137,8 +138,12 @@ static void *process_event_callbacks(void *unused)
 		pthread_mutex_lock(&event_callbacks.lock);
 
 		while(callback_queue_full == 0) {
-			pthread_cond_wait(&event_callback_cond, 
-					&event_callbacks.lock);
+			pthread_cond_wait(&event_callback_cond, &event_callbacks.lock);
+			if (event_callback_exit) {
+				/* we're being told we need to shutdown */
+				pthread_mutex_unlock(&event_callbacks.lock);
+				return (NULL);
+			}
 		}
 
 		/*
@@ -450,8 +455,11 @@ static void usbi_fini_common()
 {
 	/* XXX need to free device, bus and backend list */
 
-	/* shared thread and cond should be destroyed ? */
-
+	/* first we need to make sure that the event callback thread is shutdown */
+	event_callback_exit = 1;
+	pthread_cond_signal(&event_callback_cond);
+	pthread_join(event_callback_thread, NULL);
+	
 	pthread_cond_destroy(&event_callback_cond);
 	usbi_list_fini(&event_callbacks);
 	usbi_list_fini(&usbi_dev_handles);
