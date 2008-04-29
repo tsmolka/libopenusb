@@ -541,7 +541,7 @@ void linux_fini(struct usbi_handle *hdl)
 
 	/* If we're here this is our last instance */
 	/* Stop the event (connect/disconnect) thread */
-	if (g_main_loop_is_running(event_loop)) {
+	if ((event_loop != NULL) && g_main_loop_is_running(event_loop)) {
 		usbi_debug(hdl, 4, "stopping the hotplug thread...");
 		g_main_loop_quit(event_loop);
 		g_main_context_wakeup(g_main_loop_get_context(event_loop));
@@ -550,7 +550,7 @@ void linux_fini(struct usbi_handle *hdl)
 	
 	/* Decrement the count */
 	linux_backend_inited--;
-
+	
 	return;
 }
 
@@ -1748,6 +1748,7 @@ int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 {
 	uint8_t buf[1] = {1};
 
+	buf[0] = 0;
 	if (write(hdev->priv->event_pipe[1], buf, 1) < 1) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s", strerror(errno));
 		return translate_errno(errno);

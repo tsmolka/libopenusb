@@ -50,6 +50,7 @@ static pthread_cond_t event_callback_cond;
 static volatile int32_t event_callback_exit = 0;
 
 
+
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
 	uint32_t line, char *fmt, ...)
 {
@@ -664,9 +665,9 @@ void openusb_fini(openusb_handle_t handle)
 
 		/* last openusb instance, unload the backends */
 		list_for_each_entry_safe(backend, tbackend, &backends, list) {
-			/* safe */
-			if(backend->ops->fini)
-				dlclose(backend->handle);/* call each backend's fini */
+		/* safe */
+			dlclose(backend->handle);	/* shutdown the backend */
+			list_del(&backend->list);	/* remove the backend from the list */
 		}
 
 		return;
