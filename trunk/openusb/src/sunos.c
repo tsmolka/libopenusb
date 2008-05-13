@@ -1475,6 +1475,8 @@ usb_close_all_eps(struct usbi_dev_handle *hdev)
 			(void) close(hdev->priv->eps[i].statfd);
 			hdev->priv->eps[i].statfd = -1;
 		}
+
+		hdev->priv->epflags[i] &= ~ISOC_IN_INITED;
 	}
 }
 
@@ -2124,7 +2126,6 @@ solaris_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	return (ret);
 }
 
-
 /*
  * isoc data = isoc pkt header + isoc pkt desc + isoc pkt desc ...+ data
  */
@@ -2237,13 +2238,35 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	 * simutaneously, or some thread close the device while another is 
 	 * accessing it? 
 	 */
-
-	/* do isoc OUT xfer or init polling for isoc IN xfer */
-	ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
+	
+	
+	if ((ep_addr & USB_ENDPOINT_DIR_MASK) == 0) {
+		/* do isoc OUT xfer*/
+		ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
 		hdev->priv->eps[ep_index].statfd, (char *)buf, len, WRITE,
 		&isoc->isoc_status);
 
+	} else if ((ep_addr & USB_ENDPOINT_DIR_MASK) &&
+		((hdev->priv->epflags[ep_index] & ISOC_IN_INITED) == 0)) {
+		/*
+		 * Write request information to initialize polling
+		 * for isoc IN xfer. Kernel will start ISOC IN polling
+		 * immediately after set parameters successfully.
+		 */
+		ret = usb_do_io(hdev->priv->eps[ep_index].datafd,
+			hdev->priv->eps[ep_index].statfd, (char *)buf,
+			len, WRITE, &isoc->isoc_status);
+		hdev->priv->epflags[ep_index] |= ISOC_IN_INITED;
+	} else {
+		/* isoc IN endpoint, polling already started. i.e. Don't
+		 * write ISOC IN request twice, otherwise the kernel will
+		 * return failure
+		 */
+		ret = 0;
+	}
+
 	if (ret < 0) {
+		fprintf(stderr, "write isoc failed %d\n", ret);
 		usbi_debug(hdev->lib_hdl, 1, "write isoc ep failed %d TID=%d",
 			ret, pthread_self());
 
@@ -2330,8 +2353,10 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		for(pkt = 0; pkt < n_pkt; pkt++) {
 			usbi_debug(hdev->lib_hdl, 4, "packet: %d, len: %d", pkt,
 					packet[pkt].length);
+
 			memcpy(packet[pkt].payload, p, packet[pkt].length); 
 			p += packet[pkt].length;
+
 			isoc->isoc_results[pkt].status = 
 				pkt_descr[pkt].isoc_pkt_status;
 			isoc->isoc_results[pkt].transferred_bytes = 
@@ -2340,12 +2365,19 @@ solaris_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 		free(buf);
 
+		/*
+		 * To avoid data loss, we have to keep the ISOC IN
+		 * endpoint polling. Application must call openusb_close_device
+		 * to stop the periodic endpoints polling.
+		 */
+#if 0
 		/* we have to close this pipe to stop ISOC IN polling */
 		(void) close(hdev->priv->eps[ep_index].datafd);
 		(void) close(hdev->priv->eps[ep_index].statfd);
 
 		hdev->priv->eps[ep_index].datafd = -1;
 		hdev->priv->eps[ep_index].statfd = -1;
+#endif
 	}
 
 	pthread_mutex_unlock(&hdev->lock);
