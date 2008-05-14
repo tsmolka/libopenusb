@@ -141,7 +141,8 @@ static void *process_event_callbacks(void *unused)
 		while(callback_queue_full == 0) {
 			pthread_cond_wait(&event_callback_cond, &event_callbacks.lock);
 			if (event_callback_exit) {
-				/* we're being told we need to shutdown */
+				/* we're being told we need to shutdown, reset our flag and exit */
+				event_callback_exit = 0;
 				pthread_mutex_unlock(&event_callbacks.lock);
 				return (NULL);
 			}
@@ -410,7 +411,9 @@ static int usbi_init_common(void)
 
 	pthread_cond_init(&event_callback_cond, NULL);
 
-	/* Start up thread for callbacks */
+	/* Start up thread for callbacks, make sure our exit flag is 0,
+	 * if we're creating the thread we definitely don't want it to exit */
+	event_callback_exit = 0;
 	ret = pthread_create(&event_callback_thread, NULL,
 		process_event_callbacks, NULL);
 	if (ret < 0) {
@@ -659,9 +662,8 @@ void openusb_fini(openusb_handle_t handle)
 		usbi_debug(NULL, 4, "Last lib handle");
 		usbi_fini_common();
 
-		/* last openusb instance, destroy lock */
+		/* last openusb instance, DON'T destroy it */
 		pthread_mutex_unlock(&usbi_lock);
-		pthread_mutex_destroy(&usbi_lock);
 
 		/* last openusb instance, unload the backends */
 		list_for_each_entry_safe(backend, tbackend, &backends, list) {

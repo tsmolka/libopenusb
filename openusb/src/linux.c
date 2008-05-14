@@ -147,9 +147,8 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	if (!hdev)
 		return (OPENUSB_BADARG);
 
-	resubmit_flag = NO_RESUBMIT;     /*stop isoc resubmit, it is a method, but not a good method. And it will be improved in near future*/
-
 	pthread_mutex_lock(&hdev->lock);
+	resubmit_flag = NO_RESUBMIT;     /*stop isoc resubmit, it is a method, but not a good method. And it will be improved in near future*/
 	hdev->state = USBI_DEVICE_CLOSING;
 	pthread_mutex_unlock(&hdev->lock);
 
@@ -510,6 +509,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
+		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
 	/* we're initialized */
@@ -548,9 +548,9 @@ void linux_fini(struct usbi_handle *hdl)
 		pthread_join(event_thread, NULL);
 	}
 	
-	/* Decrement the count */
+	/* We're no longer initialized */
 	linux_backend_inited--;
-	
+
 	return;
 }
 
@@ -1259,6 +1259,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 			/* Submit the URB */
 			ret = urb_submit(hdev, new_io);
 			if(ret < 0) {
+				resubmit_flag = NO_RESUBMIT;
 				usbi_debug(hdev->lib_hdl, 1, "submit isoc urb error!\n", strerror(errno));
 				pthread_mutex_unlock(&io->lock);
 				pthread_mutex_unlock(&hdev->lock);
@@ -2025,7 +2026,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 
 	/* Lock the bus */
 	pthread_mutex_lock(&ibus->lock);
-	
+
 	/* Initialize the error struct... */
 	dbus_error_init (&error);
 
@@ -2106,8 +2107,9 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		}
 	}
 
+	/* unlock */
 	pthread_mutex_unlock(&ibus->lock);
-
+	
 	/* Free the HAL context (don't shut it down or we won't get events) */
 	libhal_ctx_free (hal_ctx);
 
@@ -2367,7 +2369,7 @@ void *hal_hotplug_event_thread(void *unused)
 	GMainContext		*gmaincontext;
 	
 	usbi_debug(NULL, 4, "starting hotplug thread...");
-
+	
 	/* Create the gmaincontext and the event loop */
 	gmaincontext = g_main_context_new();
 	event_loop = g_main_loop_new (gmaincontext, FALSE);
