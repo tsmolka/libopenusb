@@ -50,12 +50,13 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-, root, root)
 
 %doc AUTHORS COPYING LICENSE ChangeLog NEWS README
-%{prefix}/lib/openusb-1.0.so.*
+%{prefix}/%{_lib}/openusb-1.0.so.*
 
 %files devel
 %defattr(-, root, root)
 
-%{prefix}/lib/*.so
-%{prefix}/lib/*a
+%doc doc/html/*
+%{prefix}/%{_lib}/*.so
+%{prefix}/%{_lib}/*a
 %{prefix}/include/*
 %{prefix}/bin/*

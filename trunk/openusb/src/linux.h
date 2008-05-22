@@ -113,6 +113,16 @@ struct usbk_hub_portinfo {
 };
 
 
+typedef enum {
+	NORMAL,
+	CANCELED,
+	SUBMIT_FAILED,
+	COMPLETED_EARLY,
+	TIMEDOUT
+} linux_reap_action_t;
+
+
+
 #define USB_MAX_DEVICES_PER_BUS	128
 #define ISOC_URB_MAX_NUM				10
 #define RESUBMIT								1
@@ -157,7 +167,6 @@ void *hal_hotplug_event_thread(void *unused);
 
 /* Helper Functions */
 struct usbi_io* isoc_io_clone(struct usbi_io *io);
-int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io);
 int32_t io_complete(struct usbi_dev_handle *hdev);
 int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc);
 int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
@@ -175,7 +184,17 @@ struct usbi_device *find_device_by_udi(const char *udi);
 void process_new_device(LibHalContext *ctx, const char *udi, struct usbi_bus *ibus);
 void device_added(LibHalContext *ctx, const char *udi);
 void device_removed(LibHalContext *ctx, const char *udi);
-
+int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
+void free_isoc_urbs(struct usbi_io *io);
+void discard_urbs(struct usbi_dev_handle *hdev, struct usbi_io *io,
+									linux_reap_action_t reap_action);
+void handle_partial_submit(struct usbi_dev_handle *hdev, struct usbi_io *io,
+													 int32_t idx);
+void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
+												 int32_t idx);
+int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
+																	struct usbk_urb *urb);
+int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
 
 
 /* Linux specific members for various internal structures */
@@ -205,8 +224,18 @@ struct usbi_dev_hdl_private
 
 struct usbi_io_private
 {
-	struct usbk_urb urb;        /* URB for IOCTLs */
-	void *tempbuf;							/* temporary data storage */
+	union {
+		struct usbk_urb	*urbs;			/* URBs for ioctl calls */
+		struct usbk_urb **iso_urbs;	/* URBs for ioctl calls (isochronous) */
+	};
+
+	uint32_t	num_urbs;
+	uint32_t	urbs_to_reap;
+	uint32_t	urbs_to_cancel;
+	uint32_t	bytes_transferred;
+	int32_t		isoc_packet_offset;
+		
+	linux_reap_action_t	reap_action;
 };
 
 

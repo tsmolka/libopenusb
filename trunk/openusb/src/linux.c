@@ -18,12 +18,16 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <math.h>
 
 #include "usbi.h"
 #include "linux.h"
 
+#define	LINUX_MAX_BULK_INTR_XFER	16384
+#define LINUX_MAX_ISOC_XFER				32768
+
+
 static pthread_t	event_thread;
-static int32_t		resubmit_flag = RESUBMIT;
 static char				device_dir[PATH_MAX + 1] = "";
 static GMainLoop	*event_loop;
 static int32_t		linux_backend_inited = 0;
@@ -59,6 +63,9 @@ int32_t translate_errno(int errnum)
 
 		case EPIPE:
 			return (OPENUSB_IO_STALL);
+
+		case ENODEV:
+			return (OPENUSB_UNKNOWN_DEVICE);
 	}
 }
 
@@ -81,7 +88,8 @@ int32_t device_open(struct usbi_device *idev)
 	if (fd < 0) {
 		fd = open(idev->sys_path, O_RDONLY);
 		if (fd < 0) {
-			usbi_debug(NULL, 1, "failed to open %s: %s", idev->sys_path, strerror(errno));
+			usbi_debug(NULL, 1, "failed to open %s: %s", idev->sys_path,
+								 strerror(errno));
 			return translate_errno(errno);
 		}
 	}
@@ -148,7 +156,6 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 		return (OPENUSB_BADARG);
 
 	pthread_mutex_lock(&hdev->lock);
-	resubmit_flag = NO_RESUBMIT;     /*stop isoc resubmit, it is a method, but not a good method. And it will be improved in near future*/
 	hdev->state = USBI_DEVICE_CLOSING;
 	pthread_mutex_unlock(&hdev->lock);
 
@@ -172,7 +179,8 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	if (close(hdev->priv->fd) == -1) {
 		/* Log the fact that we had a problem closing the file, however failing a
 		 * close isn't really an error, so return success anyway */
-		usbi_debug(hdev->lib_hdl, 2, "error closing device fd %d: %s", hdev->priv->fd, strerror(errno));
+		usbi_debug(hdev->lib_hdl, 2, "error closing device fd %d: %s",
+							 hdev->priv->fd, strerror(errno));
 	}
 	pthread_mutex_unlock(&hdev->lock);
 
@@ -199,7 +207,8 @@ int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 
 	ret = ioctl(hdev->priv->fd, IOCTL_USB_SETCONFIG, &cfg);
 	if (ret < 0) {
-		usbi_debug(hdev->lib_hdl, 1, "could not set config %u: %s", cfg, strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "could not set config %u: %s", cfg,
+							 strerror(errno));
 		return (translate_errno(errno));
 	}
 
@@ -253,7 +262,8 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
 	usbi_debug(hdev->lib_hdl, 2, "claiming interface %d", ifc);
 	ret = ioctl(hdev->priv->fd, IOCTL_USB_CLAIMINTF, &interface);
 	if (ret < 0) {
-		usbi_debug(hdev->lib_hdl, 1, "could not claim interface %d: %s", ifc, strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "could not claim interface %d: %s", ifc,
+							 strerror(errno));
 
 		/* there may be another kernel driver attached to this interface, if the
 		 * user requested it try and detach the kernel driver, we'll reattach
@@ -269,8 +279,8 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
 				if (ret < 0) {
 					hdev->priv->reattachdrv = 0;
 					usbi_debug(hdev->lib_hdl, 1,
-										 "could not claim interface %d, after detaching kernel driver: %s",
-										 ifc, openusb_strerror(ret));
+										 "could not claim interface %d, after "
+										 "detaching kernel driver: %s", ifc, openusb_strerror(ret));
 					ret = linux_attach_kernel_driver(hdev,ifc);
 					if (ret < 0) {
 						usbi_debug(hdev->lib_hdl, 1, "could not reattach kernel driver: %s",
@@ -314,17 +324,10 @@ int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
 		return OPENUSB_BADARG;
 	}
 
-	/* stop isoc resubmit,currently it is only a work around ,
-	 * but not a good solution. And it will be improved in near future,
-	 * maybe we need a stop_isoc() function to do it*/
-	resubmit_flag = NO_RESUBMIT;
-
-	/*wait for isoc urb to be finished, so isoc callback is better to return quickly*/
-	/*sleep(3); Remove this for now...*/
-
 	ret = ioctl(hdev->priv->fd, IOCTL_USB_RELEASEINTF, &interface);
 	if (ret < 0) {
-		usbi_debug(hdev->lib_hdl, 1, "could not release interface %d: %s", ifc, strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "could not release interface %d: %s", ifc,
+							 strerror(errno));
 		return translate_errno(errno);
 	}
 
@@ -351,7 +354,8 @@ int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
  *
  *  Sets the alternate setting, via IOCTL_USB_SETINTF
  */
-int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t alt)
+int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
+														 uint8_t alt)
 {
 	struct usbk_setinterface setintf;
 	int32_t                  ret;
@@ -361,9 +365,8 @@ int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t 
 		return OPENUSB_BADARG;
 
 	if (hdev->claimed_ifs[ifc].clm != USBI_IFC_CLAIMED) {
-		usbi_debug(hdev->lib_hdl, 1,
-							 "interface (%d) must be claimed before assigning an alternate setting",
-							 ifc);
+		usbi_debug(hdev->lib_hdl, 1, "interface (%d) must be claimed before "
+							 "assigning an alternate setting", ifc);
 		return OPENUSB_BADARG;
 	}
 
@@ -394,7 +397,8 @@ int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t 
  *  Gets the alternate setting from our cached value. There is no usbdevfs IOCTL
  *  to do this so this is the best we can do.
  */
-int32_t linux_get_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t *alt)
+int32_t linux_get_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
+														 uint8_t *alt)
 {
 	/* Validate... */
 	if ((!hdev) || (!alt))
@@ -446,7 +450,8 @@ int32_t linux_clear_halt(struct usbi_dev_handle *hdev, uint8_t ept)
 
 	ret = ioctl(hdev->priv->fd, IOCTL_USB_CLEAR_HALT, &ept);
 	if (ret) {
-		usbi_debug(hdev->lib_hdl, 1, "could not clear halt ep %d: %s", ept, strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "could not clear halt ep %d: %s", ept,
+							 strerror(errno));
 		return translate_errno(errno);
 	}
 
@@ -506,9 +511,10 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	if (!g_thread_supported()) g_thread_init(NULL);
 	
 	/* Start up thread for polling events */
-	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread, (void*)NULL);
+	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
+												(void*)NULL);
 	if (ret < 0) {
-		usbi_debug(NULL, 1, "unable to create event polling thread (ret = %d)", ret);
+		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -575,7 +581,8 @@ int32_t linux_find_buses(struct list_head *buses)
 	/* Scan our device directory for bus directories */
 	dir = opendir(device_dir);
 	if (!dir) {
-		usbi_debug(NULL, 1, "could not opendir(%s): %s", device_dir, strerror(errno));
+		usbi_debug(NULL, 1, "could not opendir(%s): %s", device_dir,
+							 strerror(errno));
 		return translate_errno(errno);
 	}
 
@@ -619,11 +626,11 @@ int32_t linux_find_buses(struct list_head *buses)
 
 		/* setup the maximum transfer sizes - these are determined by usbfs and
 		 * NOT by the bus (as with other oses) so they will always be the same */
-		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4088;
-		ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = 16384;
-		ibus->max_xfer_size[USB_TYPE_BULK]        = 16384;
-		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = 16384;
-		
+		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4096 - USBI_CONTROL_SETUP_LEN;
+		ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = pow(2,32) - 1;
+		ibus->max_xfer_size[USB_TYPE_BULK]        = pow(2,32) - 1;
+		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = pow(2,32) - 1;
+
 		pthread_mutex_init(&ibus->lock, NULL);
 		pthread_mutex_init(&ibus->devices.lock, NULL);
 
@@ -639,338 +646,6 @@ int32_t linux_find_buses(struct list_head *buses)
 	return (OPENUSB_SUCCESS);
 }
 
-
-#if 0
-/*
- * linux_refresh_devices
- *
- *  Make a new search of the devices on the bus and refresh the device list.
- *  The device nodes that have been detached from the system would be removed 
- *  from the list.
- */
-int32_t linux_refresh_devices(struct usbi_bus *ibus)
-{
-	char devfilename[PATH_MAX + 1];
-	struct usbi_device *idev, *tidev;
-	int busnum = 0, pdevnum = 0, pport = 0, devnum = 0, max_children = 0;
-	char sysfsdir[PATH_MAX + 1];
-	FILE *f;
-
-	/* Validate... */
-	if (!ibus) {
-		return (OPENUSB_BADARG);
-	}
-
-	/* we'll use libsysfs as our primary way of getting the device topology */
-	if (sysfs_get_mnt_path(sysfsdir,PATH_MAX+1) == 0)
-	{
-		struct sysfs_class        *class;
-		struct sysfs_class_device *classdev;
-		struct sysfs_device       *dev;
-		struct sysfs_device       *parentdev;
-		struct sysfs_attribute    *devattr;
-		struct dlist              *devlist;
-		char                      *p, *b, *d, *t;
-
-		pthread_mutex_lock(&ibus->lock);
-
-		/* Reset the found flag for all devices */
-		list_for_each_entry(idev, &ibus->devices.head, bus_list) {
-			idev->found = 0;
-		}
-
-		/* if we were able to get the mount path, it's safe to say we support
-		 * sysfs and we'll use that to get our info */
-		class = sysfs_open_class("usb_device");
-		if (!class) {
-			usbi_debug(NULL, 1, "could not open sysfs usb_device class: %s\n",strerror(errno));
-			return translate_errno(errno);
-		}
-
-		devlist = sysfs_get_class_devices(class);
-		if (!devlist) {
-			usbi_debug(NULL, 1, "could not get sysfs/bus/usb devices: %s",strerror(errno));
-			return translate_errno(errno);
-		}
-
-		/* loop through the list of class devices */
-		dlist_for_each_data(devlist,classdev,struct sysfs_class_device) {
-
-
-			/* the class name is usbdevBUS.DEV (where BUS is the bus number and DEV
-			 * is the device number, e.g usbdev8.1). We'll parse our number from 
-			 * this name.
-			 */
-
-			p = classdev->name;
-			while (!isdigit(*p))
-				p++;
-			b = p; /* bus number string starts here, save it as b */
-			while (*p != '.')
-				p++;
-			t = p;   /* bus number string ends here, save it as t */
-			d = ++p; /* device number string starts here, save it as d */
-			*t = 0;  /* terminate our bus number string */
-
-			 busnum = atoi(b);
-			 devnum = atoi(d);
-
-			/* now we'll get the sysfs_device for this class device and it's parent */
-			dev = sysfs_get_classdev_device(classdev);
-			if (!dev) {
-				usbi_debug(NULL, 1, "could not open sysfs device this class device (%s): %s\n",classdev->name,strerror(errno));
-				return translate_errno(errno);
-			}
-
-
-			/* we need to get the maximum number of children*/
-			devattr = sysfs_get_device_attr(dev,"maxchild");
-			if (!devattr) {
-				max_children = 0;
-			} else {
-				max_children = atoi(devattr->value);
-			}
-
-			parentdev = sysfs_get_device_parent(dev);
-			if (!parentdev) {
-				/* we may not have a parent, in which case our parent number is 0 */
-				pdevnum = 0;
-			} else {
-				devattr = sysfs_get_device_attr(parentdev,"devnum");
-				if (!devattr) {
-					/* there's no dev number for the parent, so parent num = 0 */
-					pdevnum = 0;
-				} else {
-					pdevnum = atoi(devattr->value);
-				}
-			}
-
-      /* now we should have all the information we need to procede */
-
-			/* Is this a device on the bus we're looking for? */
-			if (busnum != ibus->busnum)
-				continue;
-
-			/* Validate the data we parsed out */
-			if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
-					max_children >= USB_MAX_DEVICES_PER_BUS ||
-					pdevnum >= USB_MAX_DEVICES_PER_BUS) {
-				usbi_debug(NULL, 1, "invalid device number, max children or parent device");
-				continue;
-			}
-
-			/* Validate the parent device */
-			if (pdevnum && (!ibus->priv->dev_by_num[pdevnum])) {
-				usbi_debug(NULL, 1, "no parent device or invalid child port number");
-				continue;
-			}
-
-			/* make sure we don't have two root devices */
-			if (!pdevnum && ibus->root && ibus->root->found) {
-				usbi_debug(NULL, 1, "cannot have two root devices");
-				continue;
-			}
-
-			/* Only add this device if it's new */
-			/* If we don't have a device by this number yet, it must be new */
-			idev = ibus->priv->dev_by_num[devnum];
-			if (!idev) {
-				int ret;
-
-				ret = create_new_device(&idev, ibus, devnum, max_children);
-				if (ret) {
-					usbi_debug(NULL, 1, "ignoring new device because of errors");
-					continue;
-				}
-
-				usbi_add_device(ibus, idev);
-
-				/* Setup parent/child relationship */
-				if (pdevnum) {
-					ibus->priv->dev_by_num[pdevnum]->children[pport] = idev;
-					idev->parent = ibus->priv->dev_by_num[pdevnum];
-				} else {
-					ibus->root = idev;
-				}
-			}
-
-			idev->found = 1;
-		}
-
-		/* close our sysfs class - this also destroys our dlist*/
-		sysfs_close_class(class);
-
-	} else {
-		/*
-		 * This used to scan the bus directory for files named like devices.
-		 * Unfortunately, this has a couple of problems:
-		 * 1) Devices are added out of order. We need the root device first atleast.
-		 * 2) All kernels (up through 2.6.12 atleast) require write and/or root
-		 *    access to get to some important topology information.
-		 * So, we parse /proc/bus/usb/devices instead. It will give us the topology
-		 * information we're looking for, in the order we need, while being
-		 * available to normal users.
-		 */
-		/*printf("start /proc/bus/usb/devices\n");*/
-		snprintf(devfilename, sizeof(devfilename), "%s/devices", device_dir);
-		f = fopen(devfilename, "r");
-		if (!f) {
-			usbi_debug(NULL, 1, "could not open %s: %s", devfilename, strerror(errno));
-			return translate_errno(errno);
-		}
-
-		pthread_mutex_lock(&ibus->lock);
-
-		/* Reset the found flag for all devices */
-		list_for_each_entry(idev, &ibus->devices.head, bus_list)
-			idev->found = 0;
-
-		while (!feof(f)) {
-			char buf[1024], *p, *k, *v;
-
-			if (!fgets(buf, sizeof(buf), f))
-				continue;
-
-			/* Strip off newlines and trailing spaces */
-			for (p = strchr(buf, 0) - 1; p >= buf && isspace(*p); p--)
-				*p = 0;
-
-			/* Skip blank or short lines */
-			if (!buf[0] || strlen(buf) < 4)
-				continue;
-
-			/* We need a character and colon to start the line */
-			if (buf[1] != ':')
-				break;
-
-			switch (buf[0]) {
-				case 'T': /* Topology information for a device. Also starts a new device */
-					/* T:  Bus=02 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  5 Spd=12  MxCh= 0 */
-
-					/* We need the bus number, parent dev number, this dev number */
-					/* Tokenize into key and value pairs */
-					p = buf + 2;
-					do {
-						/* Skip over whitespace */
-						while (*p && isspace(*p))
-							p++;
-						if (!*p)
-						break;
-
-						/* Parse out the key */
-						k = p;
-						while (*p && (isalnum(*p) || *p == '#'))
-							p++;
-						if (!*p)
-							break;
-						*p++ = 0;
-
-						/* Skip over the = */
-						while (*p && (isspace(*p) || *p == '='))
-							p++;
-						if (!*p)
-							break;
-
-						/* Parse out the value */
-						v = p;
-						while (*p && (isdigit(*p) || *p == '.'))
-							p++;
-						if (*p)
-							*p++ = 0;
-
-						if (strcasecmp(k, "Bus") == 0)
-							busnum = atoi(v);
-						else if (strcasecmp(k, "Prnt") == 0)
-							pdevnum = atoi(v);
-						else if (strcasecmp(k, "Port") == 0)
-							pport = atoi(v);
-						else if (strcasecmp(k, "Dev#") == 0)
-							devnum = atoi(v);
-						else if (strcasecmp(k, "MxCh") == 0)
-							max_children = atoi(v);
-					} while (*p);
-
-					/* Is this a device on the bus we're looking for? */
-					if (busnum != ibus->busnum)
-						break;
-
-					/* Validate the data we parsed out */
-					if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
-						max_children >= USB_MAX_DEVICES_PER_BUS ||
-						pdevnum >= USB_MAX_DEVICES_PER_BUS ||
-						pport >= USB_MAX_DEVICES_PER_BUS) {
-						usbi_debug(NULL, 1, "invalid device number, max children or parent device");
-						break;
-					}
-
-					/* Validate the parent device */
-					if (pdevnum && (!ibus->priv->dev_by_num[pdevnum] ||
-						pport >= ibus->priv->dev_by_num[pdevnum]->nports)) {
-						usbi_debug(NULL, 1, "no parent device or invalid child port number");
-						break;
-					}
-
-					if (!pdevnum && ibus->root && ibus->root->found) {
-						usbi_debug(NULL, 1, "cannot have two root devices");
-						break;
-					}
-
-					/* Only add this device if it's new */
-
-					/* If we don't have a device by this number yet, it must be new */
-					idev = ibus->priv->dev_by_num[devnum];
-					if (!idev) {
-						int ret;
-
-						ret = create_new_device(&idev, ibus, devnum, max_children);
-						if (ret) {
-							usbi_debug(NULL, 1, "ignoring new device because of errors");
-							break;
-						}
-
-						usbi_add_device(ibus, idev);
-
-						/* Setup parent/child relationship */
-						if (pdevnum) {
-							ibus->priv->dev_by_num[pdevnum]->children[pport] = idev;
-							idev->parent = ibus->priv->dev_by_num[pdevnum];
-						} else
-							ibus->root = idev;
-						}
-
-						idev->found = 1;
-						break;
-
-						/* Ignore the rest */
-#if 0
-    case 'B': /* Bandwidth related information */
-    case 'D': /* Device related information */
-    case 'P': /* Vendor/Product information */
-    case 'S': /* String descriptor */
-    case 'C': /* Config information */
-    case 'I': /* Interface information */
-    case 'E': /* Endpoint information */
-#endif
-				default:
-					break;
-			}
-		/*printf("done /proc/bus/usb/devices\n");*/
-		}
-	}
-
-	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
-		if (!idev->found) {
-			/* Device disappeared, remove it */
-			usbi_debug(NULL, 2, "device %d removed", idev->devnum);
-			usbi_remove_device(idev);
-		}
-	}
-
-	pthread_mutex_unlock(&ibus->lock);
-
-	return (OPENUSB_SUCCESS);
-}
-#endif
 
 
 /*
@@ -999,47 +674,6 @@ void linux_free_device(struct usbi_device *idev)
 /******************************************************************************
  *                                IO Functions                                *
  *****************************************************************************/
-
-/*
- * urb_submit
- *
- *  All io requests are submitted to usbfs kernel driver as a urb, this function
- *  actually submits the URB, the other functions (linux_submit_bulk -- just set
- *  up the URB).
- */
-int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbi_io *io)
-{
-	int32_t ret;
-
-	/* Validate ... */
-	if ((!hdev) || (!io)) {
-		return (OPENUSB_BADARG);
-	}
-
-	io->priv->urb.endpoint = io->req->endpoint;
-	io->priv->urb.status   = 0;
-
-	io->priv->urb.signr = 0;
-	io->priv->urb.usercontext = (void *)io;
-
-	io->status = USBI_IO_INPROGRESS;
-
-	/* submit this request to the usbfs kernel driver */
-	ret = ioctl(hdev->priv->fd, IOCTL_USB_SUBMITURB, &io->priv->urb);
-	if (ret < 0) {
-		usbi_debug(hdev->lib_hdl, 1, "error submitting URB: %s", strerror(errno));
-		io->status = USBI_IO_COMPLETED_FAIL;
-		return translate_errno(errno);
-	}
-
-	/* Always do this to avoid race conditions */
-	wakeup_io_thread(hdev);
-
-	return (OPENUSB_SUCCESS);
-}
-
-
-
 /*
  * linux_submit_ctrl
  *
@@ -1061,53 +695,73 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
 	if (!io->priv) {
-		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the "
+							 "private io member");
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv, 0, sizeof(*io->priv));
 
+	/* allocate memory for the urb */
+	io->priv->num_urbs = 1;
+	io->priv->urbs = (struct usbk_urb*)malloc(sizeof(struct usbk_urb));
+	if (!io->priv->urbs) {
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the urb");
+		return (OPENUSB_NO_RESOURCES);
+	}
+	memset(io->priv->urbs, 0, sizeof(struct usbk_urb));
+	
 	/* get a pointer to the request */
 	ctrl = io->req->req.ctrl;
 
+	/* setup the user context */
+	io->priv->urbs[0].usercontext = io;
+	
 	/* fill in the setup packet */
 	setup[0] = ctrl->setup.bmRequestType;
 	setup[1] = ctrl->setup.bRequest;
 	*(uint16_t *)(setup + 2) = openusb_cpu_to_le16(ctrl->setup.wValue);
 	*(uint16_t *)(setup + 4) = openusb_cpu_to_le16(ctrl->setup.wIndex);
 	*(uint16_t *)(setup + 6) = openusb_cpu_to_le16(ctrl->length);
-
+	
 	/* setup the URB */
-	io->priv->urb.type = USBK_URB_TYPE_CONTROL;
+	io->priv->urbs[0].type = USBK_URB_TYPE_CONTROL;
 
 	/* allocate a temporary buffer for the payload */
-	io->priv->urb.buffer = malloc(USBI_CONTROL_SETUP_LEN + ctrl->length);
-	if (!io->priv->urb.buffer) {
+	io->priv->urbs[0].buffer = malloc(USBI_CONTROL_SETUP_LEN + ctrl->length);
+	if (!io->priv->urbs[0].buffer) {
 		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
-	memset(io->priv->urb.buffer,0,USBI_CONTROL_SETUP_LEN + ctrl->length);
+	memset(io->priv->urbs[0].buffer,0,USBI_CONTROL_SETUP_LEN + ctrl->length);
 
 	/* fill in the temporary buffer */
-	memcpy(io->priv->urb.buffer, setup, USBI_CONTROL_SETUP_LEN);
-	io->priv->urb.buffer_length = USBI_CONTROL_SETUP_LEN + ctrl->length;
+	memcpy(io->priv->urbs[0].buffer, setup, USBI_CONTROL_SETUP_LEN);
+	io->priv->urbs[0].buffer_length = USBI_CONTROL_SETUP_LEN + ctrl->length;
 
 	/* copy the data if we're writing */
 	if ((ctrl->setup.bmRequestType & USB_REQ_DIR_MASK) == USB_REQ_HOST_TO_DEV) {
-		memcpy(io->priv->urb.buffer + USBI_CONTROL_SETUP_LEN, ctrl->payload, ctrl->length);
+		memcpy(io->priv->urbs[0].buffer + USBI_CONTROL_SETUP_LEN,
+					 ctrl->payload, ctrl->length);
 	}
-
-	io->priv->urb.actual_length = 0;
-	io->priv->urb.number_of_packets = 0;
 
 	/* lock the device */
 	pthread_mutex_lock(&hdev->lock);
 	
 	/* submit the URB */
-	ret = urb_submit(hdev, io);
-
+	ret = urb_submit(hdev, &io->priv->urbs[0]);
+	if (ret < 0) {
+		usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
+							 strerror(errno));
+		io->status = USBI_IO_COMPLETED_FAIL;
+		return translate_errno(errno);
+	}
+	
 	/* unlock the device & io request */
 	pthread_mutex_unlock(&io->lock);
 	pthread_mutex_unlock(&hdev->lock);
+
+	/* always do this to avoid race conditions */
+	wakeup_io_thread(hdev);
 	
 	return (ret);
 }
@@ -1115,14 +769,18 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 
 /*
- * linux_submit_intr
+ * linux_submit_bulk_intr
  *
- *  Submits and io request to the interrupt endpoint
+ *  Submits an io request to a bulk or interrupt endpoint
  */
-int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
+int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
-	openusb_intr_request_t	*intr;
-	int32_t								ret;
+	int32_t		ret;
+	int32_t		i;
+	uint8_t		partial_last_urb = 0;
+	uint8_t		*payload;
+	uint32_t	length;
+	uint8_t		xfertype;
 
 	/* Validate... */
 	if ((!hdev) || (!io)) {
@@ -1134,88 +792,99 @@ int32_t linux_submit_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
 	if (!io->priv) {
-		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the "
+							 "private io member");
 		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv, 0, sizeof(*io->priv));
 
-	/* get a pointer to the request */
-	intr = io->req->req.intr;
-
-	/* create the urb */
-	io->priv->urb.type = USBK_URB_TYPE_INTERRUPT;
-
-	io->priv->urb.buffer = intr->payload;
-	io->priv->urb.buffer_length = intr->length;
-
-	io->priv->urb.actual_length = 0;
-	io->priv->urb.number_of_packets = 0;
-	
-	/* lock the device */
-	pthread_mutex_lock(&hdev->lock);
-
-	/* submit the URB */
-	ret = urb_submit(hdev, io);
-
-	/* unlock the device & io request */
-	pthread_mutex_unlock(&io->lock);
-	pthread_mutex_unlock(&hdev->lock);
-
-	return (ret);
-}
-
-
-
-/*
- * linux_submit_bulk
- *
- *  Submits an io request to the bulk endpoint
- */
-int32_t linux_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
-{
-	openusb_bulk_request_t *bulk;
-	int32_t								ret;
-
-	/* Validate... */
-	if ((!hdev) || (!io)) {
+	/* setup the payload, length and type we need for later */
+	if (io->req->type == USB_TYPE_BULK) {
+		payload = io->req->req.bulk->payload;
+		length	= io->req->req.bulk->length;
+		xfertype= USBK_URB_TYPE_BULK;
+	} else if (io->req->type == USB_TYPE_INTERRUPT) {
+		payload = io->req->req.intr->payload;
+		length	= io->req->req.intr->length;
+		xfertype= USBK_URB_TYPE_INTERRUPT;
+	} else {
+		usbi_debug(hdev->lib_hdl, 1, "transfer type is not bulk or interrupt");
 		return (OPENUSB_BADARG);
 	}
 
-	pthread_mutex_lock(&io->lock);
-	
-	/* allocate memory for the private part */
-	io->priv = malloc(sizeof(struct usbi_io_private));
-	if (!io->priv) {
-		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
-		pthread_mutex_unlock(&io->lock);
+	/* usbfs only allows transfer sizes of up to 16KB, so we'll probably need to
+	 * split this request up into multiple chunks and fire them all off at once */
+	io->priv->num_urbs = length / LINUX_MAX_BULK_INTR_XFER;
+	if ((length % LINUX_MAX_BULK_INTR_XFER) > 0) {
+		partial_last_urb = 1;
+		io->priv->num_urbs++;
+	}
+	usbi_debug(hdev->lib_hdl, 4, "%d urbs needed for bulk/intr xfer of length %d",
+						 io->priv->num_urbs, length);
+
+	/* allocate memory for our urbs */
+	io->priv->urbs = (struct usbk_urb*)malloc(  io->priv->num_urbs
+																						* sizeof(struct usbk_urb));
+	if (!io->priv->urbs) {
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for %d urbs",
+							 io->priv->num_urbs);
 		return (OPENUSB_NO_RESOURCES);
 	}
-	memset(io->priv, 0, sizeof(*io->priv));
-
-	/* get a pointer to the request */
-	bulk = io->req->req.bulk;
-
-	/* create the URB */
-	io->priv->urb.type = USBK_URB_TYPE_BULK;
-
-	io->priv->urb.buffer = bulk->payload;
-	io->priv->urb.buffer_length = bulk->length;
-
-	io->priv->urb.actual_length = 0;
-	io->priv->urb.number_of_packets = 0;
 	
-	/* lock the device */
+	/* initialize our variables */
+	memset(io->priv->urbs, 0, io->priv->num_urbs * sizeof(struct usbk_urb));
+	io->priv->urbs_to_reap = 0;
+	io->priv->urbs_to_cancel = 0;
+
+	/* now setup each urb and fire it off */
 	pthread_mutex_lock(&hdev->lock);
+	io->status = USBI_IO_INPROGRESS;
+	io->priv->reap_action = NORMAL;
+	for(i = 0; i < io->priv->num_urbs; i++) {
+
+		/* get a point to our urb for easier access */
+		struct usbk_urb	*urb = &io->priv->urbs[i];
+
+		/* setup this urb */
+		urb->endpoint			= io->req->endpoint;
+		urb->usercontext	= (void*)io;
+		urb->type					= xfertype;
+		urb->buffer				= payload + (i * LINUX_MAX_BULK_INTR_XFER);
+
+		if ((i == io->priv->num_urbs - 1) && partial_last_urb) {
+			urb->buffer_length	= length % LINUX_MAX_BULK_INTR_XFER;
+		} else {
+			urb->buffer_length	= LINUX_MAX_BULK_INTR_XFER;
+		}
 	
-	/* submit the URB */
-	ret = urb_submit(hdev, io);
+		/* submit the urb */
+		ret = urb_submit(hdev, urb);
+		if (ret < 0) {
+
+			/* if this is the first URB we've submitted, things are simple */
+			if (i == 0) {
+				usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
+									 strerror(errno));
+				io->status = USBI_IO_COMPLETED_FAIL;
+				return translate_errno(errno);
+			}
+
+			/* if it's not the first urb then the logic gets more complicated */
+			handle_partial_submit(hdev, io, i);
+			return (OPENUSB_SUCCESS);
+		}
+
+	} /* end for(i = 0; i < io->priv->num_urbs; i++) */
 
 	/* unlock the device & io request */
 	pthread_mutex_unlock(&io->lock);
 	pthread_mutex_unlock(&hdev->lock);
 
-	return (ret);
+	/* always do this to avoid race conditions */
+	wakeup_io_thread(hdev);
+	
+	return (OPENUSB_SUCCESS);
 }
 
 
@@ -1227,135 +896,282 @@ int32_t linux_submit_bulk(struct usbi_dev_handle *hdev, struct usbi_io *io)
  */
 int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
-	int							n = 0;
-	int32_t					ret;
-	struct usbi_io	*new_io;
-
+	openusb_isoc_request_t	*isoc;
+	int32_t									ret;
+	int32_t									i, this_urb_len, packet_offset;
+	uint32_t								packet_len;
+	struct usbk_urb					*urb;
+	int32_t									space_remaining_in_urb;
+	int32_t									urb_packet_offset;
+	int32_t									j,k;
+	uint8_t									*urb_buffer;
+	
 	if((!io) || (!hdev)) {
 		return (OPENUSB_BADARG);
 	}
 
 	pthread_mutex_lock(&io->lock);
+
+	/* intialize */
+	this_urb_len = 0;
+	packet_offset = 0;
+	io->priv->num_urbs = 0;
 	
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
 	if (!io->priv) {
-		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the private io member");
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the "
+							 "private io member");
 		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv, 0, sizeof(*io->priv));
 
-	resubmit_flag = RESUBMIT;
-	for(n = 0; n < ISOC_URB_MAX_NUM; n++) {
-		usleep(1000);
+	/* get a pointer to our request (for easier access) */
+	isoc = io->req->req.isoc;
+	
+	/* usbfs only allows transfer sizes of up to 32KB, so we'll probably need to
+	 * split this request up into multiple chunks and fire them all off at once */
+	for (i = 0; i < isoc->pkts.num_packets; i++) {
+		space_remaining_in_urb = LINUX_MAX_ISOC_XFER - this_urb_len;
+		packet_len = isoc->pkts.packets[i].length;
 
-		new_io = isoc_io_clone(io);
-		if(new_io != NULL) {
-
-			/* lock the device */
-			pthread_mutex_lock(&hdev->lock);
-
-			/* Submit the URB */
-			ret = urb_submit(hdev, new_io);
-			if(ret < 0) {
-				resubmit_flag = NO_RESUBMIT;
-				usbi_debug(hdev->lib_hdl, 1, "submit isoc urb error!\n", strerror(errno));
-				pthread_mutex_unlock(&io->lock);
-				pthread_mutex_unlock(&hdev->lock);
-				return translate_errno(errno);
-			}
-			pthread_mutex_unlock(&hdev->lock);
+		if (packet_len > space_remaining_in_urb) {
+			io->priv->num_urbs++;
+			this_urb_len = packet_len;
+		} else {
+			this_urb_len += packet_len;
 		}
-		pthread_mutex_unlock(&io->lock);
+	}
+	usbi_debug(hdev->lib_hdl, 4, "%d URBs needed for isoc transfer",
+						 io->priv->num_urbs);
+
+	/* allocate memory for our array of urbs */
+	io->priv->iso_urbs = (struct usbk_urb**)malloc(  io->priv->num_urbs
+																								 * sizeof(struct usbk_urb));
+	if(!io->priv->iso_urbs) {
+		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for %d urbs",
+							 io->priv->num_urbs);
+		return (OPENUSB_NO_RESOURCES);
+	}
+	memset(io->priv->iso_urbs, 0, io->priv->num_urbs * sizeof(struct usbk_urb));
+
+	io->priv->urbs_to_cancel			= 0;
+	io->priv->urbs_to_reap				= 0;
+	io->priv->reap_action					= NORMAL;
+	io->priv->isoc_packet_offset	= 0;
+
+	/* allocate and initialize each urb with the correct number of packets */
+	for (i = 0; i < io->priv->num_urbs; i++) {
+
+		space_remaining_in_urb = LINUX_MAX_ISOC_XFER;
+		urb_packet_offset = 0;
+
+		/* get all of the packets that will fit in this urb */
+		while (packet_offset < isoc->pkts.num_packets) {
+			packet_len = isoc->pkts.packets[packet_offset].length;
+			if (packet_len <= space_remaining_in_urb) {
+				/* include this packet */
+				urb_packet_offset++;
+				packet_offset++;
+				space_remaining_in_urb -= packet_len;
+				urb->buffer_length += packet_len;
+			} else {
+				/* it won't fit, put it in the next urb */
+				break;
+			}
+		}
+
+		/* allocate memory for this specific urb */
+		urb = (struct usbk_urb*)malloc(  sizeof(*urb)
+																	 + (  urb_packet_offset
+																			* sizeof(struct usbk_iso_packet_desc)) );
+		if (!urb) {
+			free_isoc_urbs(io);
+			return (OPENUSB_NO_RESOURCES);
+		}
+		memset(urb, 0,  sizeof(*urb)
+									+ (urb_packet_offset * sizeof(struct usbk_iso_packet_desc)));
+		io->priv->iso_urbs[i] = urb;
+
+		/* allocate memory for the urb buffer */
+		urb->buffer = (void*)malloc(urb->buffer_length);
+		if (!urb->buffer) {
+			usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for urb buffer "
+								 "of length %d", urb->buffer_length);
+			free_isoc_urbs(io);
+			return (OPENUSB_NO_RESOURCES);
+		}
+		memset(urb->buffer, 0, urb->buffer_length);
+		urb_buffer = urb->buffer;
+		
+		/* setup the packet lengths and copy in the data */
+		for (j=0, k=packet_offset-urb_packet_offset; k<packet_offset; k++, j++) {
+			packet_len = isoc->pkts.packets[k].length;
+			urb->iso_frame_desc[j].length = packet_len;
+			if ((io->req->endpoint & USB_REQ_DIR_MASK) == USB_REQ_HOST_TO_DEV) {
+				memcpy(urb->buffer, isoc->pkts.packets[k].payload, packet_len);
+			}
+			urb_buffer += packet_len;
+		}
+
+		urb->usercontext	= io;
+		urb->type					= USBK_URB_TYPE_ISO;
+		urb->flags				= USBK_URB_ISO_ASAP;
+		urb->endpoint			= io->req->endpoint;
+		urb->number_of_packets = urb_packet_offset;
+
 	}
 
+	/* now setup each urb and fire it off */
+	pthread_mutex_lock(&hdev->lock);
+	io->status = USBI_IO_INPROGRESS;
+	io->priv->reap_action = NORMAL;
+	for(i = 0; i < io->priv->num_urbs; i++) {
+
+		/* get a point to our urb for easier access */
+		struct usbk_urb	*urb = io->priv->iso_urbs[i];
+
+		/* submit the urb */
+		ret = urb_submit(hdev, urb);
+		if (ret < 0) {
+
+			/* if this is the first URB we've submitted, things are simple */
+			if (i == 0) {
+				usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
+									 strerror(errno));
+				io->status = USBI_IO_COMPLETED_FAIL;
+				return translate_errno(errno);
+			}
+
+			/* if it's not the first urb then the logic gets more complicated */
+			handle_partial_submit(hdev, io, i);
+			return (OPENUSB_SUCCESS);
+		}
+
+	} /* end for(i = 0; i < io->priv->num_urbs; i++) */
+
+	/* unlock the device & io request */
+	pthread_mutex_unlock(&io->lock);
+	pthread_mutex_unlock(&hdev->lock);
+
+	/* always do this to avoid race conditions */
+	wakeup_io_thread(hdev);
+	
 	return (OPENUSB_SUCCESS);
 }
 
 
 
 /*
- * isoc_io_clone
+ * urb_submit
  *
+ *	Submit the specified urb using IOCTL_USB_SUBMITURB
  */
-struct usbi_io* isoc_io_clone(struct usbi_io *io)
+int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 {
-	struct usbi_io *new_io = NULL;
-	struct usbk_iso_packet_desc *p;
-	struct openusb_isoc_packet *packets;
-	struct openusb_isoc_request *isocr;
-	void *new_buf;
-	char *tmp;
-	int buflen = 0;
-	int i = 0;
-	int new_iolen;
+	return (ioctl(hdev->priv->fd, IOCTL_USB_SUBMITURB, urb));
+}
 
-	/*create new_io for descriptor space of num_packets*/
-	new_io = (struct usbi_io *)malloc(sizeof(*io) + io->req->req.isoc->pkts.num_packets * sizeof(struct usbk_iso_packet_desc));
 
-	if(!new_io) {
-		usbi_debug(io->dev->lib_hdl, 1, "error malloc new_io: %s\n", strerror(errno));
-		return NULL;
-	} 
 
-	new_iolen =  sizeof(*io) + io->req->req.isoc->pkts.num_packets
-						 * sizeof(struct usbk_iso_packet_desc);
-	memset(new_io, 0, new_iolen);
-	memcpy(new_io, io, sizeof(*io));
+/*
+ * free_isoc_urbs
+ *
+ *	Free all the memory allocated for the isochronous urbs store in the private
+ *	section of usbi_io.
+ */
+void free_isoc_urbs(struct usbi_io *io)
+{
+	int32_t 				i;
+	struct usbk_urb	*urb;
 
-	new_io->priv = malloc(sizeof(*new_io->priv));
-
-	if(!new_io) {
-		usbi_debug(io->dev->lib_hdl, 1, "error malloc new_io: %s\n", strerror(errno));
-		return NULL;
-	}
-	memset(new_io->priv, 0, sizeof(*new_io->priv));
-	memcpy(new_io->priv, io->priv, sizeof(*io->priv));
-
-	/*initialize new io structure*/
-	pthread_mutex_init(&new_io->lock, NULL);
-	pthread_cond_init(&new_io->cond, NULL);
-	list_init(&new_io->list);
-
-	new_io->priv->urb.type = USBK_URB_TYPE_ISO;
-	isocr = new_io->req->req.isoc;
-	packets = isocr->pkts.packets;
-
-	/*isoc.num_packets seems no need, because isoc request has included this member*/
-	new_io->req->req.isoc->pkts.num_packets = isocr->pkts.num_packets;
-	for(i = 0; i < isocr->pkts.num_packets; i++) {
-		buflen += packets[i].length;
+	for (i = 0; i < io->priv->num_urbs; i++) {
+		urb = io->priv->iso_urbs[i];
+		if (!urb) {
+			break;
+		}
+		free(urb->buffer);
+		free(urb);
 	}
 
-	new_buf = malloc(buflen);
-	if(!new_buf) {
-		free(new_io);
-		return NULL;
-	}
-	memset(new_buf, 0, buflen);
+	free(io->priv->iso_urbs);
+	return;
+}
 
-	new_io->priv->urb.buffer = new_buf;
-	new_io->priv->urb.buffer_length = buflen;
-	new_io->priv->urb.start_frame = isocr->start_frame;
-	new_io->priv->urb.number_of_packets = isocr->pkts.num_packets;
-	new_io->priv->urb.flags = isocr->flags;
 
-	p = &new_io->priv->urb.iso_frame_desc[0];
-	tmp = new_io->priv->urb.buffer;
-	for(i = 0; i < new_io->priv->urb.number_of_packets; i++) {
-		p[i].length = packets[i].length;
-		p[i].actual_length = 0;
-		p[i].status = 0;
 
-		/*while usb isoc out transfer*/
-		if( (io->req->endpoint & USB_ENDPOINT_DIR_MASK) == USB_ENDPOINT_OUT) {
-			memcpy((void *)tmp, packets[i].payload, packets[i].length);
-			tmp += packets[i].length;
+/*
+ * discard_urbs
+ *
+ *	This functions uses IOCTL_DISCARDURB to discard all the URBs for a given
+ *	usbi_io request. It also tracks how many URBs we expected to be handled
+ */
+void discard_urbs(struct usbi_dev_handle *hdev, struct usbi_io *io,
+									linux_reap_action_t reap_action)
+{
+	int32_t	i, ret;
+
+	io->priv->reap_action = reap_action;
+	for (i = 0; i < io->priv->num_urbs; i++) {
+		ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urbs[i]);
+		if (ret == 0) {
+			io->priv->urbs_to_cancel++;
+		} else if (errno == EINVAL) {
+			io->priv->urbs_to_reap++;
+		} else {
+			usbi_debug(hdev->lib_hdl, 4, "failed to cancel URB %d: %s", errno,
+								 strerror(errno));
 		}
 	}
 
-	return new_io;
+	return;
+}
+
+
+
+/*
+ * handle_partial_submit
+ *
+ *	This functions takes care of discarding all previously submitted URBs for a
+ *	give usbi_io request in case IOCTL_USB_SUBMITURB fails sometime after the
+ *	first URB in the io request fails.
+ */
+void handle_partial_submit(struct usbi_dev_handle *hdev, struct usbi_io *io,
+													 int32_t idx)
+{
+	int32_t	i, ret;
+
+	/* This function is called when submitting a set of urbs to usbfs and
+	* an urb that is not the first one fails. We must cancel all of the URBs
+	* that have been submitted up to this point.
+	*
+	* Since cancelling the urbs is asynchronous they will still be reaped
+	* later. So we want to return success even though we know we have a
+	* problem to hopefully prevent the user from freeing any memory we'll
+	* need when reaping the canceled urbs later.
+	*
+	* Also, some of the URBs we're about to cancel may have succeeded and
+	* we don't want to throw away that data, so we'll set the reap action
+	* such that it will save data from those that completed successfully.
+	*/
+	io->priv->reap_action = SUBMIT_FAILED;
+	for (i = 0; i < idx; i++) {
+		ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urbs[i]);
+		if (ret == 0) {
+			io->priv->urbs_to_cancel++;
+		} else if (errno == EINVAL) {
+			io->priv->urbs_to_reap++;
+		} else {
+			usbi_debug(hdev->lib_hdl, 4, "failed to cancel URB %d: %s", errno,
+								 strerror(errno));
+		}
+	}
+
+	usbi_debug(hdev->lib_hdl, 1, "some urbs failed to submit, reporting success "
+			"but waiting for %d cancels and %d reaps before reporting an error",
+			io->priv->urbs_to_cancel, io->priv->urbs_to_reap);
+	return;
 }
 
 
@@ -1368,70 +1184,333 @@ struct usbi_io* isoc_io_clone(struct usbi_io *io)
  */
 int32_t io_complete(struct usbi_dev_handle *hdev)
 {
-	struct usbk_urb							*urb     = NULL;
-	struct usbi_io							*io      = NULL;
-	struct usbi_io							*new_io  = NULL;
-	struct openusb_isoc_packet	*packets = NULL;
-	int 												ret, i, offset = 0;
+	struct usbk_urb		*urb	= NULL;
+	struct usbi_io		*io		= NULL;
 
-	while((ret = ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void*)&urb)) >= 0) {
+
+	while(ioctl(hdev->priv->fd, IOCTL_USB_REAPURBNDELAY, (void*)&urb) >= 0) {
 
 		io = urb->usercontext;
 
-		/* Check for failures or cancels before anything else */
-		if (urb->status == -2) { /* this IO was canceled, skip processing */
-			usbi_debug(hdev->lib_hdl, 4, "received cancelled urb: %d",urb->actual_length);
-			usbi_io_complete(io,OPENUSB_IO_CANCELED,0);
-			continue;
-		} else if (urb->status < 0) {
-			io->status = USBI_IO_COMPLETED_FAIL;
-			/* FIXME: not sure what the best error code to use here is */
-			usbi_io_complete(io, OPENUSB_PLATFORM_FAILURE, 0);
-			continue;
-		}
+		/* We handle the completion of bulk, interrupt and control requests
+		 * differently than we handle the completion of isochronous requests */
+		switch (io->req->type) {
+			default:
+				usbi_debug(hdev->lib_hdl, 1, "unrecognized usb transfer type: %d",
+									 io->req->type);
+				break;
 
-		/* if this was a control request copy the payload */
-		if (io->req->type == USB_TYPE_CONTROL) {
-			memcpy(io->req->req.ctrl->payload, urb->buffer + USBI_CONTROL_SETUP_LEN, io->req->req.ctrl->length);
-			free(urb->buffer);
-		}
-
-		/*complete handle for isochronous transfer*/
-		if(io->req->type == USB_TYPE_ISOCHRONOUS) {
-			/*copy data*/
-			packets = io->req->req.isoc->pkts.packets;
-			io->req->req.isoc->isoc_results = (openusb_request_result_t *)malloc(io->req->req.isoc->pkts.num_packets * sizeof(openusb_request_result_t));
-			if(io->req->req.isoc->isoc_results == NULL) {
-				io->status = USBI_IO_COMPLETED_FAIL;
-				usbi_free_io(io);
-				continue;
-			}
-
-			/*copy the result of each packet*/
-			offset = 0;
-			for(i = 0; i < io->req->req.isoc->pkts.num_packets; i++) {
-				memcpy(packets[i].payload, urb->buffer + offset, packets[i].length);
-				offset += packets[i].length;
-				io->req->req.isoc->isoc_results[i].status = urb->iso_frame_desc[i].status;
-				io->req->req.isoc->isoc_results[i].transferred_bytes = urb->iso_frame_desc[i].actual_length;
-			}
-
-			/*resubmit isoc io*/
-			if(resubmit_flag == RESUBMIT)
-			{
-				new_io = isoc_io_clone(io);
-				if(new_io != NULL) {
-					urb_submit(hdev, new_io);
+			case USB_TYPE_CONTROL:
+				
+				if (urb->status == 0) {
+					/* copy the data back */
+					memcpy(io->req->req.ctrl->payload,
+								 urb->buffer + USBI_CONTROL_SETUP_LEN,
+								 io->req->req.ctrl->length);
+					io->status = USBI_IO_COMPLETED;
+					usbi_io_complete(io, OPENUSB_SUCCESS, urb->actual_length);
 				}
-			}
-		}
+			
+				/* report successful completion */
+				if (urb->status == -ENOENT) {
+					if (io->priv->reap_action == CANCELED) {
+						io->status = USBI_IO_CANCEL;
+						usbi_io_complete(io, OPENUSB_IO_CANCELED, urb->actual_length);
+					} else if (io->priv->reap_action == TIMEDOUT) {
+						io->status = USBI_IO_TIMEOUT;
+						usbi_io_complete(io, OPENUSB_IO_TIMEOUT, urb->actual_length);
+					} else {
+						io->status = USBI_IO_COMPLETED_FAIL;
+						usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE, urb->actual_length);
+					}
+				}
 
-		/* If we get here then we were successful */
-		io->status = USBI_IO_COMPLETED;
-		usbi_io_complete(io, OPENUSB_SUCCESS, urb->actual_length);
+				free(urb->buffer);
+				free(io->priv->urbs);
+				break;
+
+			case USB_TYPE_BULK:
+			case USB_TYPE_INTERRUPT:
+				handle_bulk_intr_complete(hdev, urb);
+				break;
+
+			case USB_TYPE_ISOCHRONOUS:
+				handle_isoc_complete(hdev, urb);
+				break;
+		}
 	}
 
 	return (OPENUSB_SUCCESS);
+}
+
+
+
+/*
+ * handle_bulk_intr_complete
+ *
+ *	This function handles keeping track of the URBs that have been completed for
+ *	for a give usbi_io request. It handles error statuses and keeping track of
+ *	how many URBs remain for a specific request so that timeouts, canceles and
+ *	early completions are handled properly.
+ */
+int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
+																	struct usbk_urb *urb)
+{
+	struct usbi_io	*io;
+	int32_t					urb_index;
+
+	/* Get the pointer to our io */
+	io = urb->usercontext;
+
+	/* Get the index of this urb */
+	urb_index = urb - io->priv->urbs;
+
+	/* spit out something useful... */
+	usbi_debug(hdev->lib_hdl, 4, "processing urb %d/%d: status = %d",
+						 urb_index+1, io->priv->num_urbs, urb->status);
+	
+	/* keep track of the bytes transferred */
+	if (urb->status == 0) {
+		io->priv->bytes_transferred += urb->actual_length;
+	}
+
+	/* if the reap action is not normal we have some special handling to do */
+	if (io->priv->reap_action != NORMAL) {
+
+		if (urb->status == -ENOENT) {
+			usbi_debug(hdev->lib_hdl, 4, "canceled urb found");
+			if (io->priv->urbs_to_cancel == 0) {
+				usbi_debug(hdev->lib_hdl, 1, "canceled urb found, but no urbs "
+									 " have been canceled!");
+			} else {
+				io->priv->urbs_to_cancel--;
+			}
+		} else if (urb->status == 0) {
+			usbi_debug(hdev->lib_hdl, 4, "completed urb found");
+
+			if (io->priv->reap_action == COMPLETED_EARLY) {
+				usbi_debug(hdev->lib_hdl, 1, "WARNING SOME DATA WAS LOST (completed "
+									 "early but a remaining urb also completed): ep = %x",
+									 io->req->endpoint);
+			}
+
+			if (io->priv->urbs_to_reap == 0) {
+				usbi_debug(hdev->lib_hdl, 1,
+									 "completed URB but not awaiting a completion");
+			} else {
+				io->priv->urbs_to_reap--;
+			}
+
+		} else {
+			usbi_debug(hdev->lib_hdl, 2,
+								 "unrecognized urb status (on cancel): %d", urb->status);
+		}
+
+		if ((io->priv->urbs_to_reap == 0) && (io->priv->urbs_to_cancel == 0)) {
+
+			usbi_debug(hdev->lib_hdl, 4, "last URB handled, io request complete");
+			if (io->priv->reap_action == CANCELED) {
+				usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
+				free(io->priv->urbs);
+				return (OPENUSB_SUCCESS);
+			} else if (io->priv->reap_action == COMPLETED_EARLY) {
+				usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
+				free(io->priv->urbs);
+				return (OPENUSB_SUCCESS);
+			} else if (io->priv->reap_action == TIMEDOUT) {
+				usbi_io_complete(io, OPENUSB_IO_TIMEOUT, io->priv->bytes_transferred);
+				free(io->priv->urbs);
+				return (OPENUSB_SUCCESS);
+			} else {
+				usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
+												 io->priv->bytes_transferred);
+				free(io->priv->urbs);
+				return (OPENUSB_SUCCESS);
+			}
+		}
+
+		return (OPENUSB_SUCCESS);
+	}
+
+	/* check for errors */
+	if (urb->status == -EPIPE) {
+		usbi_debug(hdev->lib_hdl, 1, "endpoint %x stalled", io->req->endpoint);
+		free(io->priv->urbs);
+		usbi_io_complete(io, OPENUSB_IO_STALL, urb->actual_length);
+	} else if (urb->status != 0) {
+		usbi_debug(hdev->lib_hdl, 1, "unrecognized urb status: %d", urb->status);
+	}
+
+	/* if this is the last urb we need to complete or we received less data than
+	* requested we're done */
+	if (urb_index == io->priv->num_urbs - 1) {
+
+		usbi_debug(hdev->lib_hdl, 4, "last URB in transfer, io request complete");
+		usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
+		free(io->priv->urbs);
+		return (OPENUSB_SUCCESS);
+
+	} else if (urb->actual_length < urb->buffer_length) {
+
+		usbi_debug(hdev->lib_hdl, 4, "short transfer on ep %x, urb %d/%d, total %d",
+							 io->req->endpoint, urb->actual_length, urb->buffer_length,
+							 io->priv->bytes_transferred);
+
+		/* cancel the remaining urbs */
+		handle_partial_xfer(hdev, io, urb_index + 1);
+
+		return (OPENUSB_SUCCESS);
+	}
+
+	return (OPENUSB_SUCCESS);
+}
+
+
+
+/*
+ * handle_isoc_complete
+ *
+ *	This function handles keeping track of the URBs that have been completed for
+ *	for a give usbi_io request. It handles error statuses and keeping track of
+ *	how many URBs remain for a specific request so that canceles are handled
+ *	properly. This function only handle isochronous URBs).
+ */
+int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
+{
+	struct usbi_io	*io;
+	int32_t					urb_index;
+	int32_t					i;
+	uint8_t					*urb_buffer;
+
+	openusb_request_result_t	*isoc_results;
+	openusb_isoc_request_t		*isoc;
+
+	/* Initialization */
+	io = urb->usercontext;
+	urb_index = 0;
+
+	for (i = 0; i < io->priv->num_urbs; i++) {
+		if (urb == io->priv->iso_urbs[i]) {
+			urb_index = i + 1;
+			break;
+		}
+	}
+	if (urb_index == 0) {
+		usbi_debug(hdev->lib_hdl, 1, "failed to find urb (isoc xfer)");
+		return (OPENUSB_BADARG);
+	}
+
+	usbi_debug(hdev->lib_hdl, 4, "handling completion of iso urb %d/%d: %d",
+						 urb_index, io->priv->num_urbs, urb->status);
+
+	if (urb->status == 0) {
+
+		/* copy the isochronous results back in */
+		urb_buffer = urb->buffer;
+		isoc = io->req->req.isoc;
+		isoc_results = isoc->isoc_results;
+		for (i = 0; i < urb->number_of_packets; i++) {
+			isoc_results[io->priv->isoc_packet_offset].status =
+					translate_errno(-urb->iso_frame_desc[i].status);
+			isoc_results[io->priv->isoc_packet_offset].transferred_bytes =
+					urb->iso_frame_desc[i].actual_length;
+			if ((io->req->endpoint & USB_REQ_DIR_MASK) == USB_REQ_DEV_TO_HOST) {
+				memcpy(isoc->pkts.packets[io->priv->isoc_packet_offset].payload,
+							 urb_buffer, urb->iso_frame_desc[i].actual_length);
+				urb_buffer += urb->iso_frame_desc[i].actual_length;
+			}
+			io->priv->bytes_transferred += urb->iso_frame_desc[i].actual_length;
+			io->priv->isoc_packet_offset++;
+		}
+	}
+
+	if (io->priv->reap_action != NORMAL) {
+	
+		if (urb->status == -ENOENT) {
+			usbi_debug(hdev->lib_hdl, 4, "canceled urb found");
+			if (io->priv->urbs_to_cancel == 0) {
+				usbi_debug(hdev->lib_hdl, 1,
+									 "canceled urb found, but no urbs have been canceled!");
+			} else {
+				io->priv->urbs_to_cancel--;
+			}
+		} else if (urb->status == 0) {
+			usbi_debug(hdev->lib_hdl, 4, "completed urb found");
+
+			if (io->priv->urbs_to_reap == 0) {
+				usbi_debug(hdev->lib_hdl, 1,
+									 "completed URB but not awaiting a completion");
+			} else {
+				io->priv->urbs_to_reap--;
+			}
+
+		} else {
+			usbi_debug(hdev->lib_hdl, 2, "unrecognized urb status (on cancel): %d",
+								 urb->status);
+		}
+
+		if ((io->priv->urbs_to_reap == 0) && (io->priv->urbs_to_cancel == 0)) {
+
+			usbi_debug(hdev->lib_hdl, 4, "last URB handled, io request complete");
+			if (io->priv->reap_action == CANCELED) {
+				usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
+				free_isoc_urbs(io);
+				return (OPENUSB_SUCCESS);
+			} else {
+				usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
+												 io->priv->bytes_transferred);
+				free_isoc_urbs(io);
+				return (OPENUSB_SUCCESS);
+			}
+		}
+
+		return (OPENUSB_SUCCESS);
+	}
+	
+	if (urb->status != 0) {
+		usbi_debug(hdev->lib_hdl, 2, "unrecognized urb status %d", urb->status);
+	}
+
+	/* if this is the last urb then we're done */
+	if (urb_index == io->priv->num_urbs) {
+		usbi_debug(hdev->lib_hdl, 4, "last URB in transfer completed");
+		free_isoc_urbs(io);
+		usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
+	}
+
+	return (OPENUSB_SUCCESS);
+}
+
+
+
+/*
+ * handle_partial_xfer
+ *
+ *	This function handle cancelling all the remaining URBs in a give usbi_io
+ *	request in the case that a transfer completes early.
+ */
+void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
+												 int32_t idx)
+{
+	int32_t	i, ret;
+
+	io->priv->reap_action = COMPLETED_EARLY;
+	for (i = idx; i < io->priv->num_urbs; i++) {
+		ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urbs[i]);
+		if (ret == 0) {
+			io->priv->urbs_to_cancel++;
+		} else if (errno == EINVAL) {
+			io->priv->urbs_to_reap++;
+		} else {
+			usbi_debug(NULL, 4, "failed to cancel URB %d: %s", errno,
+								 strerror(errno));
+		}
+	}
+
+	usbi_debug(NULL, 4,
+						 "partial xfer: waiting on %d cancels and %d reaps before reporting"
+						 " an error", io->priv->urbs_to_cancel, io->priv->urbs_to_reap);
+	return;
 }
 
 
@@ -1445,36 +1524,19 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
 int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 {
 	struct usbi_io	*io, *tio;
-	int							ret;
 
 	/* check each entry in the io list to find out if it's timed out */
 	list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
 
-		/* currently, isochronous io doesn't consider timeout issue and we don't want
-		 * to process any requests that aren't in progress */
+		/* currently, isochronous io doesn't consider timeout issue and we don't
+		 * want to process any requests that aren't in progress */
 		if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
 				(io->status != USBI_IO_INPROGRESS) ) {
 				continue;
 		}
 
 		if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
-
-			/* this request has timed out, tell usbfs to discard it */
-			ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
-			if (ret < 0) {
-				/* If this failed, then we haven't submitted the request to usbfs
-				 * yet. So let's log it and delete the request */
-				usbi_debug(hdev->lib_hdl, 1, "error cancelling URB on timeout: %s", strerror(errno));
-			}
-
-			/* clear out the buffer if we allocated (only on a control req) */
-			if (io->req->type == USB_TYPE_CONTROL) {
-				if (io->priv->urb.buffer) { free(io->priv->urb.buffer); }
-			}
-
-			/* Set the status */
-			io->status = USBI_IO_TIMEOUT;
-			usbi_io_complete(io, OPENUSB_IO_TIMEOUT, 0);
+			discard_urbs(hdev, io, TIMEDOUT);
 		}
 	}
 
@@ -1493,19 +1555,12 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
  */
 int32_t linux_io_cancel(struct usbi_io *io)
 {
-	int ret;
 
 	io->status = USBI_IO_CANCEL;
 	
-	/* Discard/Cancel the URB */
-	ret = ioctl(io->dev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urb);
-	if (ret < 0) {
-		/* If this fails then we probably haven't submitted the request to usbfs.
-		 * So we'll log an error, and notify the library the the IO was canceled */
-		usbi_debug(io->dev->lib_hdl, 1, "error canceling URB: %s", strerror(errno));
-		usbi_io_complete(io, OPENUSB_IO_CANCELED, 0);
-	}
-
+	/* Discard/Cancel all the URBs for this io request */
+	discard_urbs(io->dev, io, CANCELED);
+	
 	/* Always do this to avoid race conditions */
 	wakeup_io_thread(io->dev);
 
@@ -1751,7 +1806,8 @@ int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
 
 	buf[0] = 0;
 	if (write(hdev->priv->event_pipe[1], buf, 1) < 1) {
-		usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s", strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "unable to write to event pipe: %s",
+							 strerror(errno));
 		return translate_errno(errno);
 	}
 
@@ -1793,7 +1849,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	/* Open the device */
 	fd = device_open(idev);
 	if (fd < 0) {
-		usbi_debug(NULL, 1, "couldn't open %s: %s", idev->sys_path, strerror(errno));
+		usbi_debug(NULL, 1, "couldn't open %s: %s", idev->sys_path,
+							 strerror(errno));
 		return (OPENUSB_UNKNOWN_DEVICE);
 	}
 
@@ -1802,7 +1859,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	 */
 	devdescr = malloc(USBI_DEVICE_DESC_SIZE);
 	if (!devdescr) {
-		usbi_debug(NULL, 1, "unable to allocate memory for cached device descriptor");
+		usbi_debug(NULL, 1,
+							 "unable to allocate memory for cached device descriptor");
 		sts = OPENUSB_NO_RESOURCES;
 		goto done;
   }
@@ -1824,7 +1882,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	}
 
 	/* parse the device decriptor to get the number of configurations */
-	openusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen, &device, USBI_DEVICE_DESC_SIZE, &count);
+	openusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen, &device,
+										 USBI_DEVICE_DESC_SIZE, &count);
 
 	/* now we'll allocated memory for all of our config descriptors */
 	configs_raw = malloc(device.bNumConfigurations * sizeof(configs_raw[0]));
@@ -1847,7 +1906,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 			if (ret < 0) {
 				usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
 			} else {
-				usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", 8, ret);
+				usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)",
+									 8, ret);
 			} 
 			sts = translate_errno(errno);
 			goto done;
@@ -1871,7 +1931,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 			if (ret < 0) {
 				usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
 			} else {
-				usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)", cfgr->len, ret);
+				usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)",
+									 cfgr->len, ret);
 			}
 
 			cfgr->len = 0;
@@ -2038,7 +2099,8 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 
 	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
 	if (conn == NULL) {
-		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name, error.message);
+		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name,
+							 error.message);
 		dbus_error_free(&error);
 		libhal_ctx_free (hal_ctx);
 		return (OPENUSB_SYS_FUNC_FAILURE);
@@ -2152,7 +2214,8 @@ struct usbi_device *find_device_by_udi(const char *udi)
 }
 
 
-void process_new_device(LibHalContext *hal_ctx, const char *udi, struct usbi_bus *ibus)
+void process_new_device(LibHalContext *hal_ctx, const char *udi,
+												struct usbi_bus *ibus)
 {
 	char								*parent;
 	char								*bus;
@@ -2210,7 +2273,8 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi, struct usbi_bus
 
 	/* Get the device number */
 	devnum = libhal_device_get_property_int(hal_ctx, udi,
-																					"usb_device.linux.device_number", &error);
+																					"usb_device.linux.device_number",
+																					&error);
 	if (dbus_error_is_set(&error)) {
 		usbi_debug(NULL, 4, "get device number error: %s", error.message);
 		dbus_error_free(&error);
@@ -2231,7 +2295,7 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi, struct usbi_bus
 	pdevnum = libhal_device_get_property_int(hal_ctx, parent,
 			"usb_device.linux.device_number", &error);
 	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "Error getting parent device number: %s", error.message);
+		usbi_debug(NULL, 4, "Error getting parent device number: %s",error.message);
 		dbus_error_free(&error);
 		/* this means that there probably isn't a parent device number, so
 		 * make it zero, meaning this is the root device */
@@ -2379,7 +2443,8 @@ void *hal_hotplug_event_thread(void *unused)
 	
 	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
 	if (conn == NULL) {
-		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name, error.message);
+		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name,
+							 error.message);
 		dbus_error_free(&error);
 		return (NULL);
 	}
@@ -2412,6 +2477,7 @@ void *hal_hotplug_event_thread(void *unused)
 								 error.name, error.message);
 			dbus_error_free(&error);
 		}
+
 		usbi_debug(NULL, 1, "Could not initialise connection to hald.");
 		usbi_debug(NULL, 1, "Normally this means the HAL daemon (hald) is");
 		usbi_debug(NULL, 1, "not running or not ready.");
@@ -2477,8 +2543,8 @@ struct usbi_backend_ops backend_ops = {
 		.attach_kernel_driver_np	= linux_attach_kernel_driver,
 		.detach_kernel_driver_np	= linux_detach_kernel_driver,
 		.ctrl_xfer_aio						= linux_submit_ctrl,
-		.intr_xfer_aio						= linux_submit_intr,
-		.bulk_xfer_aio						= linux_submit_bulk,
+		.intr_xfer_aio						= linux_submit_bulk_intr,
+		.bulk_xfer_aio						= linux_submit_bulk_intr,
 		.isoc_xfer_aio						= linux_submit_isoc,
 		.ctrl_xfer_wait						= NULL,
 		.intr_xfer_wait						= NULL,
