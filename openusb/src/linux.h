@@ -118,7 +118,9 @@ typedef enum {
 	CANCELED,
 	SUBMIT_FAILED,
 	COMPLETED_EARLY,
-	TIMEDOUT
+	TIMEDOUT,
+	STALL,
+	UNKNOWNFAILURE
 } linux_reap_action_t;
 
 
@@ -191,10 +193,10 @@ void discard_urbs(struct usbi_dev_handle *hdev, struct usbi_io *io,
 void handle_partial_submit(struct usbi_dev_handle *hdev, struct usbi_io *io,
 													 int32_t idx);
 void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
-												 int32_t idx);
-int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
+												 int32_t idx, linux_reap_action_t action);
+void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 																	struct usbk_urb *urb);
-int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
+void handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
 
 
 /* Linux specific members for various internal structures */
