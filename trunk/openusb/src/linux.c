@@ -896,11 +896,11 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
  */
 int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
-	openusb_isoc_request_t	*isoc;
+	openusb_isoc_request_t	*isoc = NULL;
 	int32_t									ret;
 	int32_t									i, this_urb_len, packet_offset;
 	uint32_t								packet_len;
-	struct usbk_urb					*urb;
+	struct usbk_urb					*urb = NULL;
 	int32_t									space_remaining_in_urb;
 	int32_t									urb_packet_offset;
 	int32_t									j,k;
@@ -1253,8 +1253,8 @@ int32_t io_complete(struct usbi_dev_handle *hdev)
  *	how many URBs remain for a specific request so that timeouts, canceles and
  *	early completions are handled properly.
  */
-int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
-																	struct usbk_urb *urb)
+void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
+															 struct usbk_urb *urb)
 {
 	struct usbi_io	*io;
 	int32_t					urb_index;
@@ -1309,36 +1309,45 @@ int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 		if ((io->priv->urbs_to_reap == 0) && (io->priv->urbs_to_cancel == 0)) {
 
 			usbi_debug(hdev->lib_hdl, 4, "last URB handled, io request complete");
-			if (io->priv->reap_action == CANCELED) {
-				usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
-				free(io->priv->urbs);
-				return (OPENUSB_SUCCESS);
-			} else if (io->priv->reap_action == COMPLETED_EARLY) {
-				usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
-				free(io->priv->urbs);
-				return (OPENUSB_SUCCESS);
-			} else if (io->priv->reap_action == TIMEDOUT) {
-				usbi_io_complete(io, OPENUSB_IO_TIMEOUT, io->priv->bytes_transferred);
-				free(io->priv->urbs);
-				return (OPENUSB_SUCCESS);
-			} else {
-				usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
-												 io->priv->bytes_transferred);
-				free(io->priv->urbs);
-				return (OPENUSB_SUCCESS);
+			switch (io->priv->reap_action) {
+				default:
+				case UNKNOWNFAILURE:
+					usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
+													 io->priv->bytes_transferred);
+					break;
+
+				case CANCELED:
+					usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
+					break;
+
+				case COMPLETED_EARLY:
+					usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
+					break;
+
+				case TIMEDOUT:
+					usbi_io_complete(io, OPENUSB_IO_TIMEOUT, io->priv->bytes_transferred);
+					break;
+
+				case STALL:
+					usbi_io_complete(io, OPENUSB_IO_STALL, io->priv->bytes_transferred);
+					break;
 			}
+			free(io->priv->urbs);
+			return;
 		}
 
-		return (OPENUSB_SUCCESS);
+		return;
 	}
 
 	/* check for errors */
 	if (urb->status == -EPIPE) {
 		usbi_debug(hdev->lib_hdl, 1, "endpoint %x stalled", io->req->endpoint);
-		free(io->priv->urbs);
-		usbi_io_complete(io, OPENUSB_IO_STALL, urb->actual_length);
+		handle_partial_xfer(hdev, io, urb_index + 1, STALL);
+		return;
 	} else if (urb->status != 0) {
 		usbi_debug(hdev->lib_hdl, 1, "unrecognized urb status: %d", urb->status);
+		handle_partial_xfer(hdev, io, urb_index + 1, UNKNOWNFAILURE);
+		return;
 	}
 
 	/* if this is the last urb we need to complete or we received less data than
@@ -1348,7 +1357,7 @@ int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 		usbi_debug(hdev->lib_hdl, 4, "last URB in transfer, io request complete");
 		usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
 		free(io->priv->urbs);
-		return (OPENUSB_SUCCESS);
+		return;
 
 	} else if (urb->actual_length < urb->buffer_length) {
 
@@ -1357,12 +1366,12 @@ int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 							 io->priv->bytes_transferred);
 
 		/* cancel the remaining urbs */
-		handle_partial_xfer(hdev, io, urb_index + 1);
+		handle_partial_xfer(hdev, io, urb_index + 1, COMPLETED_EARLY);
 
-		return (OPENUSB_SUCCESS);
+		return;
 	}
 
-	return (OPENUSB_SUCCESS);
+	return;
 }
 
 
@@ -1375,7 +1384,7 @@ int32_t handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
  *	how many URBs remain for a specific request so that canceles are handled
  *	properly. This function only handle isochronous URBs).
  */
-int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
+void handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 {
 	struct usbi_io	*io;
 	int32_t					urb_index;
@@ -1397,7 +1406,7 @@ int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 	}
 	if (urb_index == 0) {
 		usbi_debug(hdev->lib_hdl, 1, "failed to find urb (isoc xfer)");
-		return (OPENUSB_BADARG);
+		return;
 	}
 
 	usbi_debug(hdev->lib_hdl, 4, "handling completion of iso urb %d/%d: %d",
@@ -1455,20 +1464,22 @@ int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 			if (io->priv->reap_action == CANCELED) {
 				usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
 				free_isoc_urbs(io);
-				return (OPENUSB_SUCCESS);
+				return;
 			} else {
 				usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
 												 io->priv->bytes_transferred);
 				free_isoc_urbs(io);
-				return (OPENUSB_SUCCESS);
+				return;
 			}
 		}
 
-		return (OPENUSB_SUCCESS);
+		return;
 	}
 	
 	if (urb->status != 0) {
 		usbi_debug(hdev->lib_hdl, 2, "unrecognized urb status %d", urb->status);
+		handle_partial_xfer(hdev, io, urb_index, UNKNOWNFAILURE);
+		return;
 	}
 
 	/* if this is the last urb then we're done */
@@ -1478,7 +1489,7 @@ int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 		usbi_io_complete(io, OPENUSB_SUCCESS, io->priv->bytes_transferred);
 	}
 
-	return (OPENUSB_SUCCESS);
+	return;
 }
 
 
@@ -1490,11 +1501,11 @@ int32_t handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
  *	request in the case that a transfer completes early.
  */
 void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
-												 int32_t idx)
+												 int32_t idx, linux_reap_action_t action)
 {
 	int32_t	i, ret;
 
-	io->priv->reap_action = COMPLETED_EARLY;
+	io->priv->reap_action = action;
 	for (i = idx; i < io->priv->num_urbs; i++) {
 		ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urbs[i]);
 		if (ret == 0) {
