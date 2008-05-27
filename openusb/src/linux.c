@@ -697,6 +697,7 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	if (!io->priv) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the "
 							 "private io member");
+		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv, 0, sizeof(*io->priv));
@@ -706,6 +707,7 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	io->priv->urbs = (struct usbk_urb*)malloc(sizeof(struct usbk_urb));
 	if (!io->priv->urbs) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for the urb");
+		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv->urbs, 0, sizeof(struct usbk_urb));
@@ -750,9 +752,12 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	/* submit the URB */
 	ret = urb_submit(hdev, &io->priv->urbs[0]);
 	if (ret < 0) {
-		usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
-							 strerror(errno));
+		usbi_debug(hdev->lib_hdl, 1, "error submitting URB on ep %x: %s",
+							 io->req->endpoint, strerror(errno));
 		io->status = USBI_IO_COMPLETED_FAIL;
+		
+		pthread_mutex_unlock(&io->lock);
+		pthread_mutex_unlock(&hdev->lock);
 		return translate_errno(errno);
 	}
 	
@@ -810,6 +815,7 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		xfertype= USBK_URB_TYPE_INTERRUPT;
 	} else {
 		usbi_debug(hdev->lib_hdl, 1, "transfer type is not bulk or interrupt");
+		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_BADARG);
 	}
 
@@ -829,6 +835,7 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	if (!io->priv->urbs) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for %d urbs",
 							 io->priv->num_urbs);
+		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	
@@ -867,11 +874,17 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 				usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
 									 strerror(errno));
 				io->status = USBI_IO_COMPLETED_FAIL;
+				
+				pthread_mutex_unlock(&io->lock);
+				pthread_mutex_unlock(&hdev->lock);
 				return translate_errno(errno);
 			}
 
 			/* if it's not the first urb then the logic gets more complicated */
 			handle_partial_submit(hdev, io, i);
+
+			pthread_mutex_unlock(&io->lock);
+			pthread_mutex_unlock(&hdev->lock);
 			return (OPENUSB_SUCCESS);
 		}
 
@@ -952,6 +965,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	if(!io->priv->iso_urbs) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for %d urbs",
 							 io->priv->num_urbs);
+		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv->iso_urbs, 0, io->priv->num_urbs * sizeof(struct usbk_urb));
@@ -988,6 +1002,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 																			* sizeof(struct usbk_iso_packet_desc)) );
 		if (!urb) {
 			free_isoc_urbs(io);
+			pthread_mutex_unlock(&io->lock);
 			return (OPENUSB_NO_RESOURCES);
 		}
 		memset(urb, 0,  sizeof(*urb)
@@ -1000,6 +1015,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 			usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for urb buffer "
 								 "of length %d", urb->buffer_length);
 			free_isoc_urbs(io);
+			pthread_mutex_unlock(&io->lock);
 			return (OPENUSB_NO_RESOURCES);
 		}
 		memset(urb->buffer, 0, urb->buffer_length);
@@ -1041,11 +1057,17 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 				usbi_debug(hdev->lib_hdl, 1, "error submitting first URB: %s",
 									 strerror(errno));
 				io->status = USBI_IO_COMPLETED_FAIL;
+
+				pthread_mutex_unlock(&io->lock);
+				pthread_mutex_unlock(&hdev->lock);
 				return translate_errno(errno);
 			}
 
 			/* if it's not the first urb then the logic gets more complicated */
 			handle_partial_submit(hdev, io, i);
+
+			pthread_mutex_unlock(&io->lock);
+			pthread_mutex_unlock(&hdev->lock);
 			return (OPENUSB_SUCCESS);
 		}
 
@@ -1312,12 +1334,21 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 			switch (io->priv->reap_action) {
 				default:
 				case UNKNOWNFAILURE:
+					usbi_debug(hdev->lib_hdl, 2, "An unknown failure was reported after "
+										 " the io request has been reported as complete");
 					usbi_io_complete(io, OPENUSB_SYS_FUNC_FAILURE,
 													 io->priv->bytes_transferred);
 					break;
+					
+				case STALL:
+					usbi_debug(hdev->lib_hdl, 2, "A stall was reported after the io "
+										 "request has been reported as complete");
+					// We don't want to free the urbs in this case, so just return
+					return;
 
 				case CANCELED:
-					usbi_io_complete(io, OPENUSB_IO_CANCELED, io->priv->bytes_transferred);
+					usbi_io_complete(io, OPENUSB_IO_CANCELED,
+													 io->priv->bytes_transferred);
 					break;
 
 				case COMPLETED_EARLY:
@@ -1326,10 +1357,6 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 
 				case TIMEDOUT:
 					usbi_io_complete(io, OPENUSB_IO_TIMEOUT, io->priv->bytes_transferred);
-					break;
-
-				case STALL:
-					usbi_io_complete(io, OPENUSB_IO_STALL, io->priv->bytes_transferred);
 					break;
 			}
 			free(io->priv->urbs);
@@ -1343,6 +1370,8 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 	if (urb->status == -EPIPE) {
 		usbi_debug(hdev->lib_hdl, 1, "endpoint %x stalled", io->req->endpoint);
 		handle_partial_xfer(hdev, io, urb_index + 1, STALL);
+		free(io->priv->urbs);
+		usbi_io_complete(io, OPENUSB_IO_STALL, io->priv->bytes_transferred);
 		return;
 	} else if (urb->status != 0) {
 		usbi_debug(hdev->lib_hdl, 1, "unrecognized urb status: %d", urb->status);
