@@ -199,13 +199,14 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
  */
 int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 {
-	int32_t ret;
+	int32_t	ret;
+	int			config = (int)cfg;
 
 	/* Validate... */
 	if (!hdev)
 		return OPENUSB_BADARG;
 
-	ret = ioctl(hdev->priv->fd, IOCTL_USB_SETCONFIG, &cfg);
+	ret = ioctl(hdev->priv->fd, IOCTL_USB_SETCONFIG, &config);
 	if (ret < 0) {
 		usbi_debug(hdev->lib_hdl, 1, "could not set config %u: %s", cfg,
 							 strerror(errno));
@@ -213,7 +214,7 @@ int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 	}
 
 	hdev->idev->cur_config = cfg;
-	hdev->config_value = cfg + 1;
+	hdev->config_value = cfg;
 
 	return (OPENUSB_SUCCESS);
 }
