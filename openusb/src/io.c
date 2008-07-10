@@ -417,7 +417,7 @@ io_submit(void *arg)
 	
 	ret = usbi_sync_submit(iop);
 
-	if(iop->callback){
+	if(iop->req->cb){
 		usbi_debug(iop->dev->lib_hdl, 4, "callback get called");
 		iop->req->cb(iop->req);
 		usbi_free_io(iop); /* should be removed ? */
