@@ -1453,7 +1453,7 @@ void handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 		for (i = 0; i < urb->number_of_packets; i++) {
 			if (urb->iso_frame_desc[i].status) {
 				isoc_results[io->priv->isoc_packet_offset].status =
-					translate_errno(-urb->iso_frame_desc[i].status;
+					translate_errno(-urb->iso_frame_desc[i].status);
 			}
 
 			isoc_results[io->priv->isoc_packet_offset].transferred_bytes =
