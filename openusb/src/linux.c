@@ -24,11 +24,11 @@
 #include "linux.h"
 
 #define	LINUX_MAX_BULK_INTR_XFER	16384
-#define LINUX_MAX_ISOC_XFER				32768
+#define LINUX_MAX_ISOC_XFER		32768
 
 
 static pthread_t	event_thread;
-static char				device_dir[PATH_MAX + 1] = "";
+static char		device_dir[PATH_MAX + 1] = "";
 static GMainLoop	*event_loop;
 static int32_t		linux_backend_inited = 0;
 
@@ -929,7 +929,6 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 	/* intialize */
 	this_urb_len = 0;
 	packet_offset = 0;
-	io->priv->num_urbs = 0;
 	
 	/* allocate memory for the private part */
 	io->priv = malloc(sizeof(struct usbi_io_private));
@@ -940,6 +939,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		return (OPENUSB_NO_RESOURCES);
 	}
 	memset(io->priv, 0, sizeof(*io->priv));
+	io->priv->num_urbs = 1;
 
 	/* get a pointer to our request (for easier access) */
 	isoc = io->req->req.isoc;
@@ -962,14 +962,14 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 	/* allocate memory for our array of urbs */
 	io->priv->iso_urbs = (struct usbk_urb**)malloc(  io->priv->num_urbs
-																								 * sizeof(struct usbk_urb));
+																								 * sizeof(struct usbk_urb*));
 	if(!io->priv->iso_urbs) {
 		usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for %d urbs",
 							 io->priv->num_urbs);
 		pthread_mutex_unlock(&io->lock);
 		return (OPENUSB_NO_RESOURCES);
 	}
-	memset(io->priv->iso_urbs, 0, io->priv->num_urbs * sizeof(struct usbk_urb));
+	memset(io->priv->iso_urbs, 0, io->priv->num_urbs * sizeof(struct usbk_urb*));
 
 	io->priv->urbs_to_cancel			= 0;
 	io->priv->urbs_to_reap				= 0;
@@ -981,6 +981,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 
 		space_remaining_in_urb = LINUX_MAX_ISOC_XFER;
 		urb_packet_offset = 0;
+		this_urb_len = 0;
 
 		/* get all of the packets that will fit in this urb */
 		while (packet_offset < isoc->pkts.num_packets) {
@@ -990,7 +991,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 				urb_packet_offset++;
 				packet_offset++;
 				space_remaining_in_urb -= packet_len;
-				urb->buffer_length += packet_len;
+				this_urb_len += packet_len;
 			} else {
 				/* it won't fit, put it in the next urb */
 				break;
@@ -1011,6 +1012,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		io->priv->iso_urbs[i] = urb;
 
 		/* allocate memory for the urb buffer */
+		urb->buffer_length = this_urb_len;
 		urb->buffer = (void*)malloc(urb->buffer_length);
 		if (!urb->buffer) {
 			usbi_debug(hdev->lib_hdl, 1, "unable to allocate memory for urb buffer "
@@ -1027,7 +1029,7 @@ int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 			packet_len = isoc->pkts.packets[k].length;
 			urb->iso_frame_desc[j].length = packet_len;
 			if ((io->req->endpoint & USB_REQ_DIR_MASK) == USB_REQ_HOST_TO_DEV) {
-				memcpy(urb->buffer, isoc->pkts.packets[k].payload, packet_len);
+				memcpy(urb_buffer, isoc->pkts.packets[k].payload, packet_len);
 			}
 			urb_buffer += packet_len;
 		}
@@ -1449,8 +1451,11 @@ void handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb)
 		isoc = io->req->req.isoc;
 		isoc_results = isoc->isoc_results;
 		for (i = 0; i < urb->number_of_packets; i++) {
-			isoc_results[io->priv->isoc_packet_offset].status =
-					translate_errno(-urb->iso_frame_desc[i].status);
+			if (urb->iso_frame_desc[i].status) {
+				isoc_results[io->priv->isoc_packet_offset].status =
+					translate_errno(-urb->iso_frame_desc[i].status;
+			}
+
 			isoc_results[io->priv->isoc_packet_offset].transferred_bytes =
 					urb->iso_frame_desc[i].actual_length;
 			if ((io->req->endpoint & USB_REQ_DIR_MASK) == USB_REQ_DEV_TO_HOST) {
