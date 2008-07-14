@@ -176,7 +176,7 @@ void usbi_io_complete(struct usbi_io *io, int32_t status, size_t transferred_byt
 	pthread_mutex_unlock(&io->lock);
 
 	/* run the user supplied callback */
-	if(io->req->cb) {	io->req->cb(io->req);	}
+	if(io->flag == USBI_ASYNC && io->req->cb) {	io->req->cb(io->req);	}
 
 	/* run the internal callback, if it exists */
 	if(io->callback) { io->callback(io,status);	}
