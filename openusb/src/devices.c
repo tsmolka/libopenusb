@@ -855,10 +855,8 @@ int32_t openusb_get_raw_desc(openusb_handle_t handle,
 
 void openusb_free_raw_desc(uint8_t *buffer)
 {
-	if (buffer == NULL)
-		return;
-
 	free(buffer);
+	return;
 }
 
 int32_t openusb_parse_device_desc(openusb_handle_t handle,
@@ -866,7 +864,7 @@ int32_t openusb_parse_device_desc(openusb_handle_t handle,
 	usb_device_desc_t *devdesc)
 {
 	struct usbi_handle *hdl;
-	uint8_t *tmpbuf;
+	uint8_t *tmpbuf = NULL;
 	uint16_t tmplen;
 	int ret = OPENUSB_SUCCESS;
 	uint32_t count;
@@ -910,7 +908,7 @@ int32_t openusb_parse_config_desc(openusb_handle_t handle,
 	uint8_t cfgidx, usb_config_desc_t *cfgdesc)
 {
 	struct usbi_handle *hdl;
-	uint8_t *tmpbuf;
+	uint8_t *tmpbuf = NULL;
 	uint16_t tmplen;
 	int ret = OPENUSB_SUCCESS;
 	uint32_t count;
@@ -1228,15 +1226,15 @@ int usbi_get_string_simple(openusb_dev_handle_t dev, int index, char *buf,
 int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 	uint32_t flags, openusb_dev_data_t **data)
 {
-	openusb_dev_data_t *pdata;
-	struct usbi_handle *plib;
-	struct usbi_device *pdev;
+	openusb_dev_data_t *pdata = NULL;
+	struct usbi_handle *plib = NULL;
+	struct usbi_device *pdev = NULL;
 	uint16_t datalen;
-	uint8_t *descdata;
+	uint8_t *descdata = NULL;
 	int ret;
 	char strings[256];
 	openusb_dev_handle_t hdev;
-	struct usbi_dev_handle *devh, *dev_found=NULL;
+	struct usbi_dev_handle *devh = NULL, *dev_found=NULL;
 
 	usbi_debug(NULL, 4, "devid=%d, flags=%d",(int)devid, flags);
 
@@ -1435,6 +1433,7 @@ get_raw:
 	return 0;
 
 fail:
+	if (!dev_found) { openusb_close_device(hdev); }
 	free(pdata->product);
 	free(pdata->manufacturer);
 	free(pdata->serialnumber);
