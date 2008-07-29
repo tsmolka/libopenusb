@@ -100,51 +100,6 @@ int32_t device_open(struct usbi_device *idev)
 
 
 /*
- * linux_open
- *
- *   Prepare the device and make the default endpoint accessible
- */
-int32_t linux_open(struct usbi_dev_handle *hdev)
-{
-	int ret;
-
-	/* Validate... */
-	if (!hdev) {
-		return (OPENUSB_BADARG);
-	}
-
-	/* allocate memory for our private data */
-	hdev->priv = calloc(sizeof(struct usbi_dev_hdl_private), 1);
-	if (!hdev->priv) {
-		return (OPENUSB_NO_RESOURCES);
-	}
-
-	/* open the device */
-	hdev->priv->fd = device_open(hdev->idev);
-	if (hdev->priv->fd < 0) {
-		return (hdev->priv->fd);
-	}
-
-	/* setup the event pipe for this device */
-	pipe(hdev->priv->event_pipe);
-
-	/* Start up thread for polling io */
-	ret = pthread_create(&hdev->priv->io_thread, NULL, poll_io, (void*)hdev);
-	if (ret < 0) {
-		usbi_debug(NULL, 1, "unable to create io polling thread (ret = %d)", ret);
-		return (OPENUSB_NO_RESOURCES);
-	}
-
-	/* usbfs has set the configuration to 0, so make sure we note that */
-	hdev->idev->cur_config = 0;
-	hdev->config_value = 1;
-
-	return (OPENUSB_SUCCESS);
-}
-
-
-
-/*
  * linux_close
  *
  *  Close the device and return it to it's original state
@@ -155,6 +110,12 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	if (!hdev)
 		return (OPENUSB_BADARG);
 
+	/* If the device is closed or closing, don't close it again */
+	if ((hdev->state==USBI_DEVICE_CLOSING) || (hdev->state==USBI_DEVICE_CLOSED)) {
+		return (OPENUSB_SUCCESS);
+	}
+
+	/* Make sure we know we're closing */
 	pthread_mutex_lock(&hdev->lock);
 	hdev->state = USBI_DEVICE_CLOSING;
 	pthread_mutex_unlock(&hdev->lock);
@@ -189,6 +150,54 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
 	return (OPENUSB_SUCCESS);
 } 
+
+
+
+/*
+ * linux_open
+ *
+ *   Prepare the device and make the default endpoint accessible
+ */
+int32_t linux_open(struct usbi_dev_handle *hdev)
+{
+	int ret;
+
+	/* Validate... */
+	if (!hdev) {
+		return (OPENUSB_BADARG);
+	}
+
+	/* allocate memory for our private data */
+	hdev->priv = calloc(sizeof(struct usbi_dev_hdl_private), 1);
+	if (!hdev->priv) {
+		return (OPENUSB_NO_RESOURCES);
+	}
+
+	/* open the device */
+	hdev->priv->fd = device_open(hdev->idev);
+	if (hdev->priv->fd < 0) {
+		return (hdev->priv->fd);
+	}
+
+	/* setup the event pipe for this device */
+	pipe(hdev->priv->event_pipe);
+
+	/* Start up thread for polling io */
+	ret = pthread_create(&hdev->priv->io_thread, NULL, poll_io, (void*)hdev);
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "unable to create io polling thread (ret = %d)", ret);
+		linux_close(hdev);
+		return (OPENUSB_NO_RESOURCES);
+	}
+
+	hdev->idev->cur_config = 0;
+	hdev->config_value = 0;
+
+	/* link the handle and the usbi_device */
+	hdev->idev->priv->hdev = hdev;
+
+	return (OPENUSB_SUCCESS);
+}
 
 
 
@@ -657,6 +666,7 @@ int32_t linux_find_buses(struct list_head *buses)
  */
 void linux_free_device(struct usbi_device *idev)
 {
+
 	/* Free the udi and the private data structure */
 	if (idev->priv) {
 		if (idev->priv->udi) {
@@ -1578,12 +1588,14 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 		 * want to process any requests that aren't in progress */
 		if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
 				(io->status != USBI_IO_INPROGRESS) ) {
-				continue;
+			pthread_mutex_unlock(&io->lock);	
+			continue;
 		}
 
 		if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
 			discard_urbs(hdev, io, TIMEDOUT);
 		}
+
 	}
 
 	return (OPENUSB_SUCCESS);
@@ -1601,7 +1613,6 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
  */
 int32_t linux_io_cancel(struct usbi_io *io)
 {
-
 	io->status = USBI_IO_CANCEL;
 	
 	/* Discard/Cancel all the URBs for this io request */
@@ -2455,6 +2466,10 @@ void device_removed(LibHalContext *ctx, const char *udi)
 	
 	idev = find_device_by_udi(udi);
 	if (idev) {
+
+		/* Make sure the device gets closed (we don't care about the status) */
+		linux_close(idev->priv->hdev);
+
 		/* Clear the dev_by_num field */
 		idev->bus->priv->dev_by_num[idev->devid] = NULL;
 		

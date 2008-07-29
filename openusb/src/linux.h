@@ -212,6 +212,7 @@ struct usbi_dev_private
 	int     found;                    /* flag to denote if we saw this dev during rescan */
 	int			pdevnum;									/* the device number of this devices parent */
 	char		*udi;											/* HAL unique identifier */
+	struct usbi_dev_handle	*hdev;		/* Pointer to this devices handle (for closing on remove) */
 };
 
 
