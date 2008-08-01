@@ -195,7 +195,6 @@ int usbi_async_submit(struct usbi_io *io)
 	
 	pthread_mutex_lock(&io->lock);
 	type = io->req->type;
-	io->flag = USBI_ASYNC;
 	pthread_mutex_unlock(&io->lock);
   
 	dev = usbi_find_dev_handle(io->req->dev);
@@ -244,7 +243,6 @@ int usbi_sync_submit(struct usbi_io *io)
 
 	dev = io->dev;
 	type = io->req->type;
-	io->flag = USBI_SYNC;
 	switch (type) {
 		case USB_TYPE_CONTROL:
 			ret = dev->idev->ops->ctrl_xfer_wait(dev, io);
