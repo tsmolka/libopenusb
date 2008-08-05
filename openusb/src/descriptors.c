@@ -378,7 +378,7 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		if (extra_len != 0) {
 			usbi_debug(NULL, 4, "extra_len: %d", extra_len);
 
-			as->extra = malloc(extra_len);
+			as->extra = calloc(extra_len, 1);
 			if (!as->extra) {
 				/* free something */
 				usbi_debug(NULL, 4, "malloc fail");
@@ -569,7 +569,7 @@ int usbi_parse_configuration(struct usbi_config *cfg, unsigned char *buf,
 				" endpoint descriptors", numskipped);
 
 	if (extra_len) {
-		cfg->extra = malloc(extra_len);
+		cfg->extra = calloc(extra_len, 1);
 		if (cfg->extra == NULL) {
 			/* free something */
 
@@ -693,6 +693,12 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 	ret = usbi_get_descriptor(hdev->handle, USB_DESC_TYPE_DEVICE,
 		0, devbuf, USBI_DEVICE_DESC_SIZE);
 
+	if (ret < 0) {
+		usbi_debug(NULL, 2, "Fail to get device descriptors: %d", ret);
+
+		return (OPENUSB_PARSE_ERROR);
+	}
+
 	ret = openusb_parse_data("bbwbbbbwwwbbbb", (uint8_t *)devbuf,
 		USBI_DEVICE_DESC_SIZE, &dev->desc.device,
 		sizeof(dev->desc.device), &count);
@@ -709,7 +715,7 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 
 	if (dev->desc.num_configs > USBI_MAXCONFIG) {
 		usbi_debug(NULL, 1, "too many configurations (%d > %d)", 
-				dev->desc.num_configs, USBI_MAXCONFIG);
+			dev->desc.num_configs, USBI_MAXCONFIG);
 		goto err;
 	}
 
