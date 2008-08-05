@@ -233,7 +233,7 @@ static int load_backend(const char *filepath)
 		goto err;
 	}
 
-	backend = malloc(sizeof(*backend));
+	backend = calloc(sizeof(*backend), 1);
 	if (!backend) {
 		fprintf(stderr, "couldn't allocate memory for backend\n");
 		goto err;
@@ -867,7 +867,7 @@ int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
 	if (!idev)
 		return OPENUSB_UNKNOWN_DEVICE;
 
-	hdev = malloc(sizeof (*hdev));
+	hdev = calloc(sizeof (*hdev), 1);
 	if (!hdev)
 		return OPENUSB_NO_RESOURCES;
 
