@@ -191,7 +191,7 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 	}
 
 	hdev->idev->cur_config = 0;
-	hdev->config_value = 0;
+	hdev->config_value = 1;
 
 	/* link the handle and the usbi_device */
 	hdev->idev->priv->hdev = hdev;
@@ -519,10 +519,9 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 
 	/* Initialize thread support in GLib (if it's not already) */
 	if (!g_thread_supported()) g_thread_init(NULL);
-	
 	/* Start up thread for polling events */
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
-												(void*)NULL);
+		       	(void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
@@ -1914,13 +1913,13 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	/* The way USBFS works we always have to read the data in order, so start by
 	 * reading the device descriptor, no matter what descriptor we were asked for
 	 */
-	devdescr = malloc(USBI_DEVICE_DESC_SIZE);
+	devdescr = calloc(USBI_DEVICE_DESC_SIZE, 1);
 	if (!devdescr) {
 		usbi_debug(NULL, 1,
-							 "unable to allocate memory for cached device descriptor");
+			"unable to allocate memory for cached device descriptor");
 		sts = OPENUSB_NO_RESOURCES;
 		goto done;
-  }
+	}
 
 	/* read the device descriptor */
 	ret = read(fd, devdescr, USBI_DEVICE_DESC_SIZE);
@@ -1939,8 +1938,8 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	}
 
 	/* parse the device decriptor to get the number of configurations */
-	openusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen, &device,
-										 USBI_DEVICE_DESC_SIZE, &count);
+	openusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen,
+	       	&device, USBI_DEVICE_DESC_SIZE, &count);
 
 	/* now we'll allocated memory for all of our config descriptors */
 	configs_raw = malloc(device.bNumConfigurations * sizeof(configs_raw[0]));
@@ -2272,13 +2271,14 @@ struct usbi_device *find_device_by_udi(const char *udi)
 
 
 void process_new_device(LibHalContext *hal_ctx, const char *udi,
-												struct usbi_bus *ibus)
+	       	struct usbi_bus *ibus)
 {
-	char								*parent;
-	char								*bus;
-	DBusError						error;
+	char			*parent;
+	char			*bus;
+	DBusError		error;
 	struct usbi_device	*idev;
-	int 								busnum = 0, pdevnum = 0, devnum = 0, max_children = 0;
+	int 			busnum = 0, pdevnum = 0,
+			       	devnum = 0, max_children = 0;
 
 	/* Initialize the error structure */
 	dbus_error_init(&error);
