@@ -196,7 +196,16 @@ int32_t openusb_set_altsetting(openusb_dev_handle_t dev, uint8_t ifc,
 	}
 
 	pthread_mutex_lock(&hdev->lock);
-	pcfg=&idev->desc.configs[hdev->config_value - 1];
+
+
+	if (hdev->config_value < 1) {
+		usbi_debug(hdev->lib_hdl, 1, "config value = %d\n",
+			hdev->config_value);
+
+		return (OPENUSB_PARSE_ERROR);
+	} else {
+		pcfg=&idev->desc.configs[hdev->config_value - 1];
+	}
 
 	/* not valid interface, or not claimed, or not valid alt */
 	if (ifc > pcfg->num_interfaces || ifc > USBI_MAXINTERFACES
@@ -324,7 +333,7 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 	openusb_parse_data("bbw", (unsigned char *)buf, 8, &cfg_desc,
 			sizeof(cfg_desc), &count);
 
-	newbuf = malloc(cfg_desc.wTotalLength);
+	newbuf = calloc(cfg_desc.wTotalLength, 1);
 	if (!newbuf) {
 		usbi_debug(NULL, 1, "no memory");
 		return OPENUSB_NO_RESOURCES;
@@ -1128,7 +1137,7 @@ int32_t multi_req_callback(openusb_request_handle_t req)
 			isoc->pkts[idx].num_packets;
 	}
 
-	result = malloc(len);
+	result = calloc(len, 1);
 	if (!result) {
 		return OPENUSB_NO_RESOURCES;
 	}
@@ -1213,7 +1222,7 @@ loop:
 	for(i = 0; i< req_num; i++) {
 		usbi_debug(hdev->lib_hdl, 4, "submit request %d",i);
 
-		req = malloc(sizeof(struct openusb_request_handle));
+		req = calloc(sizeof(struct openusb_request_handle), 1);
 		if (!req) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
 			pthread_mutex_unlock(&mi_req->lock);
@@ -1223,7 +1232,7 @@ loop:
 		/* args is the additional argument of callback 
 		 * in openusb_request_handle_t
 		 */
-		args = malloc(sizeof(struct usbi_multi_req_args));
+		args = calloc(sizeof(struct usbi_multi_req_args), 1);
 		if (!args) {
 			usbi_debug(hdev->lib_hdl, 1, "No resources");
 			pthread_mutex_unlock(&mi_req->lock);
@@ -1257,7 +1266,7 @@ loop:
 			m_bulk = mh->req.bulk;
 
 			/* submit all the request buffers */
-			bulk = malloc(sizeof(*bulk));
+			bulk = calloc(sizeof(*bulk), 1);
 			if (!bulk) {
 				pthread_mutex_unlock(&mi_req->lock);
 				return OPENUSB_NO_RESOURCES;
@@ -1285,7 +1294,7 @@ loop:
 
 			m_intr = mh->req.intr;
 
-			intr = malloc(sizeof(*intr));
+			intr = calloc(sizeof(*intr), 1);
 			if (!intr) {
 				pthread_mutex_unlock(&mi_req->lock);
 				return OPENUSB_NO_RESOURCES;
@@ -1322,7 +1331,7 @@ loop:
 			m_isoc = mh->req.isoc;
 
 			/* submit all the request buffers */
-			isoc = malloc(sizeof(*isoc));
+			isoc = calloc(sizeof(*isoc), 1);
 			if (!isoc) {
 				free(req);
 				pthread_mutex_unlock(&mi_req->lock);
@@ -1408,13 +1417,13 @@ int32_t openusb_start(openusb_multi_request_handle_t handle)
 		return OPENUSB_BADARG;
 	}
 
-	mi_req = malloc(sizeof(struct usbi_multi_request));
+	mi_req = calloc(sizeof(struct usbi_multi_request), 1);
 	if (!mi_req) {
 		usbi_debug(hdev->lib_hdl, 1, "malloc fail");
 		return OPENUSB_NO_RESOURCES;
 	}
 
-	req = malloc(sizeof(struct openusb_request_handle));
+	req = calloc(sizeof(struct openusb_request_handle), 1);
 	if (!req) {
 		return OPENUSB_NO_RESOURCES;
 	}
