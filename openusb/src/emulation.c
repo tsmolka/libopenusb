@@ -335,7 +335,7 @@ int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 		ep01->bSynchAddress = ep10->desc.bSynchAddress;
 
 		if (ep10->extra) {
-			ep01->extra = malloc(ep10->extralen);
+			ep01->extra = calloc(ep10->extralen, 1);
 			if (!ep01->extra) {
 				return -1;
 			}
@@ -382,7 +382,7 @@ int wr_parse_interface(struct usb_interface * ifc01,
 		ifdesc->iInterface = alt->desc.iInterface;
 
 		if (alt->extra) {
-			ifdesc->extra = malloc(alt->extralen);
+			ifdesc->extra = calloc(alt->extralen, 1);
 			if (!ifdesc->extra) {
 				return -1;
 			}
@@ -476,7 +476,7 @@ static int wr_setup_dev_config(struct usb_device *dev, openusb_devid_t devid,
 		pcfg->MaxPower = picfg->bMaxPower;
 
 		if (config->extralen) {
-			pcfg->extra = malloc(config->extralen);
+			pcfg->extra = calloc(config->extralen, 1);
 			if (!pcfg->extra) {
 				return -1;
 			}

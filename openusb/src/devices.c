@@ -328,7 +328,7 @@ int32_t openusb_get_busid_list(openusb_handle_t handle, openusb_busid_t **busids
 		return OPENUSB_NULL_LIST;
 	}
 
-	*busids = malloc((*num_busids) * sizeof (openusb_busid_t));
+	*busids = calloc((*num_busids) * sizeof (openusb_busid_t), 1);
 	if (*busids == NULL) {
 		pthread_mutex_unlock(&usbi_buses.lock);
 		usbi_debug(hdl, 2, "No resource");
@@ -545,7 +545,7 @@ int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid
 			return OPENUSB_NULL_LIST;
 		}
 
-		*devids = malloc((devcnts) * sizeof (openusb_devid_t));
+		*devids = calloc((devcnts) * sizeof (openusb_devid_t), 1);
 		if (*devids == NULL) {
 			pthread_mutex_unlock(&usbi_devices.lock);
 			return OPENUSB_NO_RESOURCES;
@@ -586,7 +586,7 @@ int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid
 		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc(devcnts * sizeof (openusb_devid_t));
+	*devids = calloc(devcnts * sizeof (openusb_devid_t), 1);
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&ibus->devices.lock);
 		return OPENUSB_NO_RESOURCES;
@@ -673,7 +673,7 @@ int32_t openusb_get_devids_by_vendor(openusb_handle_t handle, int32_t vendor,
 		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc((*num_devids) * sizeof (openusb_devid_t));
+	*devids = calloc((*num_devids) * sizeof (openusb_devid_t), 1);
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&usbi_devices.lock);
 		return OPENUSB_NO_RESOURCES;
@@ -750,7 +750,7 @@ int32_t openusb_get_devids_by_class(openusb_handle_t handle, int16_t devclass,
 		return OPENUSB_NULL_LIST;
 	}
 
-	*devids = malloc((*num_devids) * sizeof (openusb_devid_t));
+	*devids = calloc((*num_devids) * sizeof (openusb_devid_t), 1);
 	if (*devids == NULL) {
 		pthread_mutex_unlock(&usbi_devices.lock);
 		return OPENUSB_NO_RESOURCES;
@@ -1341,7 +1341,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 			/* this should not be an error, perhaps we just don't have permission */
 			pdata->manufacturer = NULL;
 		} else {
-			if ((pdata->manufacturer = malloc(strings[0])) == NULL) {
+			if ((pdata->manufacturer = calloc(strings[0], 1)) == NULL) {
 				free(pdata);
 				if (!dev_found) { openusb_close_device(hdev); }
 				return OPENUSB_NO_RESOURCES;
@@ -1358,7 +1358,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 			/* this should not be an error, perhaps we just don't have permission */
 			pdata->product = NULL;
 		} else {
-			if ((pdata->product= malloc(strings[0])) == NULL) {
+			if ((pdata->product= calloc(strings[0], 1)) == NULL) {
 				free(pdata->manufacturer);
 				free(pdata);
 				if (!dev_found) { openusb_close_device(hdev); }
@@ -1375,7 +1375,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 			/* this should not be an error, perhaps we just don't have permission */
 			pdata->serialnumber = NULL;
 		} else {
-			if ((pdata->serialnumber = malloc(strings[0])) == NULL) {
+			if ((pdata->serialnumber = calloc(strings[0], 1)) == NULL) {
 				free(pdata->product);
 				free(pdata->manufacturer);
 				free(pdata);
@@ -1408,7 +1408,7 @@ get_raw:
 	}
 	usbi_debug(NULL, 4, "data len = %d",datalen);
 
-	pdata->raw_cfg_desc = malloc(datalen);
+	pdata->raw_cfg_desc = calloc(datalen, 1);
 	if (!pdata->raw_cfg_desc) {
 		openusb_free_raw_desc(descdata);
 		ret = OPENUSB_NO_RESOURCES;
