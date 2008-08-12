@@ -46,8 +46,11 @@ case $CC in
 *xlc | *xlc\ * | *lcc | *lcc\ *) am_opt=--include-deps;;
 esac
 
-libtoolize
-aclocal $ACLOCAL_FLAGS
+# libtoolize on Darwin systems is glibtoolize
+(glibtoolize --version) < /dev/null > /dev/null 2>&1 && LIBTOOLIZE=glibtoolize || LIBTOOLIZE=libtoolize
+
+$LIBTOOLIZE --force
+aclocal${AUTOMAKE_SUFFIX} $ACLOCAL_FLAGS
 
 # optionally feature autoheader
 (autoheader${AUTOCONF_SUFFIX} --version)  < /dev/null > /dev/null 2>&1 && autoheader${AUTOCONF_SUFFIX}
