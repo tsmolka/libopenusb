@@ -243,6 +243,7 @@ int usbi_sync_submit(struct usbi_io *io)
 
 	dev = io->dev;
 	type = io->req->type;
+
 	switch (type) {
 		case USB_TYPE_CONTROL:
 			ret = dev->idev->ops->ctrl_xfer_wait(dev, io);
@@ -345,7 +346,7 @@ int usbi_io_sync(struct usbi_dev_handle *dev, openusb_request_handle_t req)
 		struct simple_io *io;
 		struct usbi_io *iop;
 		uint32_t timeout;
-		
+
 		timeout = usbi_get_xfer_timeout(req, dev);
 		iop = usbi_alloc_io(dev, req, timeout);
 		io = calloc(sizeof(*io), 1);
@@ -369,10 +370,10 @@ int usbi_io_sync(struct usbi_dev_handle *dev, openusb_request_handle_t req)
 		free(io);
 		return ret;
 
-	} else if (io_pattern == PATTERN_SYNC) {
+	} else if (io_pattern == PATTERN_SYNC || io_pattern == PATTERN_BOTH) {
 		struct usbi_io *io;
 		uint32_t timeout;
-
+		
 		timeout = usbi_get_xfer_timeout(req, dev);
 
 		io = usbi_alloc_io(dev, req, timeout);
@@ -382,7 +383,6 @@ int usbi_io_sync(struct usbi_dev_handle *dev, openusb_request_handle_t req)
 
 		return ret;
 	} else {
-
 		return OPENUSB_PLATFORM_FAILURE;
 	}
 }
