@@ -24,14 +24,14 @@
 #include "linux.h"
 
 #define	LINUX_MAX_BULK_INTR_XFER	16384
-#define LINUX_MAX_ISOC_XFER		32768
+#define LINUX_MAX_ISOC_XFER				32768
 
 
 static pthread_t	event_thread;
 static char		device_dir[PATH_MAX + 1] = "";
 static GMainLoop	*event_loop;
 static int32_t		linux_backend_inited = 0;
-
+static pthread_mutex_t linuxdbus_lock;
 
 
 /*
@@ -110,11 +110,6 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	if (!hdev)
 		return (OPENUSB_BADARG);
 
-	/* If the device is closed or closing, don't close it again */
-	if ((hdev->state==USBI_DEVICE_CLOSING) || (hdev->state==USBI_DEVICE_CLOSED)) {
-		return (OPENUSB_SUCCESS);
-	}
-
 	/* Make sure we know we're closing */
 	pthread_mutex_lock(&hdev->lock);
 	hdev->state = USBI_DEVICE_CLOSING;
@@ -143,6 +138,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 		usbi_debug(hdev->lib_hdl, 2, "error closing device fd %d: %s",
 							 hdev->priv->fd, strerror(errno));
 	}
+	hdev->state = USBI_DEVICE_CLOSED;
 	pthread_mutex_unlock(&hdev->lock);
 
 	/* free our private data */
@@ -166,6 +162,9 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 	if (!hdev) {
 		return (OPENUSB_BADARG);
 	}
+
+	/* if the device is opened return a failure */
+	if (hdev->state == USBI_DEVICE_OPENED) { return (OPENUSB_BUSY); }
 
 	/* allocate memory for our private data */
 	hdev->priv = calloc(sizeof(struct usbi_dev_hdl_private), 1);
@@ -517,8 +516,13 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		usbi_debug(hdl, 1, "no USB device directory found");
 	}
 
+	/* Initialize the dbus mutex (which will prevent the hotplug thread from
+	 * running before we've done the first pass of refresh devices) */
+	pthread_mutex_init(&linuxdbus_lock, NULL);	
+
 	/* Initialize thread support in GLib (if it's not already) */
 	if (!g_thread_supported()) g_thread_init(NULL);
+	
 	/* Start up thread for polling events */
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
 		       	(void*)NULL);
@@ -553,6 +557,9 @@ void linux_fini(struct usbi_handle *hdl)
 		linux_backend_inited--;
 		return;
 	}
+
+	pthread_mutex_unlock(&linuxdbus_lock);
+	pthread_mutex_destroy(&linuxdbus_lock);
 
 	/* If we're here this is our last instance */
 	/* Stop the event (connect/disconnect) thread */
@@ -1585,10 +1592,9 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 
 		/* currently, isochronous io doesn't consider timeout issue and we don't
 		 * want to process any requests that aren't in progress */
-		if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
-				(io->status != USBI_IO_INPROGRESS) ) {
-			pthread_mutex_unlock(&io->lock);	
-			continue;
+		if(   (io->status != USBI_IO_INPROGRESS) 
+			 || (io->req->type == USB_TYPE_ISOCHRONOUS)) { 
+			break;
 		}
 
 		if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
@@ -1680,10 +1686,11 @@ void *poll_io(void *devhdl)
 		/* loop through the pending io requests and find our next soonest timeout */
 		list_for_each_entry(io, &hdev->io_head, list) {
 			/* skip the timeout calculation if it's an isochronous request, or if
-			 * the IO is not in progress (to avoid processing aborted requests) */
-			if( (io->req->type == USB_TYPE_ISOCHRONOUS) ||
-					(io->status != USBI_IO_INPROGRESS) ) {
-				continue;
+			 * the IO is not in progress (to avoid processing aborted requests), if we
+ 			 * hit one of these cases, then break */
+			if(   (io->status != USBI_IO_INPROGRESS) 
+				 || (io->req->type == USB_TYPE_ISOCHRONOUS)) {
+				break;
 			}
 			
 			if (   io->tvo.tv_sec
@@ -1884,7 +1891,6 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 {
 	uint8_t               *devdescr = NULL;
 	uint8_t               *cfgdescr = NULL;
-	struct usbi_raw_desc  *configs_raw = NULL;
 	size_t                devdescrlen;
 	uint32_t              count;
 	usb_device_desc_t     device;
@@ -1941,20 +1947,12 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 	openusb_parse_data("bbwbbbbwwwbbbb", devdescr, devdescrlen,
 	       	&device, USBI_DEVICE_DESC_SIZE, &count);
 
-	/* now we'll allocated memory for all of our config descriptors */
-	configs_raw = malloc(device.bNumConfigurations * sizeof(configs_raw[0]));
-	if (!configs_raw) {
-		usbi_debug(NULL, 1, "unable to allocate memory for cached descriptors");
-		sts = OPENUSB_NO_RESOURCES;
-		goto done;
-	}
-	memset(configs_raw, 0, device.bNumConfigurations * sizeof(configs_raw[0]));
-
+	/* Loop over the number of configurations looking for the one we want */
 	for (i = 0; i < device.bNumConfigurations; i++) {
 
 		uint8_t                 buf[8];
 		struct usb_config_desc  cfg_desc;
-		struct usbi_raw_desc    *cfgr = configs_raw + i;
+		struct usbi_raw_desc    cfgr;
 
 		/* Get the first 8 bytes so we can figure out what the total length is */
 		ret = read(fd, buf, 8);
@@ -1970,53 +1968,61 @@ int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
 		}
 
 		openusb_parse_data("bbw", buf, 8, &cfg_desc, sizeof(cfg_desc), &count);
-		cfgr->len = cfg_desc.wTotalLength;
+		cfgr.len = cfg_desc.wTotalLength;
 
-		cfgr->data = calloc(cfgr->len,1);
-		if (!cfgr->data) {
+		cfgr.data = calloc(cfgr.len,1);
+		if (!cfgr.data) {
 			usbi_debug(NULL, 1, "unable to allocate memory for descriptors");
 			sts = translate_errno(errno);
 			goto done;
 		}
 
 		/* Copy over the first 8 bytes we read */
-		memcpy(cfgr->data, buf, 8);
+		memcpy(cfgr.data, buf, 8);
 
-		ret = read(fd, cfgr->data + 8, cfgr->len - 8);
-		if (ret < cfgr->len - 8) {
+		ret = read(fd, cfgr.data + 8, cfgr.len - 8);
+		if (ret < cfgr.len - 8) {
 			if (ret < 0) {
 				usbi_debug(NULL, 1, "unable to get descriptor: %s", strerror(errno));
 			} else {
 				usbi_debug(NULL, 1, "config descriptor too short (expected %d, got %d)",
-									 cfgr->len, ret);
+									 cfgr.len, ret);
 			}
 
-			cfgr->len = 0;
-			free(cfgr->data);
+			cfgr.len = 0;
+			free(cfgr.data);
 			sts = translate_errno(errno);
 			goto done;
 		}
 
 		/* if this is the descriptor we want then we'll return it and be done */
 		if (i == descidx) {
-			*buflen = cfgr->len;
+			*buflen = cfgr.len;
 
 			/* allocate memory for the buffer to return */
-			cfgdescr = calloc(cfgr->len,1);
+			cfgdescr = calloc(cfgr.len,1);
 			if (!cfgdescr) {
 				usbi_debug(NULL, 1, "unable to allocate memory for the descriptor");
+				free(cfgr.data);
 				sts = OPENUSB_NO_RESOURCES;
 				goto done;
 			}
 
 			/* copy the data we read */
-			memcpy(cfgdescr, cfgr->data, cfgr->len);
+			memcpy(cfgdescr, cfgr.data, cfgr.len);
 			*buffer = cfgdescr;
+
+			/* break out of the loop, since we found what we're looking for */
+			free(cfgr.data);
+			goto done;
 		}
 
 		/* free the temporary memory */
-		free(cfgr->data);
+		free(cfgr.data);
 	}
+
+	/* requested index does not exist */
+	sts = OPENUSB_BADARG;
 
 done:
 
@@ -2026,7 +2032,6 @@ done:
 	{
 		if (devdescr) { free(devdescr); }
 	}
-	if (configs_raw) { free (configs_raw); }
  
 	return (sts);
 }
@@ -2130,16 +2135,20 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 {
 	int 								i;
 	int 								num_devices;
-	char 								**device_names;
-	struct usbi_device	*idev, *tidev;
+	char 								**device_names = NULL;
+	struct usbi_device	*idev = NULL, *tidev = NULL;
 	DBusError						error;
-	DBusConnection			*conn;
-	LibHalContext				*hal_ctx;
+	DBusConnection			*conn = NULL;
+	LibHalContext				*hal_ctx = NULL;
 
 	/* Validate... */
 	if (!ibus) {
 		return (OPENUSB_BADARG);
 	}
+
+	/* hold the lock so that the event thread will have to wait,
+	 * linux_refresh_devices will unlock it */
+	pthread_mutex_lock(&linuxdbus_lock);
 
 	/* Lock the bus */
 	pthread_mutex_lock(&ibus->lock);
@@ -2150,6 +2159,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 	/* Create & Initialize the HAL context */
 	if ((hal_ctx = libhal_ctx_new()) == NULL) {
 		usbi_debug(NULL, 1, "error: libhal_ctx_new");
+		pthread_mutex_unlock(&linuxdbus_lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -2159,6 +2169,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 							 error.message);
 		dbus_error_free(&error);
 		libhal_ctx_free (hal_ctx);
+		pthread_mutex_unlock(&linuxdbus_lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -2169,6 +2180,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		libhal_ctx_free (hal_ctx);
 		dbus_connection_close (conn);
 		dbus_connection_unref (conn);
+		pthread_mutex_unlock(&linuxdbus_lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -2185,6 +2197,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		libhal_ctx_free (hal_ctx);
 		dbus_connection_close (conn);
 		dbus_connection_unref (conn);
+		pthread_mutex_unlock(&linuxdbus_lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -2196,6 +2209,7 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 		libhal_ctx_free (hal_ctx);
 		dbus_connection_close (conn);
 		dbus_connection_unref (conn);
+		pthread_mutex_unlock(&linuxdbus_lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -2234,6 +2248,11 @@ int32_t linux_refresh_devices(struct usbi_bus *ibus)
 	/* Close the DBUS connection */
 	dbus_connection_close (conn);
 	dbus_connection_unref (conn);
+
+	/* Now that we've done with dbus/hal unlock the dbus lock so the event thread
+	 * can get to work */
+	usbi_debug(NULL, 4, "exiting linux_refresh_devices");
+	pthread_mutex_unlock(&linuxdbus_lock);
 
 	return (OPENUSB_SUCCESS);
 }
@@ -2448,7 +2467,9 @@ void device_added (LibHalContext *ctx, const char *udi)
 		}
 		pthread_mutex_unlock(&usbi_handles.lock);
 	} else {
+		pthread_mutex_lock(&linuxdbus_lock);
 		process_new_device(ctx, udi, NULL);
+		pthread_mutex_unlock(&linuxdbus_lock);
 	}
 }
 
@@ -2488,11 +2509,13 @@ void device_removed(LibHalContext *ctx, const char *udi)
  */
 void *hal_hotplug_event_thread(void *unused)
 {
-	LibHalContext		*hal_ctx;
-	DBusConnection	*conn;
+	LibHalContext		*hal_ctx = NULL;
+	DBusConnection	*conn = NULL;
 	DBusError				error;
-	GMainContext		*gmaincontext;
+	GMainContext		*gmaincontext = NULL;
 	
+	pthread_mutex_lock(&linuxdbus_lock);
+
 	usbi_debug(NULL, 4, "starting hotplug thread...");
 	
 	/* Create the gmaincontext and the event loop */
@@ -2551,12 +2574,18 @@ void *hal_hotplug_event_thread(void *unused)
 	libhal_ctx_set_device_added (hal_ctx, device_added);
 	libhal_ctx_set_device_removed (hal_ctx, device_removed);
 
+	/* unlock the dbus thread */
+	pthread_mutex_unlock(&linuxdbus_lock);
+
 	/* run the main loop */
 	if (event_loop != NULL) {
 		usbi_debug(NULL, 4, "hotplug thread running...");
 		g_main_loop_run (event_loop);
 		usbi_debug(NULL, 4, "hotplug thread exiting...");
 	}
+
+	/* hold the dbus lock */
+	pthread_mutex_lock(&linuxdbus_lock);
 
 	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE) {
 		dbus_error_free(&error);
@@ -2569,6 +2598,8 @@ void *hal_hotplug_event_thread(void *unused)
 	g_main_context_unref(gmaincontext);
 	g_main_context_release(gmaincontext);
 	
+	pthread_mutex_unlock(&linuxdbus_lock);
+
 	return (NULL);
 }
 
