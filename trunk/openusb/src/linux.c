@@ -2297,7 +2297,7 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi,
 	DBusError		error;
 	struct usbi_device	*idev;
 	int 			busnum = 0, pdevnum = 0,
-			       	devnum = 0, max_children = 0;
+						devnum = 0, max_children = 0;
 
 	/* Initialize the error structure */
 	dbus_error_init(&error);
@@ -2306,7 +2306,14 @@ void process_new_device(LibHalContext *hal_ctx, const char *udi,
 	bus = libhal_device_get_property_string(hal_ctx, udi, "info.bus", &error);
 	if (dbus_error_is_set(&error)) {
 		dbus_error_free(&error);
-		return;
+
+		/* we might have a newer version of hal and we might need to search 
+		 * info.subsystem */
+		bus = libhal_device_get_property_string(hal_ctx, udi, "info.subsystem", &error);
+		if (dbus_error_is_set(&error)) {
+			dbus_error_free(&error);
+			return;
+		}
 	}
 
 	/* if this is not a usb device, we're not interested */
