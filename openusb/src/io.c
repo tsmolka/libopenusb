@@ -197,7 +197,7 @@ int usbi_async_submit(struct usbi_io *io)
 	type = io->req->type;
 	pthread_mutex_unlock(&io->lock);
   
-	dev = usbi_find_dev_handle(io->req->dev);
+	dev = io->dev;
 	if (!dev)
 		return OPENUSB_UNKNOWN_DEVICE;
 

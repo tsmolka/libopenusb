@@ -156,7 +156,8 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
  */
 int32_t linux_open(struct usbi_dev_handle *hdev)
 {
-	int ret;
+	int			ret;
+	uint8_t cfg;
 
 	/* Validate... */
 	if (!hdev) {
@@ -189,9 +190,17 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 		return (OPENUSB_NO_RESOURCES);
 	}
 
-	hdev->idev->cur_config = 0;
-	hdev->config_value = 1;
+	/* get current device configuration value */
+	ret = linux_get_configuration(hdev, &cfg);
+	if (ret < 0) {
+		linux_close(hdev);
+		return ret;
+	}
+ 
+	hdev->idev->cur_config = cfg;
+	hdev->config_value = cfg;
 
+  usbi_debug(NULL, 4, "current device configuration value: %d", cfg);
 	/* link the handle and the usbi_device */
 	hdev->idev->priv->hdev = hdev;
 
@@ -221,8 +230,8 @@ int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 		return (translate_errno(errno));
 	}
 
-	hdev->idev->cur_config = cfg;
 	hdev->config_value = cfg;
+	hdev->idev->cur_config = cfg - 1;
 
 	return (OPENUSB_SUCCESS);
 }
@@ -237,12 +246,27 @@ int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
  */
 int32_t linux_get_configuration(struct usbi_dev_handle *hdev, uint8_t *cfg)
 {
+	int32_t ret = OPENUSB_SUCCESS;
+	uint8_t current_cfg;
+
 	if ((!hdev) || (!cfg))
 		return OPENUSB_BADARG;
+ 
+	/* Get current device configuration value via control request. */
+	ret = usbi_control_xfer(hdev, USB_REQ_DEV_TO_HOST
+					| USB_REQ_TYPE_STANDARD | USB_REQ_RECIP_DEVICE,
+					USB_REQ_GET_CONFIGURATION, 0, 0, (char*)&current_cfg, 1, 100);
+ 
+	if (ret < 0) {
+		usbi_debug(NULL, 1, "fail to get current configuration value: %s",
+							 openusb_strerror(ret));
+	} else {
+		*cfg = current_cfg;
+		hdev->idev->cur_config = current_cfg;
+		hdev->config_value = current_cfg;
+	}
 
-	*cfg = hdev->idev->cur_config;
-
-	return OPENUSB_SUCCESS;
+	return ret;
 }
 
 
@@ -1362,7 +1386,7 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 				case STALL:
 					usbi_debug(hdev->lib_hdl, 2, "A stall was reported after the io "
 										 "request has been reported as complete");
-					// We don't want to free the urbs in this case, so just return
+					/* We don't want to free the urbs in this case, so just return */
 					return;
 
 				case CANCELED:
@@ -1807,6 +1831,7 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
 					 ibus->sys_path, idev->devnum);
 	usbi_debug(NULL, 4, "usbfs path: %s", idev->sys_path);
 
+	idev->cur_config = 1;
 	idev->nports = max_children;
 	if (max_children) {
 		idev->children = malloc(idev->nports * sizeof(idev->children[0]));

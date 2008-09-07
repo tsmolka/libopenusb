@@ -408,5 +408,7 @@ struct usbi_list *usbi_get_devices_list(void);
 /* api.c */
 int32_t usbi_get_xfer_timeout(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev);
+int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
+		int request, int value, int index, char *bytes, int size, int timeout);
 
 #endif /* _WRAPPER_H_ */

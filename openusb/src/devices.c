@@ -1393,7 +1393,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 
 get_raw:
 	ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
-			pdev->cur_config, 0, &descdata, &datalen);
+					pdev->cur_config - 1, 0, &descdata, &datalen);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Get raw config(%d) desc fail",
 			pdev->cur_config);
@@ -1401,7 +1401,7 @@ get_raw:
 	}
 
 	ret = openusb_parse_config_desc(handle, devid, descdata, datalen,
-			pdev->cur_config, &pdata->cfg_desc);
+					pdev->cur_config - 1, &pdata->cfg_desc);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Parse config fail");
 		goto fail;

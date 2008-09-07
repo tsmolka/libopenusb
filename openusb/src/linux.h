@@ -197,6 +197,7 @@ void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
 void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 																	struct usbk_urb *urb);
 void handle_isoc_complete(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
+int32_t linux_get_configuration(struct usbi_dev_handle *hdev, uint8_t *cfg);
 
 
 /* Linux specific members for various internal structures */
