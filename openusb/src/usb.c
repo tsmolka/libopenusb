@@ -162,7 +162,10 @@ static void *process_event_callbacks(void *unused)
 
 			cb = list_entry(&(listh->prev), struct eventcallback,
 				list);
-
+			
+			/*Get the pointer to the next list element, then we can delete this one*/
+			listh = listh->next;
+			
 			list_del(&cb->list);
 
 			devid = cb->devid;
@@ -185,8 +188,6 @@ static void *process_event_callbacks(void *unused)
 			}
 
 			pthread_mutex_lock(&event_callbacks.lock);
-
-			listh = listh->next;
 
 			/* don't reference any element of cb after this */
 			free(cb);
