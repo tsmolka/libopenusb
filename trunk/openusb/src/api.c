@@ -95,11 +95,11 @@ int32_t openusb_claim_interface(openusb_dev_handle_t dev, uint8_t ifc,
 	if (usbi_fetch_and_parse_descriptors(hdev) != 0) {
 		return OPENUSB_BADARG;
 	}
-	
+
 	pthread_mutex_lock(&hdev->lock);
 	/* check if this is a valid interface */
 	if ((ifc>= USBI_MAXINTERFACES) ||
-	    (ifc >= hdev->idev->desc.configs[hdev->config_value-1].
+	    (ifc >= hdev->idev->desc.configs[hdev->idev->cur_config_index].
 	    		num_interfaces)) {
 
 		usbi_debug(hdev->lib_hdl, 1, "interface %d not valid",
@@ -198,13 +198,13 @@ int32_t openusb_set_altsetting(openusb_dev_handle_t dev, uint8_t ifc,
 	pthread_mutex_lock(&hdev->lock);
 
 
-	if (hdev->config_value < 1) {
+	if (idev->cur_config_index < 0) {
 		usbi_debug(hdev->lib_hdl, 1, "config value = %d\n",
-			hdev->config_value);
+			idev->cur_config_value);
 
 		return (OPENUSB_PARSE_ERROR);
 	} else {
-		pcfg=&idev->desc.configs[hdev->config_value - 1];
+		pcfg=&idev->desc.configs[idev->cur_config_index];
 	}
 
 	/* not valid interface, or not claimed, or not valid alt */

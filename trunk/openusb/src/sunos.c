@@ -1289,9 +1289,6 @@ solaris_open(struct usbi_dev_handle *hdev)
 		
 	}
 
-	hdev->config_value = 1;
-	hdev->priv->config_index = -1;
-
 	/* open default control ep and keep it open */
 	if (usb_open_ep0(hdev) != 0) {
 
@@ -1307,6 +1304,9 @@ solaris_open(struct usbi_dev_handle *hdev)
 		return OPENUSB_SYS_FUNC_FAILURE;
 	}
 
+	idev->cur_config_index = 0;
+	idev->cur_config_value = 1;
+
 	return (OPENUSB_SUCCESS);
 }
 
@@ -1316,7 +1316,7 @@ solaris_get_configuration(struct usbi_dev_handle *hdev, uint8_t *cfg)
 	if(!hdev) {
 		return (OPENUSB_NOT_SUPPORTED);
 	}
-	*cfg = hdev->config_value;
+	*cfg = hdev->idev->cur_config_value;
 
 	return OPENUSB_SUCCESS;
 }
@@ -1329,8 +1329,8 @@ solaris_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 		return (OPENUSB_NOT_SUPPORTED);
 	}
 
-	hdev->config_value = cfg;
-	hdev->priv->config_index = hdev->config_value - 1;
+	hdev->idev->cur_config_value = cfg;
+	hdev->idev->cur_config_index = usbi_get_cfg_index_by_value(hdev, cfg);
 
 	return OPENUSB_SUCCESS;
 }
@@ -1397,7 +1397,7 @@ solaris_claim_interface(struct usbi_dev_handle *hdev, uint8_t interface,
 	struct usbi_device *idev = hdev->idev;
 	int index;
 
-	index = hdev->config_value - 1;
+	index = hdev->idev->cur_config_index;
 
 	/* already claimed this interface */
 	if (idev->priv->info.claimed_interfaces[interface] == hdev) {
@@ -1744,8 +1744,7 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 
 	ep_index = usb_ep_index(ep_addr);
 	
-	if ((hdev->config_value == -1) || 
-		(hdev->claimed_ifs[ifc].clm == -1) ||
+	if ((hdev->claimed_ifs[ifc].clm == -1) ||
 		(hdev->claimed_ifs[ifc].altsetting == -1)) {
 
 		usbi_debug(hdev->lib_hdl, 1, "interface not claimed");
@@ -1780,9 +1779,9 @@ usb_check_device_and_status_open(struct usbi_dev_handle *hdev,uint8_t ifc,
 	}
 	
 	/* create filename */
-	if (hdev->priv->config_index > 0) {
+	if (hdev->idev->cur_config_index > 0) {
 		(void) snprintf(cfg_num, sizeof (cfg_num), "cfg%d",
-		    hdev->config_value);
+		    hdev->idev->cur_config_value);
 	} else {
 		(void) memset(cfg_num, 0, sizeof (cfg_num));
 	}
@@ -2403,7 +2402,7 @@ solaris_set_altinterface(struct usbi_dev_handle *hdev, uint8_t ifc, uint8_t alt)
 
 	usb_close_all_eps(hdev);
 	iface = ifc;
-	index = hdev->config_value - 1;
+	index = hdev->idev->cur_config_index;
 
 	/* set alt interface is implicitly done when endpoint is opened */
 	hdev->claimed_ifs[ifc].altsetting = alt;

@@ -733,8 +733,7 @@ int32_t darwin_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg) {
     return darwin_to_openusb(kresult);
   }
 
-  hdev->idev->cur_config = cfg;
-  hdev->config_value = cfg;
+  hdev->idev->cur_config_value = cfg;
 
   /* Reclaim interfaces. */
   for (i = 0 ; i < USBI_MAXINTERFACES ; i++) {
@@ -847,7 +846,7 @@ int32_t darwin_claim_interface (struct usbi_dev_handle *hdev, uint8_t ifc, openu
   }
 
   /* make sure we have an interface */
-  if (!usbInterface && hdev->priv->open && hdev->config_value == 0) {
+  if (!usbInterface && hdev->priv->open && hdev->idev->cur_config_value == 0) {
     u_int8_t nConfig;			     /* Index of configuration to use */
     IOUSBConfigurationDescriptorPtr configDesc; /* to describe which configuration to select */
     /* Only a composite class device with no vendor-specific driver will
