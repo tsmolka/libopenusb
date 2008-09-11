@@ -851,6 +851,7 @@ int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
 	struct usbi_handle *hdl; /* lib internal handle */
 	struct usbi_device *idev;
 	struct usbi_dev_handle *hdev;
+	uint8_t cfg;
 	int ret;
 	int i;
 	
@@ -922,6 +923,12 @@ int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
 
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
+	/* get current device configuration value */
+	ret = openusb_get_configuration(*dev, &cfg);
+	if (ret != OPENUSB_SUCCESS) {
+		openusb_close_device(*dev);
+		return ret;
+	}
 
 	return OPENUSB_SUCCESS;
 }

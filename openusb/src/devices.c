@@ -1393,15 +1393,15 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 
 get_raw:
 	ret = openusb_get_raw_desc(handle, devid, USB_DESC_TYPE_CONFIG,
-					pdev->cur_config - 1, 0, &descdata, &datalen);
+			pdev->cur_config_index, 0, &descdata, &datalen);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Get raw config(%d) desc fail",
-			pdev->cur_config);
+			pdev->cur_config_value);
 		goto fail;
 	}
 
 	ret = openusb_parse_config_desc(handle, devid, descdata, datalen,
-					pdev->cur_config - 1, &pdata->cfg_desc);
+			pdev->cur_config_value, &pdata->cfg_desc);
 	if (ret != 0) {
 		usbi_debug(NULL, 1, "Parse config fail");
 		goto fail;
@@ -1503,4 +1503,39 @@ int32_t openusb_get_max_xfer_size(openusb_handle_t handle,
 struct usbi_list *usbi_get_devices_list(void)
 {
 	return (&usbi_devices);
+}
+
+/* search for the configuration value of a specified configuration index */
+uint8_t usbi_get_cfg_value_by_index(struct usbi_dev_handle *hdev, int cfgndx)
+{
+	uint8_t cfgval = 0;
+
+	if (hdev != NULL && cfgndx >= 0
+		&& usbi_fetch_and_parse_descriptors(hdev) == 0
+		&& hdev->idev->desc.num_configs > cfgndx) {
+
+		cfgval = hdev->idev->desc.configs[cfgndx].desc.bConfigurationValue;
+	}
+
+	return cfgval;
+}
+
+/* search for the descriptor index of a specified configuration value */
+int usbi_get_cfg_index_by_value(struct usbi_dev_handle *hdev, uint8_t cfgval)
+{
+	int cfgndx = -1;
+	int i;
+
+	if (hdev != NULL && usbi_fetch_and_parse_descriptors(hdev) == 0) {
+		for (i = 0; i < hdev->idev->desc.num_configs; i++) {
+			if (hdev->idev->desc.configs[i].desc.bConfigurationValue
+				== cfgval) {
+
+				cfgndx = i;
+				break;
+			}
+		}
+	}
+
+	return cfgndx;
 }

@@ -77,7 +77,6 @@ struct ep {
 #define ISOC_IN_INITED	0x01
 
 struct usbi_dev_hdl_private{
-	int config_index; /*index of the current config in desc->configs[] */
 	struct ep eps[USBI_MAXENDPOINTS]; /* opened endpoints */
 
 	/* Now, used by isoc IN endpoints to flag if request has been set */

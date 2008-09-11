@@ -67,7 +67,10 @@ struct usbi_device {
 	char			bus_path[OPENUSB_BUS_PATH_MAX];
 	struct usbi_device	**children;
 	struct usbi_device_ops	*ops;
-	uint8_t			cur_config;
+
+	uint8_t			cur_config_value;/* bConfigurationValue */
+	int			cur_config_index;/* the descriptor index of current configuration */
+
 	struct usbi_dev_private	*priv;	/* backend specific data */
 	
 	int found; /* used by some backend for search */
@@ -140,8 +143,6 @@ struct usbi_dev_handle {
 	int event_pipe[2]; /* event pipe */
 
 	enum usbi_devstate state; /* device current state */
-
-	int config_value; /* current configuration value */
 
 	struct usbi_dev_hdl_private *priv; /* backend specific data */
 };
@@ -404,11 +405,13 @@ int usbi_get_string(openusb_dev_handle_t dev, int index, int langid, char *buf,
 int usbi_get_string_simple(openusb_dev_handle_t dev, int index, char *buf,
     size_t buflen);
 struct usbi_list *usbi_get_devices_list(void);
+uint8_t usbi_get_cfg_value_by_index(struct usbi_dev_handle *hdev, int cfgndx);
+int usbi_get_cfg_index_by_value(struct usbi_dev_handle *hdev, uint8_t cfgval);
 
 /* api.c */
 int32_t usbi_get_xfer_timeout(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev);
 int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
-		int request, int value, int index, char *bytes, int size, int timeout);
+	int request, int value, int index, char *bytes, int size, int timeout);
 
 #endif /* _WRAPPER_H_ */
