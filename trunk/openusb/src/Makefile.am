@@ -10,7 +10,7 @@ configincludedir = $(pkglibdir)/include
 
 EXTRA_DIST = linux.c linux.h bsd.c darwin.c sunos.c sunos.h
 
-libopenusb_la_CFLAGS =
+libopenusb_la_CFLAGS = $(LIBUSB_CFLAGS)
 
 lib_LTLIBRARIES = libopenusb.la
 
@@ -37,7 +37,7 @@ if DARWIN_API
 usblib_LTLIBRARIES = darwin.la
 
 darwin_la_SOURCES = darwin.c
-darwin_la_CFLAGS = -traditional-cpp
+darwin_la_CFLAGS = 
 darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
 darwin_la_LDFLAGS = -avoid-version -module
 endif
