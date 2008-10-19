@@ -15,6 +15,7 @@
 #include "list.h"
 #include "descr.h"
 
+#include <pthread.h>
 
 struct usbi_list {
 	struct list_head head;
@@ -328,6 +329,13 @@ struct usbi_backend_ops {
 };
 
 
+/* defined in usb.c */
+extern struct usbi_list usbi_handles; /* protected by usbi_handles.lock */
+extern struct usbi_list usbi_dev_handles; /* protected by usbi_dev_handles.lock*/
+
+extern struct usbi_list usbi_buses; /* protected by usbi_buses.lock */
+extern struct usbi_list usbi_devices; /* protected by usbi_device.lock */
+
 
 /*the following from old usbi.h */
 #define USBI_CONTROL_SETUP_LEN (1 + 1 + 2 + 2 + 2)
@@ -335,13 +343,6 @@ struct usbi_backend_ops {
 #define USB_DEV_REQ_HOST_TO_DEV         0x00
 #define USB_DEV_REQ_DEV_TO_HOST         0x80
 #define USB_DEV_REQ_DIR_MASK            0x80
-
-struct usbi_list usbi_handles; /* protected by usbi_handles.lock */
-struct usbi_list usbi_dev_handles; /* protected by usbi_dev_handles.lock*/
-
-struct usbi_list usbi_buses; /* protected by usbi_buses.lock */
-struct usbi_list usbi_devices; /* protected by usbi_device.lock */
-
 
 /* prototypes */
 
@@ -359,14 +360,14 @@ void usbi_add_event_callback(struct usbi_handle *hdl, openusb_devid_t devid,
         openusb_event_t type);
 
 #define usbi_debug(hdl, level, fmt...) \
-	_usbi_debug(hdl, level, __FUNCTION__, __LINE__, fmt)
+       _usbi_debug(hdl, level, __FUNCTION__, __LINE__, fmt)
 
 struct usbi_handle *usbi_find_handle(openusb_handle_t handle);
 
 openusb_request_handle_t usbi_alloc_request_handle(void);
 void *timeout_thread(void *arg);
 int32_t usbi_get_driver_np(openusb_dev_handle_t dev, uint8_t interface,
-													 char *name, uint32_t namelen);
+			   char *name, uint32_t namelen);
 int32_t usbi_attach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface);
 int32_t usbi_detach_kernel_driver_np(openusb_dev_handle_t dev, uint8_t interface);
 
