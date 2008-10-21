@@ -23,6 +23,12 @@
 
 #define	USB_MAX_DEBUG_LEVEL	5
 
+struct usbi_list usbi_handles; /* protected by usbi_handles.lock */
+struct usbi_list usbi_dev_handles; /* protected by usbi_dev_handles.lock*/
+
+struct usbi_list usbi_buses; /* protected by usbi_buses.lock */
+struct usbi_list usbi_devices; /* protected by usbi_device.lock */
+
 /*
  * env variables:
  *	OPENUSB_BACKEND_PATH - file path of backends
