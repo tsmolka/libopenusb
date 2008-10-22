@@ -117,7 +117,7 @@ void print_configuration(openusb_devid_t devid, int cfgidx,
 void print_device(openusb_devid_t devid, int indent)
 {
 	struct usb_device_desc dev;
-	char *buf=NULL;
+	unsigned char *buf=NULL;
 	uint16_t buflen = 0;
 	int i, ret;
 
@@ -330,8 +330,8 @@ int test_ctrl_sync(openusb_dev_handle_t devh)
  */
 int test_bulk_sync(openusb_handle_t devh)
 {
-	char bulkdata[BULK_DATA_LEN];
-	char bulkrd[BULK_DATA_LEN];
+	unsigned char bulkdata[BULK_DATA_LEN];
+	unsigned char bulkrd[BULK_DATA_LEN];
 	openusb_bulk_request_t bulk;
 	int i,ret;
 
@@ -405,8 +405,8 @@ int test_bulk_sync(openusb_handle_t devh)
  */
 int test_intr_sync(openusb_handle_t devh, int flag)
 {
-	char bulkdata[BULK_DATA_LEN];
-	char bulkrd[BULK_DATA_LEN];
+	unsigned char bulkdata[BULK_DATA_LEN];
+	unsigned char bulkrd[BULK_DATA_LEN];
 	openusb_intr_request_t intr;
 	int i,ret;
 
@@ -482,8 +482,8 @@ int test_intr_sync(openusb_handle_t devh, int flag)
  */
 int test_isoc_sync(openusb_handle_t devh)
 {
-	char bulkdata[ISOC_PKT_NUM*ISOC_PKT_LEN];
-	char bulkrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
+	unsigned char bulkdata[ISOC_PKT_NUM*ISOC_PKT_LEN];
+	unsigned char bulkrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
 	openusb_isoc_request_t isoc;
 	int i,ret;
 
@@ -558,8 +558,8 @@ int test_isoc_sync(openusb_handle_t devh)
 
 int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 {
-	char bulkdata[BULK_DATA_LEN];
-	char bulkrd[BULK_DATA_LEN];
+	unsigned char bulkdata[BULK_DATA_LEN];
+	unsigned char bulkrd[BULK_DATA_LEN];
 	openusb_ctrl_request_t ctrl;
 	int i,ret;
 	openusb_request_handle_t req;
@@ -677,9 +677,9 @@ int async_xfer_ctrl_test(openusb_dev_handle_t devh)
  */
 int async_xfer_test(openusb_handle_t devh, openusb_transfer_type_t type, int flag)
 {
-	char bulkdata[BULK_DATA_LEN];
-	char bulkrd[BULK_DATA_LEN];
-	char isocrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
+	unsigned char bulkdata[BULK_DATA_LEN];
+	unsigned char bulkrd[BULK_DATA_LEN];
+	unsigned char isocrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
 
 	openusb_bulk_request_t bulk;
 	openusb_intr_request_t intr;
@@ -949,7 +949,7 @@ int async_xfer_test(openusb_handle_t devh, openusb_transfer_type_t type, int fla
 			int j;
 
 			for(i=0;i<ISOC_PKT_NUM;i++) {
-				char *p;
+				unsigned char *p;
 				unsigned char status;
 				unsigned int bytes;
 
