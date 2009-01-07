@@ -183,7 +183,7 @@ static void darwin_devices_detached (void *ptr, io_iterator_t rem_devices) {
   CFTypeRef locationCF;
 
   while ((device = IOIteratorNext (rem_devices)) != 0) {
-    /* get the location from the registry */
+    /* get the location from the i/o registry */
     locationCF = IORegistryEntryCreateCFProperty (device, CFSTR(kUSBDevicePropertyLocationID), kCFAllocatorDefault, 0);
 
     CFNumberGetValue(locationCF, kCFNumberLongType, &location);
@@ -313,9 +313,8 @@ void darwin_fini(struct usbi_handle *hdl) {
   void *ret;
 	
   /* Make the master port NULL so we know we're closed */
-  if (openusb_darwin_mp) {
+  if (openusb_darwin_mp)
     mach_port_deallocate(mach_task_self(), openusb_darwin_mp);
-  }
 
   openusb_darwin_mp = 0;
 	
@@ -404,7 +403,7 @@ static int32_t process_new_device (struct usbi_bus *ibus, usb_device_t **device,
   UInt8                 bDeviceClass, bDeviceSubClass;
   struct usbi_device   *idev;
 
-  (*(device))->GetDeviceAddress(device, (USBDeviceAddress *)&address);
+  (*(device))->GetDeviceAddress (device, (USBDeviceAddress *)&address);
   (*(device))->GetDeviceClass (device, &bDeviceClass);
   (*(device))->GetDeviceSubClass (device, &bDeviceSubClass);
   (*(device))->GetDeviceProduct (device, &idProduct);
@@ -446,7 +445,7 @@ static int32_t process_new_device (struct usbi_bus *ibus, usb_device_t **device,
  *  The device nodes that have been detached from the system would be removed 
  *  from the list.
  */
-int32_t darwin_refresh_devices(struct usbi_bus *ibus)  {
+int32_t darwin_refresh_devices (struct usbi_bus *ibus)  {
   io_iterator_t        deviceIterator;
   usb_device_t         **device;
   kern_return_t        kresult;
@@ -483,28 +482,25 @@ int32_t darwin_refresh_devices(struct usbi_bus *ibus)  {
       (*(device))->GetDeviceProduct (device, &idProduct);
 
       kresult = (*(device))->DeviceRequest(device, &req);
-      if (kresult) {
+      if (kresult == kIOReturnSuccess) {
+	openusb_parse_data ("bbwbbbbwwwbbbb", req.pData, USBI_DEVICE_DESC_SIZE, &desc,
+			    sizeof (usb_device_desc_t), &count);
+
+	/*
+	  Catch buggy hubs (which appear to be virtual). Apple's own USB prober has problems
+	  with these devices.
+	*/
+	if (desc.idProduct != idProduct) {
+	  /* not an error, just skip it */
+	  kresult = 0;
+	  usbi_debug (NULL, 2,
+		      "libopenusb/darwin.c darwin_refresh_devices: idProduct from iokit does not"
+		      " match idProduct in descriptor. Skipping device");
+	} else
+	  kresult = process_new_device (ibus, device, location);
+      } else
 	usbi_debug (NULL, 1, "libopenusb/darwin.c darwin_refresh_devices(DeviceRequest): %s",
 		    darwin_error_str (kresult));
-
-	(*(device))->Release(device);
-      }
-
-      openusb_parse_data ("bbwbbbbwwwbbbb", req.pData, USBI_DEVICE_DESC_SIZE, &desc,
-			  sizeof (usb_device_desc_t), &count);
-
-      /*
-	Catch buggy hubs (which appear to be virtual). Apple's own USB prober has problems
-	with these devices.
-      */
-      if (desc.idProduct != idProduct) {
-	/* mot an error, just skip it */
-	kresult = 0;
-	usbi_debug (NULL, 2,
-		    "libopenusb/darwin.c darwin_refresh_devices: idProduct from iokit does not"
-		    " match idProduct in descriptor. Skipping device");
-      } else
-	kresult = process_new_device (ibus, device, location);
     }
 
     (*(device))->Release(device);
@@ -558,7 +554,7 @@ static kern_return_t darwin_get_device (uint32_t dev_location, usb_device_t ***d
     (**darwin_device)->Release(*darwin_device);
   }
 
-  IOObjectRelease(deviceIterator);
+  IOObjectRelease (deviceIterator);
 
   if (!(*darwin_device))
     return kIOReturnNoDevice;
@@ -592,6 +588,7 @@ int32_t darwin_open (struct usbi_dev_handle *hdev) {
   if (kresult) {
     usbi_debug (hdev->lib_hdl, 1, "libopenusb/darwin.c darwin_open: could not find device: %s",
 		darwin_error_str (kresult));
+
     return darwin_to_openusb (kresult);
   }
 
@@ -616,7 +613,7 @@ int32_t darwin_open (struct usbi_dev_handle *hdev) {
       (*(hdev->priv->device))->Release (hdev->priv->device);
       free (hdev->priv);
       hdev->priv = NULL;
-      usbi_debug(hdev->lib_hdl, 1,
+      usbi_debug (hdev->lib_hdl, 1,
 		 "libopenusb/darwin.c darwin_open(USBDeviceOpen): %s",
 		 darwin_error_str(kresult));
       return darwin_to_openusb (kresult);
@@ -676,9 +673,9 @@ int32_t darwin_close(struct usbi_dev_handle *hdev) {
     if (kresult) {
       /* Log the fact that we had a problem closing the file, however failing a
        * close isn't really an error, so return success anyway */
-      usbi_debug(hdev->lib_hdl, 2,
-		 "libopenusb/darwin.c darwin_close(USBDeviceClose) (location: %d): %s",
-		 hdev->idev->priv->location, darwin_error_str(kresult));
+      usbi_debug (hdev->lib_hdl, 2,
+		  "libopenusb/darwin.c darwin_close(USBDeviceClose) (location: %d): %s",
+		  hdev->idev->priv->location, darwin_error_str(kresult));
     }
   }
 	
@@ -686,14 +683,14 @@ int32_t darwin_close(struct usbi_dev_handle *hdev) {
   if (kresult) {
     /* Log the fact that we had a problem closing the file, however failing a
      * close isn't really an error, so return success anyway */
-    usbi_debug(hdev->lib_hdl, 2,
-	       "libopenusb/darwin.c darwin_close(Release) (location: %d): %s",
-	       hdev->idev->priv->location, darwin_error_str(kresult));
+    usbi_debug (hdev->lib_hdl, 2,
+		"libopenusb/darwin.c darwin_close(Release) (location: %d): %s",
+		hdev->idev->priv->location, darwin_error_str(kresult));
   }
   pthread_mutex_unlock(&hdev->lock);
 
   /* free our private data */
-  free(hdev->priv);
+  free (hdev->priv);
 
   return OPENUSB_SUCCESS;
 } 
@@ -1082,6 +1079,60 @@ static void darwin_io_callback (void *refcon, kern_return_t result, void *io_siz
     free (io->priv);
 }
 
+static void darwin_isoc_callback (void *refcon, kern_return_t result, void *io_size) {
+  struct usbi_io *io = (struct usbi_io *)refcon;
+  openusb_isoc_request_t *isoc;
+  int32_t status;
+
+  /* Just for convienience */
+  isoc = io->req->req.isoc;
+
+  usbi_debug(io->dev->lib_hdl, 4, "libopenusb/darwin.c darwin_isoc_callback: isoc async operation"
+	     " completed: %s, size=%lu, result=0x%08x", darwin_error_str(result),
+	     (uint32_t)io_size, result);
+
+  switch (result) {
+  case kIOReturnSuccess:
+    status = OPENUSB_SUCCESS;
+    io->status = USBI_IO_COMPLETED;
+    break;
+  case kIOReturnAborted:
+    status = OPENUSB_IO_CANCELED;
+    io->status = USBI_IO_CANCEL;
+    break;
+  case kIOReturnTimeout:
+    status = OPENUSB_IO_TIMEOUT;
+    io->status = USBI_IO_TIMEOUT;
+    break;
+  default:
+    status = OPENUSB_SYS_FUNC_FAILURE;
+    io->status = USBI_IO_COMPLETED_FAIL;
+  }
+
+  if (status == OPENUSB_SUCCESS && io->priv->is_read && io->priv->isoc_buffer) {
+    int i;
+    uint8_t *bufferpos;
+
+    bufferpos = io->priv->isoc_buffer;
+
+    /* copy read data back into openusb isoc frames */
+    for (i = 0 ; i < isoc->pkts.num_packets ; i++) {
+      memmove (isoc->pkts.packets[i].payload, bufferpos, isoc->pkts.packets[i].length);
+      bufferpos += isoc->pkts.packets[i].length;
+    }
+  }
+	
+  usbi_io_complete (io, status, (int32_t)io_size);
+  if (io->priv) {
+    if (io->priv->isoc_buffer)
+      free (io->priv->isoc_buffer);
+    if (io->priv->isoc_framelist)
+      free (io->priv->isoc_framelist);
+    free (io->priv);
+    io->priv = NULL;
+  }
+}
+
 /*
  * ep_to_pipeRef
  *
@@ -1277,13 +1328,13 @@ int32_t darwin_submit_ctrl (struct usbi_dev_handle *hdev, struct usbi_io *io, in
   }
 
   /* unlock the device & io request */
-  pthread_mutex_unlock(&io->lock);
-  pthread_mutex_unlock(&hdev->lock);
+  pthread_mutex_unlock (&io->lock);
+  pthread_mutex_unlock (&hdev->lock);
 
   if (ret) {
-    usbi_debug(hdev->lib_hdl, 1,
-	       "libopenusb/darwin.c darwin_submit_ctrl: Failed to submit control request: %s",
-	       darwin_error_str(ret));
+    usbi_debug (hdev->lib_hdl, 1,
+		"libopenusb/darwin.c darwin_submit_ctrl: Failed to submit control request: %s",
+		darwin_error_str(ret));
 
     if (io->priv)
       free (io->priv);
@@ -1306,7 +1357,7 @@ int32_t darwin_submit_ctrl (struct usbi_dev_handle *hdev, struct usbi_io *io, in
  */
 int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *io, int32_t pattern) {
   IOReturn               ret;
-  uint8_t                read; /* 0 = we're reading, 1 = we're writing */
+  uint8_t                is_read; /* 0 = we're reading, 1 = we're writing */
   uint8_t                *payload;
   uint32_t               length;
   uint8_t                transferType;
@@ -1330,7 +1381,7 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
   }		
 
   /* are we reading or writing? */
-  read = io->req->endpoint & USB_REQ_DEV_TO_HOST;
+  is_read = io->req->endpoint & USB_REQ_DEV_TO_HOST;
 	
   /* lock the device */
   pthread_mutex_lock(&hdev->lock);
@@ -1338,8 +1389,8 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
   ep_to_pipeRef (hdev, io->req->endpoint, &pipeRef, &ifc);
 
   (*(hdev->priv->interfaces[ifc].interface))->GetPipeProperties (hdev->priv->interfaces[ifc].interface,
-								  pipeRef, &direction, &number,
-								  &transferType, &maxPacketSize, &interval);
+								 pipeRef, &direction, &number,
+								 &transferType, &maxPacketSize, &interval);
 	
 #if !defined (LIBUSB_NO_TIMEOUT_DEVICE)
   /* timeouts are unavailable on interrupt endpoints */
@@ -1350,23 +1401,23 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
       if (pattern == PATTERN_ASYNC) {
 	/* submit the request asynchronously */
 
-	if (read) {
-	  ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipeAsync(hdev->priv->interfaces[ifc].interface,
-								pipeRef, payload, length,
-								darwin_io_callback, io);
+	if (is_read) {
+	  ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipeAsync (hdev->priv->interfaces[ifc].interface,
+									   pipeRef, payload, length,
+									   darwin_io_callback, io);
 	} else {
-	  ret = (*(hdev->priv->interfaces[ifc].interface))->WritePipeAsync(hdev->priv->interfaces[ifc].interface,
-								 pipeRef, payload, length,
-								 darwin_io_callback, io);
+	  ret = (*(hdev->priv->interfaces[ifc].interface))->WritePipeAsync (hdev->priv->interfaces[ifc].interface,
+									    pipeRef, payload, length,
+									    darwin_io_callback, io);
 	}
       } else {
 	/* submit the request synchronously */
-	if (read) {
-	  ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipe(hdev->priv->interfaces[ifc].interface,
-							   pipeRef, payload, (UInt32 *)&length);
+	if (is_read) {
+	  ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipe (hdev->priv->interfaces[ifc].interface,
+								      pipeRef, payload, (UInt32 *)&length);
 	} else {
-	  ret = (*(hdev->priv->interfaces[ifc].interface))->WritePipe(hdev->priv->interfaces[ifc].interface,
-							    pipeRef, payload, length);
+	  ret = (*(hdev->priv->interfaces[ifc].interface))->WritePipe (hdev->priv->interfaces[ifc].interface,
+								       pipeRef, payload, length);
 	}
       }
     }
@@ -1376,7 +1427,7 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
     if (pattern == PATTERN_ASYNC) {
       /* submit the request asynchronously */
 
-      if (read) {
+      if (is_read) {
 	ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipeAsyncTO(hdev->priv->interfaces[ifc].interface,
 								pipeRef, payload, length,
 								io->timeout, io->timeout,
@@ -1389,14 +1440,14 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
       }
     } else {
       /* submit the request synchronously */
-      if (read) {
+      if (is_read) {
 	ret = (*(hdev->priv->interfaces[ifc].interface))->ReadPipeTO(hdev->priv->interfaces[ifc].interface,
-							   pipeRef, payload, (UInt32 *)&length,
-							   io->timeout, io->timeout);
+								     pipeRef, payload, (UInt32 *)&length,
+								     io->timeout, io->timeout);
       } else {
 	ret = (*(hdev->priv->interfaces[ifc].interface))->WritePipeTO(hdev->priv->interfaces[ifc].interface,
-							    pipeRef, payload, length,
-							    io->timeout, io->timeout);
+								      pipeRef, payload, length,
+								      io->timeout, io->timeout);
       }
 			
       /* if the request timed out we need to resynchronize the data */
@@ -1411,9 +1462,9 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
   pthread_mutex_unlock(&hdev->lock);
 
   if (ret) {
-    usbi_debug(hdev->lib_hdl, 1,
-	       "libopenusb/darwin.c darwin_submit_bulk_intr: bulk transfer failed (dir = %s): %s",
-	       read ? "In" : "Out", darwin_error_str(ret));
+    usbi_debug (hdev->lib_hdl, 1,
+		"libopenusb/darwin.c darwin_submit_bulk_intr: bulk transfer failed (dir = %s): %s",
+		is_read ? "In" : "Out", darwin_error_str(ret));
     return darwin_to_openusb (ret);
   }
 
@@ -1437,9 +1488,7 @@ int32_t darwin_submit_bulk_intr (struct usbi_dev_handle *hdev, struct usbi_io *i
 int32_t darwin_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io, int32_t pattern) {
   openusb_isoc_request_t *isoc;
   kern_return_t           kresult;
-  IOUSBIsocFrame         *framelist;
-  uint8_t                 read; /* 0 = we're writing, 1 = we're reading */
-  uint8_t                *buffer, *bufferpos;
+  uint8_t                *bufferpos;
   uint8_t                 pipeRef, ifc;
   uint32_t                totallen;
   UInt64                  frame;
@@ -1451,13 +1500,15 @@ int32_t darwin_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io, int
     return OPENUSB_BADARG;
 
   /* lock the io while we set things up */
-  pthread_mutex_lock(&io->lock);
+  pthread_mutex_lock (&io->lock);
 
   /* Just for convienience */
   isoc = io->req->req.isoc;
 
+  io->priv = (struct usbi_io_private *) calloc (1, sizeof (struct usbi_io_private));
+
   /* are we reading or writing? */
-  read = io->req->endpoint & USB_REQ_DEV_TO_HOST;
+  io->priv->is_read = io->req->endpoint & USB_REQ_DEV_TO_HOST;
 
   /* Now we have some serious setup work to make OpenUSB's isoc structure's
    * match with those used on OS X */
@@ -1466,16 +1517,16 @@ int32_t darwin_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io, int
   totallen = 0;
   for (i = 0; i < isoc->pkts.num_packets; i++)
     totallen += isoc->pkts.packets[i].length;
-
-  buffer = (uint8_t *) calloc (totallen, sizeof(uint8_t));
-  if (!buffer) {
-    pthread_mutex_unlock(&io->lock);
+  
+  io->priv->isoc_buffer = (uint8_t *) calloc (totallen, sizeof(uint8_t));
+  if (!io->priv->isoc_buffer) {
+    pthread_mutex_unlock (&io->lock);
     return OPENUSB_NO_RESOURCES;
   }
-	
+
   /* If we're writing we need to copy our payloads into the buffer */
-  if (!read) {
-    bufferpos = buffer;
+  if (!io->priv->is_read) {
+    bufferpos = io->priv->isoc_buffer;
     for (i = 0; i < isoc->pkts.num_packets; i++) {
       memcpy(bufferpos, isoc->pkts.packets[i].payload, isoc->pkts.packets[i].length);
       bufferpos += isoc->pkts.packets[i].length;
@@ -1483,16 +1534,16 @@ int32_t darwin_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io, int
   }
 	
   /* Now construct the array of IOUSBIsocFrames */
-  framelist = (IOUSBIsocFrame*) calloc (isoc->pkts.num_packets, sizeof(IOUSBIsocFrame));
-  if (!framelist) {
-    free(buffer);
+  io->priv->isoc_framelist = (IOUSBIsocFrame*) calloc (isoc->pkts.num_packets, sizeof(IOUSBIsocFrame));
+  if (!io->priv->isoc_framelist) {
+    free(io->priv->isoc_buffer);
     pthread_mutex_unlock(&io->lock);
     return OPENUSB_NO_RESOURCES;
   }
 	
   /* Fill in the frame list */
   for (i = 0; i < isoc->pkts.num_packets; i++)
-    framelist[i].frReqCount = isoc->pkts.packets[i].length;
+    io->priv->isoc_framelist[i].frReqCount = isoc->pkts.packets[i].length;
 
   /* determine the interface/endpoint to use */
   ep_to_pipeRef (hdev, io->req->endpoint, &pipeRef, &ifc);
@@ -1500,41 +1551,39 @@ int32_t darwin_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io, int
   /* Last but not least we need the bus frame number */
   kresult = (*(hdev->priv->interfaces[ifc].interface))->GetBusFrameNumber(hdev->priv->interfaces[ifc].interface, &frame, &atTime);
   if (kresult) {
-    usbi_debug(hdev->lib_hdl, 1, "failed to get bus frame number: %d", kresult);
-    free(buffer);
-    free(framelist);
-    pthread_mutex_unlock(&io->lock);
+    usbi_debug (hdev->lib_hdl, 1, "failed to get bus frame number: %d", kresult);
+    free (io->priv->isoc_buffer);
+    free (io->priv->isoc_framelist);
+    pthread_mutex_unlock (&io->lock);
     return (OPENUSB_SYS_FUNC_FAILURE);
   }
 
   /* lock the device */
-  pthread_mutex_lock(&hdev->lock);
+  pthread_mutex_lock (&hdev->lock);
 	
   /* submit the request */
-  if (read) {
-    kresult = (*(hdev->priv->interfaces[ifc].interface))->ReadIsochPipeAsync(hdev->priv->interfaces[ifc].interface,
-							       pipeRef, buffer, frame,
-							       isoc->pkts.num_packets,
-							       framelist,
-							       darwin_io_callback,
-							       io);
+  if (io->priv->is_read) {
+    kresult = (*(hdev->priv->interfaces[ifc].interface))->ReadIsochPipeAsync (hdev->priv->interfaces[ifc].interface,
+									      pipeRef, io->priv->isoc_buffer, frame,
+									      isoc->pkts.num_packets,
+									      io->priv->isoc_framelist,
+									      darwin_isoc_callback, io);
   } else {
-    kresult = (*(hdev->priv->interfaces[ifc].interface))->ReadIsochPipeAsync(hdev->priv->interfaces[ifc].interface,
-							       pipeRef, buffer, frame,
-							       isoc->pkts.num_packets,
-							       framelist,
-							       darwin_io_callback,
-							       io);
+    kresult = (*(hdev->priv->interfaces[ifc].interface))->WriteIsochPipeAsync (hdev->priv->interfaces[ifc].interface,
+									       pipeRef, io->priv->isoc_buffer, frame,
+									       isoc->pkts.num_packets,
+									       io->priv->isoc_framelist,
+									       darwin_isoc_callback, io);
   }
 
   /* unlock the device & io request */
-  pthread_mutex_unlock(&io->lock);
-  pthread_mutex_unlock(&hdev->lock);
+  pthread_mutex_unlock (&io->lock);
+  pthread_mutex_unlock (&hdev->lock);
 
   if (kresult) {
-    usbi_debug(hdev->lib_hdl, 1,
-	       "libopenusb/darwin.c darwin_submit_isoc: isochronous failed (dir: %s): %s", 
-	       read ? "In" : "Out", darwin_error_str(kresult));
+    usbi_debug (hdev->lib_hdl, 1,
+		"libopenusb/darwin.c darwin_submit_isoc: isochronous failed (dir: %s): %s", 
+		io->priv->is_read ? "In" : "Out", darwin_error_str(kresult));
     return darwin_to_openusb (kresult);
   }
 	
@@ -1559,9 +1608,9 @@ int32_t darwin_get_configuration (struct usbi_dev_handle *hdev, uint8_t *cfg) {
 
   kresult = (*(hdev->priv->device))->GetConfiguration(hdev->priv->device, cfg);
   if (kresult) {
-    usbi_debug(hdev->lib_hdl, 1,
-	       "libopenusb/darwin.c darwin_get_configuration(GetConfiguration): %s", 
-	       darwin_error_str(kresult));
+    usbi_debug (hdev->lib_hdl, 1,
+		"libopenusb/darwin.c darwin_get_configuration(GetConfiguration): %s", 
+		darwin_error_str(kresult));
     return darwin_to_openusb (kresult);
   }
 
@@ -1587,9 +1636,9 @@ int32_t darwin_get_altsetting (struct usbi_dev_handle *hdev, uint8_t ifc, uint8_
   kresult = (*(hdev->priv->interfaces[ifc].interface))->GetAlternateSetting (hdev->priv->interfaces[ifc].interface,
 								   alt);
   if (kresult) {
-    usbi_debug(hdev->lib_hdl, 1,
-	       "libopenusb/darwin.c darwin_get_altsetting(GetAlternateSetting) (ifc = %d): %s", 
-	       ifc, darwin_error_str (kresult));
+    usbi_debug (hdev->lib_hdl, 1,
+		"libopenusb/darwin.c darwin_get_altsetting(GetAlternateSetting) (ifc = %d): %s", 
+		ifc, darwin_error_str (kresult));
     return darwin_to_openusb (kresult);
   }
 
@@ -1610,7 +1659,7 @@ int32_t darwin_reset (struct usbi_dev_handle *hdev) {
   if (!hdev)
     return OPENUSB_BADARG;
 
-  kresult = (*(hdev->priv->device))->ResetDevice(hdev->priv->device);
+  kresult = (*(hdev->priv->device))->ResetDevice (hdev->priv->device);
   if (kresult) {
     usbi_debug (hdev->lib_hdl, 1,
 		"libopenusb/darwin.c darwin_reset(ResetDevice): %s",
@@ -1640,11 +1689,11 @@ int32_t darwin_clear_halt (struct usbi_dev_handle *hdev, uint8_t ept) {
   ep_to_pipeRef (hdev, ept, &pipeRef, &ifc);
 
 #if (InterfaceVersion < 190)
-  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStall(hdev->priv->device, pipeRef);
+  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStall (hdev->priv->device, pipeRef);
 #else
   /* newer versions of darwin support clearing additional bits on the device's endpoint */
-  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStallBothEnds(hdev->priv->interfaces[ifc].interface,
-								     pipeRef);
+  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStallBothEnds (hdev->priv->interfaces[ifc].interface,
+										pipeRef);
 #endif
   if (kresult) {
     usbi_debug (hdev->lib_hdl, 1,
