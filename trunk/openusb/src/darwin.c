@@ -40,7 +40,7 @@ static char *darwin_error_str (int result) {
   case kIOReturnError:
     return "could not establish a connection to the Darwin kernel";
   case kIOUSBTransactionTimeout:
-    return "transaction timed out";
+   return "transaction timed out";
   case kIOReturnBadArgument:
     return "invalid argument";
   case kIOReturnAborted:
@@ -481,7 +481,18 @@ int32_t darwin_refresh_devices (struct usbi_bus *ibus)  {
     if ((location >> 24) == ibus->busnum) {
       (*(device))->GetDeviceProduct (device, &idProduct);
 
+      (*device)->USBDeviceOpen (device);
+
       kresult = (*(device))->DeviceRequest(device, &req);
+      if (kresult != kIOReturnSuccess) {
+	/* device did not respond. maybe it is suspended? */
+	(*device)->USBDeviceSuspend (device, 0);
+	kresult = (*(device))->DeviceRequest(device, &req);
+	(*device)->USBDeviceSuspend (device, 1);
+      }
+
+      (*device)->USBDeviceClose (device);
+
       if (kresult == kIOReturnSuccess) {
 	openusb_parse_data ("bbwbbbbwwwbbbb", req.pData, USBI_DEVICE_DESC_SIZE, &desc,
 			    sizeof (usb_device_desc_t), &count);
