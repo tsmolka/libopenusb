@@ -1700,7 +1700,7 @@ int32_t darwin_clear_halt (struct usbi_dev_handle *hdev, uint8_t ept) {
   ep_to_pipeRef (hdev, ept, &pipeRef, &ifc);
 
 #if (InterfaceVersion < 190)
-  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStall (hdev->priv->device, pipeRef);
+  kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStall (hdev->priv->interfaces[ifc].interface, pipeRef);
 #else
   /* newer versions of darwin support clearing additional bits on the device's endpoint */
   kresult = (*(hdev->priv->interfaces[ifc].interface))->ClearPipeStallBothEnds (hdev->priv->interfaces[ifc].interface,
