@@ -2,7 +2,7 @@
  * Darwin IOKit (Mac OS X) USB Support
  *
  *  Copyright 2002-2008 Nathan Hjelm <hjelmn@users.sourceforge.net>
- *  Copyright 2008 Michael Lewis <milewis1@gmail.com>
+ *  Copyright 2008 Eastman Kodak Company. All rights reserved.
  *
  *	This library is covered by the LGPL, read LICENSE for details.
  */
