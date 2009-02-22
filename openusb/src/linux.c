@@ -1,7 +1,7 @@
 /*
  * Linux USB support
  *
- *	Copyright 2007-2008 Michael Lewis <milewis1@gmail.com>
+ *	Copyright 2007-2008 Eastman Kodak Company. All rights reserved.
  *	Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
  *
  *	This library is covered by the LGPL, read LICENSE for details.
