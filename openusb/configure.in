@@ -186,7 +186,14 @@ AC_CHECK_FUNCS(memmove)
 dnl
 dnl Check for glib, gthread, dbus, dbus-glib, hal, libusb
 dnl
-if test "$os_support" != "darwin"; then
+if test "$os_support" = "darwin"; then
+
+   PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
+   AC_SUBST(LIBUSB_CFLAGS)
+   AC_SUBST(LIBUSB_LIBS)
+
+else
+
    PKG_CHECK_MODULES(GLIB, glib-2.0, HAVE_GLIB="yes")
    AC_SUBST(GLIB_CFLAGS)
    AC_SUBST(GLIB_LIBS)
@@ -206,11 +213,11 @@ if test "$os_support" != "darwin"; then
    PKG_CHECK_MODULES(HAL, hal, HAVE_HAL="yes")
    AC_SUBST(HAL_CFLAGS)
    AC_SUBST(HAL_LIBS)
-fi
 
-PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
-AC_SUBST(LIBUSB_CFLAGS)
-AC_SUBST(LIBUSB_LIBS)
+   PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
+   AC_SUBST(LIBUSB_CFLAGS)
+   AC_SUBST(LIBUSB_LIBS)
+fi
 
 
 if test "$os_support" = "bsd"; then
