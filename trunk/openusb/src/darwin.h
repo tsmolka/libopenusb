@@ -123,14 +123,15 @@ struct usbi_bus_private
 };
 
 struct usbi_io_private {
+	uint8_t			is_read;
+	uint8_t*		isoc_buffer;
+	IOUSBIsocFrame*	isoc_framelist;
+
 #if !defined (OPENUSB_NO_TIMEOUT_DEVICE)
 	IOUSBDevRequestTO req;
 #else
 	IOUSBDevRequest req;
 #endif
-	uint8_t			is_read;
-	uint8_t*		isoc_buffer;
-	IOUSBIsocFrame* isoc_framelist;
 };
 
 int32_t darwin_claim_interface (struct usbi_dev_handle *hdev, uint8_t ifc, openusb_init_flag_t flags);

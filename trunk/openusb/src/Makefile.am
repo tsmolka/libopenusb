@@ -37,9 +37,9 @@ if DARWIN_API
 usblib_LTLIBRARIES = darwin.la
 
 darwin_la_SOURCES = darwin.c
-darwin_la_CFLAGS = 
+darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX10.4u.sdk -mmacosx-version-min=10.4 -arch ppc -arch i386 -arch ppc64 -arch x86_64
 darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
-darwin_la_LDFLAGS = -avoid-version -module
+darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=10.4 -syslibroot /Developer/SDKs/MacOSX10.4u.sdk -arch ppc -arch i386 -arch ppc64 -arch x86_64
 endif
 
 if SUNOS_API
@@ -65,11 +65,32 @@ libopenusb_la_CFLAGS += -DDRIVER_PATH=\"$(libdir)/openusb_backend\"
 include_HEADERS = openusb.h
 
 libopenusb_la_LIBADD = -ldl
+
+if DARWIN_API
+
+libopenusb_la_CFLAGS += \
+	-mmacosx-version-min=10.4 \
+	-isysroot /Developer/SDKs/MacOSX10.4u.sdk \
+	-arch ppc -arch i386 -arch ppc64 -arch x86_64
+
+libopenusb_la_LDFLAGS = \
+	-mmacosx-version-min=10.4 \
+	-syslibroot /Developer/SDKs/MacOSX10.4u.sdk \
+	-arch ppc -arch i386 -arch ppc64 -arch x86_64 \
+	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
+	-dynamiclib \
+	-lpthread \
+	$(LDADDS)
+
+else
+
 libopenusb_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	-export-dynamic \
 	-lpthread \
 	$(LDADDS)
+
+endif
 
 .PHONY: files release snapshot
 

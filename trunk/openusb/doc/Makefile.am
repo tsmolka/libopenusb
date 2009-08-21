@@ -20,6 +20,9 @@ endif
 
 if SUNOS_API
 XMLDCL = /usr/share/sgml/xml.dcl
+endif
+if DARWIN_API
+XMLDCL = /sw/share/sgml/xml.dcl
 else
 XMLDCL = /usr/share/sgml/openjade/xml.dcl 
 endif
