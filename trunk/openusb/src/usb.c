@@ -1026,7 +1026,10 @@ int openusb_abort(openusb_request_handle_t phdl)
 	struct usbi_dev_handle *hdev;
 	struct usbi_io *io,*tio;
 	int ret = OPENUSB_PLATFORM_FAILURE; 
-	char buf[1]={1};
+
+	#ifndef __APPLE__
+		char buf[1]={1};	/* We don't need this on OS/X */
+	#endif
 
 	if(!phdl) {
 		return OPENUSB_INVALID_HANDLE;
@@ -1053,8 +1056,15 @@ int openusb_abort(openusb_request_handle_t phdl)
 					usbi_debug(hdev->lib_hdl, 1,
 						"abort error");
 				} else {
-					/* wake up timeout thread */
-					write(hdev->event_pipe[1], buf, 1);
+					
+					/* We don't use the timeout thread on OS/X and there's no 
+					 * IO polling on OS/X as there is on Linux, so there's no 
+					 * good place to read from this pipe to keep it cleared out 
+					 * (it will block if we just write without reading). So, we 
+					 * won't bother writing to it if we're on OS/X */
+					#ifndef __APPLE__
+						write(dev->event_pipe[1],buf, 1); /* wake up timeout thread */
+					#endif
 
 					/*free io?*/
 				}

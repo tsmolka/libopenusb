@@ -30,13 +30,16 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 {
 	struct usbi_io *io;
 	struct timeval tvc;
-	char buf[2] = {1, 1};
 
-	io = malloc(sizeof(*io));
+	#ifndef __APPLE__
+		char buf[2] = {1, 1};	/* We don't need this on OS/X */
+	#endif
+
+	io = malloc(sizeof(struct usbi_io));
 	if (!io)
 		return NULL;
 
-	memset(io, 0, sizeof(*io));
+	memset(io, 0, sizeof(struct usbi_io));
 
 	pthread_mutex_init(&io->lock, NULL);
 	pthread_cond_init(&io->cond, NULL);
@@ -75,7 +78,13 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 	 */
 	list_add(&io->list,&dev->io_head);
 
-	write(dev->event_pipe[1],buf, 1); /* notify timeout thread */
+	/* We don't use the timeout thread on OS/X and there's no IO polling on
+	 * OS/X as there is on Linux, so there's no good place to read from this
+	 * pipe to keep it cleared out (it will block if we just write without 
+	 * reading). So, we won't bother writing to it if we're on OS/X */
+	#ifndef __APPLE__
+		write(dev->event_pipe[1],buf, 1); /* notify timeout thread */
+	#endif
 
 	pthread_mutex_unlock(&dev->lock);
 
@@ -84,7 +93,9 @@ struct usbi_io *usbi_alloc_io(struct usbi_dev_handle *dev,
 
 void usbi_free_io(struct usbi_io *io)
 {
-	char buf[1]={1};
+	#ifndef __APPLE__
+		char buf[1]={1};	/* We don't need this on OS/X */
+	#endif
 
 	if (!io) {
 		return;
@@ -104,7 +115,13 @@ void usbi_free_io(struct usbi_io *io)
 			io->dev->idev->ops->io_cancel(io);
 	}
 	
-	write(io->dev->event_pipe[1], buf, 1); /* wakeup timeout thread */
+	/* We don't use the timeout thread on OS/X and there's no IO polling on
+	 * OS/X as there is on Linux, so there's no good place to read from this
+	 * pipe to keep it cleared out (it will block if we just write without 
+	 * reading). So, we won't bother writing to it if we're on OS/X */
+	#ifndef __APPLE__
+		write(dev->event_pipe[1],buf, 1); /* notify timeout thread */
+	#endif
 
 	if (io->priv) {
 		free(io->priv);
