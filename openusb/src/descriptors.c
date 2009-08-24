@@ -462,14 +462,17 @@ static int usbi_parse_interface(struct usbi_interface *intf,
 		}
 
 		/* We check to see if it's an alternate to this one */
-		openusb_parse_data("bb", buf, buflen, &header,
-				sizeof(header), &count);
+		if (buflen != 0)
+		{
+			openusb_parse_data("bb", buf, buflen, &header,
+							   sizeof(header), &count);
 
-		alt_num = buf[3];
-		if (buflen < USBI_INTERFACE_DESC_SIZE ||
-			header.bDescriptorType != USB_DESC_TYPE_INTERFACE ||
-			!alt_num) {
-			return parsed;
+			alt_num = buf[3];
+			if (buflen < USBI_INTERFACE_DESC_SIZE ||
+				header.bDescriptorType != USB_DESC_TYPE_INTERFACE ||
+				!alt_num) {
+				return parsed;
+			}
 		}
 
 	}
