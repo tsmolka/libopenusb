@@ -1063,7 +1063,7 @@ int openusb_abort(openusb_request_handle_t phdl)
 					 * (it will block if we just write without reading). So, we 
 					 * won't bother writing to it if we're on OS/X */
 					#ifndef __APPLE__
-						write(dev->event_pipe[1],buf, 1); /* wake up timeout thread */
+						write(hdev->event_pipe[1],buf, 1); /* wake up timeout thread */
 					#endif
 
 					/*free io?*/
