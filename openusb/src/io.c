@@ -120,7 +120,7 @@ void usbi_free_io(struct usbi_io *io)
 	 * pipe to keep it cleared out (it will block if we just write without 
 	 * reading). So, we won't bother writing to it if we're on OS/X */
 	#ifndef __APPLE__
-		write(dev->event_pipe[1],buf, 1); /* notify timeout thread */
+		write(io->dev->event_pipe[1],buf, 1); /* notify timeout thread */
 	#endif
 
 	if (io->priv) {
