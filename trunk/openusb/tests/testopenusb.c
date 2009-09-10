@@ -1226,7 +1226,7 @@ int advance_xfer_test(void)
 	}
 	printf("Lib handle = %llu\n", (long long)libh);
 
-#if 1  /* multi xfer test */
+#if 0  /* multi xfer test */
 	ret = multi_xfer_test(devh);
 	if(ret !=0) {
 		openusb_free_devid_list(devids);
