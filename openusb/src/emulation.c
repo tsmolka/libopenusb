@@ -619,10 +619,10 @@ int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	return(bulk.result.transferred_bytes);
 }
 
-int usb_bulk_write(struct usb_dev_handle *dev, int ep, const char *bytes, int size,
+int usb_bulk_write(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
-	return (usb0_bulk_xfer(dev, ep, bytes, size, timeout));
+	return (usb0_bulk_xfer(dev, ep, (char*)bytes, size, timeout));
 }
 
 int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
@@ -662,7 +662,7 @@ int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	return(intr.result.transferred_bytes);
 }
 
-int usb_interrupt_write(usb_dev_handle *dev, int ep, const char *bytes, int size,
+int usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
 	return (usb0_intr_xfer(dev, ep, bytes, size, timeout));
