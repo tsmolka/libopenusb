@@ -25,6 +25,7 @@
 
 #define	LINUX_MAX_BULK_INTR_XFER	16384
 #define LINUX_MAX_ISOC_XFER				32768
+#define LINUX_MAC_CTRL_XFER       4096
 
 
 static pthread_t	event_thread;
@@ -177,6 +178,10 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 	if (hdev->priv->fd < 0) {
 		return (hdev->priv->fd);
 	}
+	
+	/* default to having support for SHORT_NOT_OK and BULK_CONTINUATION */
+	hdev->priv->supports_flag_short_not_ok = 1;
+	hdev->priv->supports_flag_bulk_continuation = 1;
 
 	/* setup the event pipe for this device */
 	pipe(hdev->priv->event_pipe);
@@ -903,9 +908,43 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		} else {
 			urb->buffer_length	= LINUX_MAX_BULK_INTR_XFER;
 		}
-	
+		
+		/* USBFS in kernel 2.6.32+ supports enhanced handling for short transfers,
+		 * however, if we don't have more than one transfer, it doesn't matter */
+		if (io->priv->num_urbs > 1)
+		{
+		  /* If USBFS supports enhanced handling of short transfers, set the flag */
+	  	if (hdev->priv->supports_flag_short_not_ok) {
+		    urb->flags = USBK_URB_SHORT_NOT_OK;
+		  }
+		  /* To fully support handling short transfers this flag must be set for all
+		   * URBs except the first one */
+		  if ((i > 0) && hdev->priv->supports_flag_bulk_continuation) {
+		    urb->flags |= USBK_URB_BULK_CONTINUATION;
+		  }
+		}
+
 		/* submit the urb */
 		ret = urb_submit(hdev, urb);
+		
+		/* this could be a real error or an error caused by the flags we set above
+		 * if it was caused by the flags set above, mark that we no long support
+		 * the flags and try again */
+    if (   (ret < 0) && (errno == EINVAL) 
+        && (urb->flags & USBK_URB_BULK_CONTINUATION)) {
+ 		  usbi_debug(hdev->lib_hdl, 2, "BULK_CONTINUATION not supported. Disabling");
+ 		  hdev->priv->supports_flag_bulk_continuation = 0;
+ 		  urb->flags &= ~USBK_URB_BULK_CONTINUATION;
+ 		  ret = urb_submit(hdev, urb);
+ 		}
+    if (   (ret < 0) && (errno == EINVAL)
+        && (urb->flags & USBK_URB_SHORT_NOT_OK)) {
+        usbi_debug(hdev->lib_hdl, 2, "SHORT_NOT_OK not supported. Disabling");
+        hdev->priv->supports_flag_short_not_ok = 0;
+        hdev->priv->supports_flag_bulk_continuation = 0;
+        urb->flags &= ~USBK_URB_SHORT_NOT_OK;
+        ret = urb_submit(hdev, urb);
+    }
 		if (ret < 0) {
 
 			/* if this is the first URB we've submitted, things are simple */
@@ -1408,16 +1447,21 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 	}
 
 	/* check for errors */
-	if (urb->status == -EPIPE) {
-		usbi_debug(hdev->lib_hdl, 1, "endpoint %x stalled", io->req->endpoint);
-		handle_partial_xfer(hdev, io, urb_index + 1, STALL);
-		free(io->priv->urbs);
-		usbi_io_complete(io, OPENUSB_IO_STALL, io->priv->bytes_transferred);
-		return;
-	} else if (urb->status != 0) {
-		usbi_debug(hdev->lib_hdl, 1, "unrecognized urb status: %d", urb->status);
-		handle_partial_xfer(hdev, io, urb_index + 1, UNKNOWNFAILURE);
-		return;
+	switch (urb->status)
+	{
+  	default:          /* Unhandled error */
+  		usbi_debug(hdev->lib_hdl, 1, "unrecognized urb status: %d", urb->status);
+  		handle_partial_xfer(hdev, io, urb_index + 1, UNKNOWNFAILURE);
+  		return;
+	  case 0:           /* Success */
+	  case -EREMOTEIO:  /* Short Transfer */
+	    break;
+	  case -EPIPE:      /* Endpoint Stalled */
+  		usbi_debug(hdev->lib_hdl, 1, "endpoint %x stalled", io->req->endpoint);
+  		handle_partial_xfer(hdev, io, urb_index + 1, STALL);
+  		free(io->priv->urbs);
+  		usbi_io_complete(io, OPENUSB_IO_STALL, io->priv->bytes_transferred);
+  		return;
 	}
 
 	/* if this is the last urb we need to complete or we received less data than
@@ -1580,6 +1624,13 @@ void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
 
 	io->priv->reap_action = action;
 	for (i = idx; i < io->priv->num_urbs; i++) {
+	  
+	  /* If USBFS supports enchanced handling of short transfers we don't need to
+	   * discard any remaining URBs ourselves */
+	  if (io->priv->urbs[i].flags & USBK_URB_BULK_CONTINUATION) {
+      continue;
+    }
+	
 		ret = ioctl(hdev->priv->fd, IOCTL_USB_DISCARDURB, &io->priv->urbs[i]);
 		if (ret == 0) {
 			io->priv->urbs_to_cancel++;
@@ -1589,6 +1640,7 @@ void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
 			usbi_debug(NULL, 4, "failed to cancel URB %d: %s", errno,
 								 strerror(errno));
 		}
+		
 	}
 
 	usbi_debug(NULL, 4,

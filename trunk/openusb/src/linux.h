@@ -66,8 +66,10 @@ struct usbk_getdriver {
   char driver[USBK_MAXDRIVERNAME + 1];
 };
 
-#define USBK_URB_DISABLE_SPD	0x01
-#define USBK_URB_ISO_ASAP	0x02
+#define USBK_URB_DISABLE_SPD	      0x01
+#define USBK_URB_ISO_ASAP	          0x02
+#define USBK_URB_SHORT_NOT_OK       0x01
+#define USBK_URB_BULK_CONTINUATION  0x04
 
 #define USBK_URB_TYPE_ISO	0
 #define USBK_URB_TYPE_INTERRUPT	1
@@ -219,10 +221,16 @@ struct usbi_dev_private
 
 struct usbi_dev_hdl_private
 {
-	int             fd;            /* file descriptor for usbdevfs entry */
-	int             event_pipe[2]; /* let's us know when things are happening */
-	int16_t					reattachdrv;	 /* do we need to reattach the kernel driver */
-	pthread_t       io_thread;     /* thread for processing io requests */
+	int       fd;            /* file descriptor for usbdevfs entry */
+	int       event_pipe[2]; /* let's us know when things are happening */
+	int16_t		reattachdrv;	 /* do we need to reattach the kernel driver */
+	pthread_t io_thread;     /* thread for processing io requests */
+
+  /* The following variables tell us whether or not USBFS supports enchanced
+   * handling of short bulk transfers when more than one URB is needed for the
+   * full transfer */
+	char      supports_flag_short_not_ok; 
+  char      supports_flag_bulk_continuation;
 };
 
 
