@@ -1784,6 +1784,7 @@ int32_t darwin_get_raw_desc(struct usbi_device *idev, uint8_t type,
   kern_return_t   kresult;
   IOUSBDevRequest req;
 
+
   /* Validate... */
   if (!idev || !buflen)
     return OPENUSB_BADARG;
@@ -1823,9 +1824,19 @@ int32_t darwin_get_raw_desc(struct usbi_device *idev, uint8_t type,
       goto done;
     }
 
-    /* retreive entire descriptor */
-    req.wLength = NXSwapLittleShortToHost (cfg_hdr.wTotalLength);
-    req.pData   = calloc (1, req.wLength);
+    
+	/* retreive entire descriptor */
+    /* req.wLength = NXSwapLittleShortToHost (cfg_hdr.wTotalLength); 
+	 *    OS X 10.6 (Snow Leopard) APIs don't have NXSwapLittleShortToHost, so
+	 *	  we're going to swap the hard way */
+	#ifdef __LITTLE_ENDIAN__
+      req.wLength = cfg_hdr.wTotalLength; 
+    #else
+      uint16_t temp;
+	  temp = cfg_hdr.wTotalLength & 0x00FF;
+	  req.wLength = (cfg_hdr.wTotalLength & 0xFF00) | (temp << 0x08);
+    #endif
+	req.pData   = calloc (1, req.wLength);
     devdescr    = req.pData;
 
     kresult = (*(darwin_device))->DeviceRequest(darwin_device, &req);
