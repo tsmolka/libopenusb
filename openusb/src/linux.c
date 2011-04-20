@@ -19,20 +19,20 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <libudev.h>
 
 #include "usbi.h"
 #include "linux.h"
 
 #define	LINUX_MAX_BULK_INTR_XFER	16384
 #define LINUX_MAX_ISOC_XFER				32768
-#define LINUX_MAC_CTRL_XFER       4096
+#define LINUX_MAX_CTRL_XFER       4096
 
 
-static pthread_t	event_thread;
-static char		device_dir[PATH_MAX + 1] = "";
-static GMainLoop	*event_loop;
-static int32_t		linux_backend_inited = 0;
-static pthread_mutex_t linuxdbus_lock;
+static pthread_t	      event_thread;
+static char		          device_dir[PATH_MAX + 1] = "";
+static int32_t		      linux_backend_inited = 0;
+static pthread_mutex_t  linuxdbus_lock;
 
 
 /*
@@ -546,17 +546,15 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	/* Initialize the dbus mutex (which will prevent the hotplug thread from
 	 * running before we've done the first pass of refresh devices) */
 	pthread_mutex_init(&linuxdbus_lock, NULL);	
-
-	/* Initialize thread support in GLib (if it's not already) */
-	if (!g_thread_supported()) g_thread_init(NULL);
 	
-	/* Start up thread for polling events */
+	/* Start up thread for polling events
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
 		       	(void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
+	*/
 
 	/* we're initialized */
 	linux_backend_inited++;
@@ -587,15 +585,6 @@ void linux_fini(struct usbi_handle *hdl)
 
 	pthread_mutex_unlock(&linuxdbus_lock);
 	pthread_mutex_destroy(&linuxdbus_lock);
-
-	/* If we're here this is our last instance */
-	/* Stop the event (connect/disconnect) thread */
-	if ((event_loop != NULL) && g_main_loop_is_running(event_loop)) {
-		usbi_debug(hdl, 4, "stopping the hotplug thread...");
-		g_main_loop_quit(event_loop);
-		g_main_context_wakeup(g_main_loop_get_context(event_loop));
-		pthread_join(event_thread, NULL);
-	}
 	
 	/* We're no longer initialized */
 	linux_backend_inited--;
@@ -702,9 +691,9 @@ void linux_free_device(struct usbi_device *idev)
 
 	/* Free the udi and the private data structure */
 	if (idev->priv) {
-		if (idev->priv->udi) {
-			free(idev->priv->udi);
-			idev->priv->udi = NULL;
+		if (idev->priv->sysfspath) {
+			free(idev->priv->sysfspath);
+			idev->priv->sysfspath = NULL;
 		}
 		free(idev->priv);
 		idev->priv = NULL;
@@ -2195,9 +2184,201 @@ int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 }
 
 
+/*
+ * linux_refresh_devices
+ *
+ *  Make a new search of the devices on the bus and refresh the device list.
+ *  The device nodes that have been detached from the system would be removed 
+ *  from the list.
+ */
+int32_t linux_refresh_devices(struct usbi_bus* ibus)
+{
+  struct udev*            udev;
+  struct udev_enumerate*  udevEnumeration;
+  struct udev_list_entry  *devices = NULL, *device_list_entry = NULL;
+  struct udev_device*     dev;
+  struct usbi_device	    *idev = NULL, *tidev = NULL;
+	int 			              busnum = 0, pdevnum = 0,
+						              devnum = 0, max_children = 0;
+  
+  /* Validate... */
+	if (!ibus) {
+		return (OPENUSB_BADARG);
+	}
+	
+	/* hold the lock so that the event thread will have to wait,
+	 * linux_refresh_devices will unlock it */
+	pthread_mutex_lock(&linuxdbus_lock);
+
+	/* Lock the bus */
+	pthread_mutex_lock(&ibus->lock);
+  
+  udev = udev_new();
+  if (!udev) {
+    usbi_debug(NULL, 1, "error: udev_new");
+    pthread_mutex_unlock(&linuxdbus_lock);
+		pthread_mutex_unlock(&ibus->lock);
+		return (OPENUSB_SYS_FUNC_FAILURE);
+  }
+  
+  /* Create a list of all the attached 'usb_devices' */
+  udevEnumeration = udev_enumerate_new(udev);
+  udev_enumerate_add_match_subsystem(udevEnumeration, "usb");
+  udev_enumerate_scan_devices(udevEnumeration);
+  devices = udev_enumerate_get_list_entry(udevEnumeration);
+  
+  /* Now we'll go through each device, if it matches our bus then we'll get the
+   * information we need to know about it and add it to our list */
+  udev_list_entry_foreach(device_list_entry, devices) {
+    
+    const char* path;
+    
+    /* Get the /sys filename, we'll save this to refer to our device and then
+     * grab the device itself so we can interrogate it */
+    path = udev_list_entry_get_name(device_list_entry);
+    dev = udev_device_new_from_syspath(udev, path);
+    
+    usbi_debug(NULL, 4, "processing device: %s", path);
+
+	  /* We need to know the bus number, device number, parent device number,
+	   * parent port and the maximum number of children this device can have
+	   * in order to add it to our list */
+	  const char* busnumString = udev_device_get_sysattr_value(dev, "busnum");
+	  if (busnumString == NULL) {
+	    /* this isn't a usb device, it's some other usb thing in sysfs, skip it */
+	    udev_device_unref(dev);
+	    continue;  
+	  }
+	  busnum = atoi(busnumString);
+	
+  	/* if ibus is not NULL then we don't want to process this device unless
+     * the specified bus number is the same */
+  	if (ibus != NULL) {
+  	
+	  	/* Check the bus number to see if this device is on the specified bus */
+	  	if (busnum != ibus->busnum) {
+	  		udev_device_unref(dev);
+	  		continue;
+	  	}
+	  
+	  } else {
+
+		  /* find the ibus that this device is on */
+		  ibus = usbi_find_bus_by_num(busnum);
+		  if (!ibus) {
+			  usbi_debug(NULL, 4, "Unable to find bus by number: %d", busnum);
+			  udev_device_unref(dev);
+			  continue;
+		  }
+	  }
+
+	  /* Get the device number */
+	  devnum = atoi(udev_device_get_sysattr_value(dev, "devnum"));
+
+	  /* Get the number of ports (aka max_children) */
+	  max_children = atoi(udev_device_get_sysattr_value(dev, "maxchild"));
+	
+	  /* Get the parent's device number*/
+	  dev = udev_device_get_parent(dev);
+	  const char* pdevnumString = udev_device_get_sysattr_value(dev, "devnum");
+		if (pdevnumString == NULL) {
+		  usbi_debug(NULL, 4, "Error getting parent device number. This is probably the root device");
+		  /* this means that there probably isn't a parent device number, so
+		   * make it zero, meaning this is the root device */
+		  pdevnum = 0;
+	  } else {
+	    pdevnum = atoi(pdevnumString);
+	  }
+		
+  	/* Validate what we have so far */
+	  if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
+			  max_children >= USB_MAX_DEVICES_PER_BUS ||
+			  pdevnum >= USB_MAX_DEVICES_PER_BUS) {
+		  usbi_debug(NULL, 1, "invalid device number or parent device");
+		  udev_device_unref(dev);
+		  continue;
+	  }
+
+	  /* Make sure we don't have two root devices */
+	  if (!pdevnum && ibus->root && ibus->root->found) {
+		  usbi_debug(NULL, 1, "cannot have two root devices");
+		  udev_device_unref(dev);
+		  continue;
+	  }
+
+	  /* Only add this device if it's new */
+	  /* If we don't have a device by this number yet, it must be new */
+	  idev = ibus->priv->dev_by_num[devnum];
+	  if (!idev) {
+		  int ret;
+
+		  ret = create_new_device(&idev, ibus, devnum, max_children);
+		  if (ret) {
+			  usbi_debug(NULL, 1, "ignoring new device because of errors");
+			  udev_device_unref(dev);
+			  continue;
+		  }
+
+		  /* set the parent device number */
+		  idev->priv->pdevnum = pdevnum;
+		
+		  /* copy the sysfs path */
+		  idev->priv->sysfspath = strdup(path);
+		
+		  /* add the device */
+		  usbi_add_device(ibus, idev);
+
+		  /* Setup the parent relationship, if this device is new */
+		  if (idev->priv->pdevnum) {
+			  idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
+		  } else {
+			  ibus->root = idev;
+		  }
+
+	  }
+
+	  /* Mark the device as found */
+	  idev->found = 1;
+
+	  /* free the property strings */
+	  udev_device_unref(dev);
+  }
+    
+  /* make sure every device we currently have in the list was found,
+	 * if not, remove it. */
+	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
+		if (!idev->found) {
+			/* Device disappeared, remove it */
+			usbi_debug(NULL, 2, "device %d removed", idev->devnum);
+			usbi_remove_device(idev);
+		}
+
+		/* Setup the parent relationship */
+		if (idev->priv->pdevnum) {
+			idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
+		} else {
+			ibus->root = idev;
+		}
+	}
+
+	/* unlock */
+	pthread_mutex_unlock(&ibus->lock);
+	
+	/* Cleanup libudev */  
+  udev_enumerate_unref(udevEnumeration);
+  udev_unref(udev);
+  
+  /* Now that we've done with libudev unlock the lock so the event thread
+	 * can get to work */
+	usbi_debug(NULL, 4, "exiting linux_refresh_devices");
+	pthread_mutex_unlock(&linuxdbus_lock);
+  return (OPENUSB_SUCCESS);
+}
 
 
-#if 1 /* hal */
+
+
+#if USING_HAL
 /*
  * linux_refresh_devices
  *

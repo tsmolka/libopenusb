@@ -192,6 +192,16 @@ if test "$os_support" = "darwin"; then
    AC_SUBST(LIBUSB_CFLAGS)
    AC_SUBST(LIBUSB_LIBS)
 
+elif test "$os_support" = "linux"; then
+
+   PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
+   AC_SUBST(LIBUSB_CFLAGS)
+   AC_SUBST(LIBUSB_LIBS)
+   
+   PKG_CHECK_MODULES(UDEV, libudev, HAVE_UDEV="yes")
+   AC_SUBST(UDEV_CFLAGS)
+   AC_SUBST(UDEV_LIBS)
+
 else
 
    PKG_CHECK_MODULES(GLIB, glib-2.0, HAVE_GLIB="yes")
