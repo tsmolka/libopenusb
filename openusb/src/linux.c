@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include <libudev.h>
+#include <sys/utsname.h>
 
 #include "usbi.h"
 #include "linux.h"
@@ -32,7 +33,6 @@
 static pthread_t	      event_thread;
 static char		          device_dir[PATH_MAX + 1] = "";
 static int32_t		      linux_backend_inited = 0;
-static pthread_mutex_t  linuxdbus_lock;
 
 
 /*
@@ -70,6 +70,37 @@ int32_t translate_errno(int errnum)
 	}
 }
 
+
+/* 
+ * bulk_continuation_supported
+ *
+ *  Check to see if the bulk continuation URB flag is support. It is supported
+ *  in kernel version 2.6.32+ 
+ */ 
+int32_t supports_flag_bulk_continuation(void)
+{
+  struct utsname uts;
+  int major, minor, sublevel;
+	
+  if (uname(&uts) < 0)
+    return -1;
+  if (strlen(uts.release) < 4)
+    return 0;
+  if (sscanf(uts.release, "%d.%d.%d", &major, &minor, &sublevel) != 3)
+    return 0;
+  if (major < 2)
+    return 0;
+  if (major == 2) {
+    if (minor < 6)
+      return 0;
+    if (minor == 6) {
+      if (sublevel < 32)
+        return 0;
+    }
+  }
+  
+  return 1;
+}
 
 
 /*
@@ -179,9 +210,9 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 		return (hdev->priv->fd);
 	}
 	
-	/* default to having support for SHORT_NOT_OK and BULK_CONTINUATION */
-	hdev->priv->supports_flag_short_not_ok = 1;
-	hdev->priv->supports_flag_bulk_continuation = 1;
+  /* Check to see if the kernel supports the short_not_ok and bulk_continuation
+   * flags. */
+	hdev->priv->supports_flag_bulk_continuation = supports_flag_bulk_continuation();
 
 	/* setup the event pipe for this device */
 	pipe(hdev->priv->event_pipe);
@@ -543,18 +574,12 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 		usbi_debug(hdl, 1, "no USB device directory found");
 	}
 
-	/* Initialize the dbus mutex (which will prevent the hotplug thread from
-	 * running before we've done the first pass of refresh devices) */
-	pthread_mutex_init(&linuxdbus_lock, NULL);	
-	
-	/* Start up thread for polling events
-	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
-		       	(void*)NULL);
+	/* Start up thread for polling events */
+	ret = pthread_create(&event_thread, NULL, udev_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-	*/
 
 	/* we're initialized */
 	linux_backend_inited++;
@@ -583,9 +608,6 @@ void linux_fini(struct usbi_handle *hdl)
 		return;
 	}
 
-	pthread_mutex_unlock(&linuxdbus_lock);
-	pthread_mutex_destroy(&linuxdbus_lock);
-	
 	/* We're no longer initialized */
 	linux_backend_inited--;
 
@@ -658,7 +680,7 @@ int32_t linux_find_buses(struct list_head *buses)
 
 		/* setup the maximum transfer sizes - these are determined by usbfs and
 		 * NOT by the bus (as with other oses) so they will always be the same */
-		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4096 - USBI_CONTROL_SETUP_LEN;
+		ibus->max_xfer_size[USB_TYPE_CONTROL]     = LINUX_MAX_CTRL_XFER;
 		ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = pow(2,32) - 1;
 		ibus->max_xfer_size[USB_TYPE_BULK]        = pow(2,32) - 1;
 		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = pow(2,32) - 1;
@@ -903,7 +925,7 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		if (io->priv->num_urbs > 1)
 		{
 		  /* If USBFS supports enhanced handling of short transfers, set the flag */
-	  	if (hdev->priv->supports_flag_short_not_ok) {
+	  	if (hdev->priv->supports_flag_bulk_continuation) {
 		    urb->flags = USBK_URB_SHORT_NOT_OK;
 		  }
 		  /* To fully support handling short transfers this flag must be set for all
@@ -916,24 +938,6 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		/* submit the urb */
 		ret = urb_submit(hdev, urb);
 		
-		/* this could be a real error or an error caused by the flags we set above
-		 * if it was caused by the flags set above, mark that we no long support
-		 * the flags and try again */
-    if (   (ret < 0) && (errno == EINVAL) 
-        && (urb->flags & USBK_URB_BULK_CONTINUATION)) {
- 		  usbi_debug(hdev->lib_hdl, 2, "BULK_CONTINUATION not supported. Disabling");
- 		  hdev->priv->supports_flag_bulk_continuation = 0;
- 		  urb->flags &= ~USBK_URB_BULK_CONTINUATION;
- 		  ret = urb_submit(hdev, urb);
- 		}
-    if (   (ret < 0) && (errno == EINVAL)
-        && (urb->flags & USBK_URB_SHORT_NOT_OK)) {
-        usbi_debug(hdev->lib_hdl, 2, "SHORT_NOT_OK not supported. Disabling");
-        hdev->priv->supports_flag_short_not_ok = 0;
-        hdev->priv->supports_flag_bulk_continuation = 0;
-        urb->flags &= ~USBK_URB_SHORT_NOT_OK;
-        ret = urb_submit(hdev, urb);
-    }
 		if (ret < 0) {
 
 			/* if this is the first URB we've submitted, things are simple */
@@ -2184,6 +2188,122 @@ int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 }
 
 
+
+/* 
+ * process_new_device
+ *
+ *  Get all of the information openusb needs to know about the device based
+ *  on the udev device pointer and path (for logging)
+ */
+void process_new_device(struct usbi_bus* ibus, struct udev_device* dev, const char* path)
+{    
+  int8_t              DO_ONCE = 1;
+	int 	              busnum  = 0, pdevnum = 0, devnum = 0, max_children = 0;
+	struct usbi_device* idev    = NULL;
+
+  usbi_debug(NULL, 4, "processing new device: %s", path);
+
+  /* Use a do/while loop to avoid goto */
+  do
+  {
+    /* We need to know the bus number, device number, parent device number,
+     * parent port and the maximum number of children this device can have
+     * in order to add it to our list */
+    const char* busnumString = udev_device_get_sysattr_value(dev, "busnum");
+    if (busnumString == NULL) { 
+      /* this is not a usb device, it's some other sysfs usb object */
+      break;
+    }
+	  busnum = atoi(busnumString);
+	  
+    /* if ibus is not NULL then we don't want to process this device unless
+     * the specified bus number is the same */
+    if (ibus != NULL) {
+  	
+      /* Check the bus number to see if this device is on the specified bus */
+ 	    if (busnum != ibus->busnum) { break; }
+	  
+    } else {
+
+	    /* find the ibus that this device is on */
+	    ibus = usbi_find_bus_by_num(busnum);
+	    if (!ibus) {
+		    usbi_debug(NULL, 4, "Unable to find bus by number: %d", busnum);
+		    break;
+	    }
+    }
+
+    /* Get the device number */
+    devnum = atoi(udev_device_get_sysattr_value(dev, "devnum"));
+
+    /* Get the number of ports (aka max_children) */
+    max_children = atoi(udev_device_get_sysattr_value(dev, "maxchild"));
+	
+    /* Get the parent's device number*/
+    dev = udev_device_get_parent(dev);
+    const char* pdevnumString = udev_device_get_sysattr_value(dev, "devnum");
+	  if (pdevnumString == NULL) {
+	    usbi_debug(NULL, 4, "Error getting parent device number. This is probably the root device");
+	    /* this means that there probably isn't a parent device number, so
+	     * make it zero, meaning this is the root device */
+	    pdevnum = 0;
+    } else {
+      pdevnum = atoi(pdevnumString);
+    }
+		
+ 	  /* Validate what we have so far */
+    if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
+		    max_children >= USB_MAX_DEVICES_PER_BUS ||
+		    pdevnum >= USB_MAX_DEVICES_PER_BUS) {
+	    usbi_debug(NULL, 1, "invalid device number or parent device");
+	    break;
+    }
+
+    /* Make sure we don't have two root devices */
+    if (!pdevnum && ibus->root && ibus->root->found) {
+	    usbi_debug(NULL, 1, "cannot have two root devices");
+      break;
+    }
+
+    /* Only add this device if it's new */
+    /* If we don't have a device by this number yet, it must be new */
+    idev = ibus->priv->dev_by_num[devnum];
+    if (!idev) {
+	    int ret;
+
+	    ret = create_new_device(&idev, ibus, devnum, max_children);
+	    if (ret) {
+		    usbi_debug(NULL, 1, "ignoring new device because of errors");
+        break;
+	    }
+
+	    /* set the parent device number */
+	    idev->priv->pdevnum = pdevnum;
+		
+	    /* copy the sysfs path */
+	    idev->priv->sysfspath = strdup(path);
+		
+	    /* add the device */
+	    usbi_add_device(ibus, idev);
+
+	    /* Setup the parent relationship, if this device is new */
+	    if (idev->priv->pdevnum) {
+	  	   idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
+	    } else {
+	  	   ibus->root = idev;
+	    }
+    }
+
+    /* Mark the device as found */
+    idev->found = 1;
+  } while (!DO_ONCE);
+  
+  /* free the property strings */
+  udev_device_unref(dev);
+}
+
+
+
 /*
  * linux_refresh_devices
  *
@@ -2198,25 +2318,18 @@ int32_t linux_refresh_devices(struct usbi_bus* ibus)
   struct udev_list_entry  *devices = NULL, *device_list_entry = NULL;
   struct udev_device*     dev;
   struct usbi_device	    *idev = NULL, *tidev = NULL;
-	int 			              busnum = 0, pdevnum = 0,
-						              devnum = 0, max_children = 0;
   
   /* Validate... */
 	if (!ibus) {
 		return (OPENUSB_BADARG);
 	}
 	
-	/* hold the lock so that the event thread will have to wait,
-	 * linux_refresh_devices will unlock it */
-	pthread_mutex_lock(&linuxdbus_lock);
-
 	/* Lock the bus */
 	pthread_mutex_lock(&ibus->lock);
   
   udev = udev_new();
   if (!udev) {
     usbi_debug(NULL, 1, "error: udev_new");
-    pthread_mutex_unlock(&linuxdbus_lock);
 		pthread_mutex_unlock(&ibus->lock);
 		return (OPENUSB_SYS_FUNC_FAILURE);
   }
@@ -2229,7 +2342,7 @@ int32_t linux_refresh_devices(struct usbi_bus* ibus)
   
   /* Now we'll go through each device, if it matches our bus then we'll get the
    * information we need to know about it and add it to our list */
-  udev_list_entry_foreach(device_list_entry, devices) {
+  udev_list_entry_foreach(device_list_entry, devices) {    
     
     const char* path;
     
@@ -2237,644 +2350,182 @@ int32_t linux_refresh_devices(struct usbi_bus* ibus)
      * grab the device itself so we can interrogate it */
     path = udev_list_entry_get_name(device_list_entry);
     dev = udev_device_new_from_syspath(udev, path);
-    
-    usbi_debug(NULL, 4, "processing device: %s", path);
 
-	  /* We need to know the bus number, device number, parent device number,
-	   * parent port and the maximum number of children this device can have
-	   * in order to add it to our list */
-	  const char* busnumString = udev_device_get_sysattr_value(dev, "busnum");
-	  if (busnumString == NULL) {
-	    /* this isn't a usb device, it's some other usb thing in sysfs, skip it */
-	    udev_device_unref(dev);
-	    continue;  
-	  }
-	  busnum = atoi(busnumString);
-	
-  	/* if ibus is not NULL then we don't want to process this device unless
-     * the specified bus number is the same */
-  	if (ibus != NULL) {
-  	
-	  	/* Check the bus number to see if this device is on the specified bus */
-	  	if (busnum != ibus->busnum) {
-	  		udev_device_unref(dev);
-	  		continue;
-	  	}
-	  
-	  } else {
-
-		  /* find the ibus that this device is on */
-		  ibus = usbi_find_bus_by_num(busnum);
-		  if (!ibus) {
-			  usbi_debug(NULL, 4, "Unable to find bus by number: %d", busnum);
-			  udev_device_unref(dev);
-			  continue;
-		  }
-	  }
-
-	  /* Get the device number */
-	  devnum = atoi(udev_device_get_sysattr_value(dev, "devnum"));
-
-	  /* Get the number of ports (aka max_children) */
-	  max_children = atoi(udev_device_get_sysattr_value(dev, "maxchild"));
-	
-	  /* Get the parent's device number*/
-	  dev = udev_device_get_parent(dev);
-	  const char* pdevnumString = udev_device_get_sysattr_value(dev, "devnum");
-		if (pdevnumString == NULL) {
-		  usbi_debug(NULL, 4, "Error getting parent device number. This is probably the root device");
-		  /* this means that there probably isn't a parent device number, so
-		   * make it zero, meaning this is the root device */
-		  pdevnum = 0;
-	  } else {
-	    pdevnum = atoi(pdevnumString);
-	  }
-		
-  	/* Validate what we have so far */
-	  if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
-			  max_children >= USB_MAX_DEVICES_PER_BUS ||
-			  pdevnum >= USB_MAX_DEVICES_PER_BUS) {
-		  usbi_debug(NULL, 1, "invalid device number or parent device");
-		  udev_device_unref(dev);
-		  continue;
-	  }
-
-	  /* Make sure we don't have two root devices */
-	  if (!pdevnum && ibus->root && ibus->root->found) {
-		  usbi_debug(NULL, 1, "cannot have two root devices");
-		  udev_device_unref(dev);
-		  continue;
-	  }
-
-	  /* Only add this device if it's new */
-	  /* If we don't have a device by this number yet, it must be new */
-	  idev = ibus->priv->dev_by_num[devnum];
-	  if (!idev) {
-		  int ret;
-
-		  ret = create_new_device(&idev, ibus, devnum, max_children);
-		  if (ret) {
-			  usbi_debug(NULL, 1, "ignoring new device because of errors");
-			  udev_device_unref(dev);
-			  continue;
-		  }
-
-		  /* set the parent device number */
-		  idev->priv->pdevnum = pdevnum;
-		
-		  /* copy the sysfs path */
-		  idev->priv->sysfspath = strdup(path);
-		
-		  /* add the device */
-		  usbi_add_device(ibus, idev);
-
-		  /* Setup the parent relationship, if this device is new */
-		  if (idev->priv->pdevnum) {
-			  idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
-		  } else {
-			  ibus->root = idev;
-		  }
-
-	  }
-
-	  /* Mark the device as found */
-	  idev->found = 1;
-
-	  /* free the property strings */
-	  udev_device_unref(dev);
+    process_new_device(ibus, dev, path);
   }
-    
+
   /* make sure every device we currently have in the list was found,
 	 * if not, remove it. */
 	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
-		if (!idev->found) {
-			/* Device disappeared, remove it */
-			usbi_debug(NULL, 2, "device %d removed", idev->devnum);
-			usbi_remove_device(idev);
-		}
-
-		/* Setup the parent relationship */
-		if (idev->priv->pdevnum) {
-			idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
-		} else {
-			ibus->root = idev;
-		}
+	  if (!idev->found) {
+		  /* Device disappeared, remove it */
+		  usbi_debug(NULL, 2, "device %d removed", idev->devnum);
+		  usbi_remove_device(idev);
+	  }
 	}
 
 	/* unlock */
 	pthread_mutex_unlock(&ibus->lock);
 	
-	/* Cleanup libudev */  
+	/* Cleanup libudev */
   udev_enumerate_unref(udevEnumeration);
   udev_unref(udev);
   
   /* Now that we've done with libudev unlock the lock so the event thread
 	 * can get to work */
 	usbi_debug(NULL, 4, "exiting linux_refresh_devices");
-	pthread_mutex_unlock(&linuxdbus_lock);
   return (OPENUSB_SUCCESS);
-}
+}    
 
 
 
-
-#if USING_HAL
 /*
- * linux_refresh_devices
+ * find_device_by_sysfspath
  *
- *  Make a new search of the devices on the bus and refresh the device list.
- *  The device nodes that have been detached from the system would be removed 
- *  from the list.
+ * This function will find the device in our list of known devices with
+ * the specified sysfs path
  */
-int32_t linux_refresh_devices(struct usbi_bus *ibus)
+struct usbi_device *find_device_by_sysfspath(const char *path)
 {
-	int 								i;
-	int 								num_devices;
-	char 								**device_names = NULL;
-	struct usbi_device	*idev = NULL, *tidev = NULL;
-	DBusError						error;
-	DBusConnection			*conn = NULL;
-	LibHalContext				*hal_ctx = NULL;
+	struct usbi_device* idev = NULL;
+ 	struct usbi_list*   pusbi_devices = usbi_get_devices_list();
+ 	
+	usbi_debug(NULL, 4, "searching device: %s", path);
+ 	
+ 	pthread_mutex_lock(&usbi_devices.lock);
+ 	list_for_each_entry(idev, &((*pusbi_devices).head), dev_list) {
+ 	  if (!idev->priv->sysfspath) {
+   	  continue;
+ 	  }
+ 	
+ 	  if (strcmp(path, idev->priv->sysfspath) == 0) {
+   	  pthread_mutex_unlock(&usbi_devices.lock);
+  	  return (idev);
+ 	  }
+ 	}
+ 	pthread_mutex_unlock(&usbi_devices.lock);
+ 	
+ 	return (NULL);
+} 
 
-	/* Validate... */
-	if (!ibus) {
-		return (OPENUSB_BADARG);
-	}
 
-	/* hold the lock so that the event thread will have to wait,
-	 * linux_refresh_devices will unlock it */
-	pthread_mutex_lock(&linuxdbus_lock);
 
-	/* Lock the bus */
-	pthread_mutex_lock(&ibus->lock);
-
-	/* Initialize the error struct... */
-	dbus_error_init (&error);
-
-	/* Create & Initialize the HAL context */
-	if ((hal_ctx = libhal_ctx_new()) == NULL) {
-		usbi_debug(NULL, 1, "error: libhal_ctx_new");
-		pthread_mutex_unlock(&linuxdbus_lock);
-		return (OPENUSB_SYS_FUNC_FAILURE);
-	}
-
-	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
-	if (conn == NULL) {
-		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name,
-							 error.message);
-		dbus_error_free(&error);
-		libhal_ctx_free (hal_ctx);
-		pthread_mutex_unlock(&linuxdbus_lock);
-		return (OPENUSB_SYS_FUNC_FAILURE);
-	}
-
-	/* Set the DBUS connection */
-	if (!libhal_ctx_set_dbus_connection (hal_ctx, conn)) {
-		usbi_debug(NULL, 1, "error: libhal_ctx_set_dbus_connection: %s: %s\n",
-							 error.name, error.message);
-		libhal_ctx_free (hal_ctx);
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		pthread_mutex_unlock(&linuxdbus_lock);
-		return (OPENUSB_SYS_FUNC_FAILURE);
-	}
-
-	/* Initialize the HAL context */
-	if (!libhal_ctx_init (hal_ctx, &error)) {
-		if (dbus_error_is_set(&error)) {
-			usbi_debug(NULL, 1, "error: libhal_ctx_init: %s: %s\n",
-								 error.name, error.message);
-			dbus_error_free(&error);
-		}
-		usbi_debug(NULL, 1, "Could not initialise connection to hald.");
-		usbi_debug(NULL, 1, "Normally this means the HAL daemon (hald) is");
-		usbi_debug(NULL, 1, "not running or not ready.");
-		libhal_ctx_free (hal_ctx);
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		pthread_mutex_unlock(&linuxdbus_lock);
-		return (OPENUSB_SYS_FUNC_FAILURE);
-	}
-
-	/* Get an array of all the devices on the system */
-	device_names = libhal_get_all_devices (hal_ctx, &num_devices, &error);
-	if (device_names == NULL) {
-		dbus_error_free(&error);
-		usbi_debug(NULL, 1, "Couldn't obtain list of devices\n");
-		libhal_ctx_free (hal_ctx);
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		pthread_mutex_unlock(&linuxdbus_lock);
-		return (OPENUSB_SYS_FUNC_FAILURE);
-	}
-
-	/* Loops through the devices that were found and look for usb devices to
-	 * add to our list of known devices */
-	for (i = 0;i < num_devices;i++) {
-		process_new_device(hal_ctx, device_names[i], ibus);
-	}
-
-	/* free the devices list */
-	libhal_free_string_array(device_names);
-	
-	/* make sure every device we currently have in the list was found,
-	 * if not, remove it. */
-	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
-		if (!idev->found) {
-			/* Device disappeared, remove it */
-			usbi_debug(NULL, 2, "device %d removed", idev->devnum);
-			usbi_remove_device(idev);
-		}
-
-		/* Setup the parent relationship */
-		if (idev->priv->pdevnum) {
-			idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
-		} else {
-			ibus->root = idev;
-		}
-	}
-
-	/* unlock */
-	pthread_mutex_unlock(&ibus->lock);
-	
-	/* Free the HAL context (don't shut it down or we won't get events) */
-	libhal_ctx_free (hal_ctx);
-
-	/* Close the DBUS connection */
-	dbus_connection_close (conn);
-	dbus_connection_unref (conn);
-
-	/* Now that we've done with dbus/hal unlock the dbus lock so the event thread
-	 * can get to work */
-	usbi_debug(NULL, 4, "exiting linux_refresh_devices");
-	pthread_mutex_unlock(&linuxdbus_lock);
-
-	return (OPENUSB_SUCCESS);
+/*
+ * device_added
+ *
+ *  Adds a new device to our list of known devices
+ */
+void device_added(struct udev_device* dev, const char* path)
+{
+  struct usbi_device *idev = NULL;
+  struct usbi_handle *handle, *thdl;
+  
+  usbi_debug(NULL, 4, "Event device added, path='%s'", path);
+  
+  /* search for the device in our list, if we already have it just notify that
+   * the device has been reconnected, otherwise process it as a new device */
+  idev = find_device_by_sysfspath(path);
+ 	if (idev) {
+  	/* old device re-inserted */
+  	usbi_debug(NULL, 4, "old device: %d", (int)idev->devid);
+  	pthread_mutex_lock(&usbi_handles.lock);
+   	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list) {
+    	/* every openusb instance should get notification of this event */
+   	  usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+    }
+    pthread_mutex_unlock(&usbi_handles.lock);
+  } else {
+    process_new_device(NULL, dev, path);
+  }
 }
 
 
 
 /*
- * find_device_by_udi
+ * device_removed
  *
- *	This function will find the device in our list of known devices with
- *	the specified HAL unique identifier (udi).
- */
-struct usbi_device *find_device_by_udi(const char *udi)
-{
-	struct usbi_device	*idev = NULL;
-	struct usbi_list		*pusbi_devices = usbi_get_devices_list();
-	
-	usbi_debug(NULL, 4, "searching device: %s", udi);
-	
-	pthread_mutex_lock(&usbi_devices.lock);
-	list_for_each_entry(idev, &((*pusbi_devices).head), dev_list) {
-		if (!idev->priv->udi) {
-			continue;
-		}
-
-		if (strcmp(udi, idev->priv->udi) == 0) {
-			pthread_mutex_unlock(&usbi_devices.lock);
-			return (idev);
-		}
-	}
-	pthread_mutex_unlock(&usbi_devices.lock);
-
-	return (NULL);
-}
-
-
-void process_new_device(LibHalContext *hal_ctx, const char *udi,
-	       	struct usbi_bus *ibus)
-{
-	char			*parent;
-	char			*bus;
-	DBusError		error;
-	struct usbi_device	*idev;
-	int 			busnum = 0, pdevnum = 0,
-						devnum = 0, max_children = 0;
-
-	/* Initialize the error structure */
-	dbus_error_init(&error);
-
-	/* Get the bus, so we know what type of device this is */
-	bus = libhal_device_get_property_string(hal_ctx, udi, "info.bus", &error);
-	if (dbus_error_is_set(&error)) {
-		dbus_error_free(&error);
-
-		/* we might have a newer version of hal and we might need to search 
-		 * info.subsystem */
-		bus = libhal_device_get_property_string(hal_ctx, udi, "info.subsystem", &error);
-		if (dbus_error_is_set(&error)) {
-			dbus_error_free(&error);
-			return;
-		}
-	}
-
-	/* if this is not a usb device, we're not interested */
-	if (strcmp(bus, "usb_device") != 0) {
-		libhal_free_string(bus);
-		return;
-	}
-
-	usbi_debug(NULL, 4, "processing new device: %s", udi);
-
-	/* We need to know the bus number, device number, parent device number,
-	 * parent port and the maximum number of children this device can have
-	 * in order to add it to our list */
-	busnum = libhal_device_get_property_int(hal_ctx, udi, 
-																					"usb_device.bus_number", &error);
-	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "get device bus number error: %s", error.message);
-		dbus_error_free(&error);
-		libhal_free_string(bus);
-		return;
-	}
-
-	/* if ibus is not NULL then we don't want to process this device unless
-   * the specified bus number is the same */
-	if (ibus != NULL) {
-		/* Check the bus number to see if this device is on the specified bus */
-		if (busnum != ibus->busnum) {
-			libhal_free_string(bus);
-			return;
-		}
-	} else {
-
-		/* find the ibus that this device is on */
-		ibus = usbi_find_bus_by_num(busnum);
-		if (!ibus) {
-			usbi_debug(NULL, 4, "Unable to find bus by number: %d", busnum);
-			return;
-		}
-	}
-
-	/* Get the device number */
-	devnum = libhal_device_get_property_int(hal_ctx, udi,
-																					"usb_device.linux.device_number",
-																					&error);
-	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "get device number error: %s", error.message);
-		dbus_error_free(&error);
-		libhal_free_string(bus);
-		return;
-	}
-
-	/* Get the parent and it's device number */
-	parent = libhal_device_get_property_string(hal_ctx, udi, 
-																						 "info.parent", &error);
-	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "Error getting parent device name: %s", error.message);
-		dbus_error_free(&error);
-		libhal_free_string(bus);
-		return;
-	}
-
-	pdevnum = libhal_device_get_property_int(hal_ctx, parent,
-			"usb_device.linux.device_number", &error);
-	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "Error getting parent device number: %s",error.message);
-		dbus_error_free(&error);
-		/* this means that there probably isn't a parent device number, so
-		 * make it zero, meaning this is the root device */
-		pdevnum = 0;
-	}
-		
-	/* Get the number of ports (aka max_children) */
-	max_children = libhal_device_get_property_int(hal_ctx, udi,
-			"usb_device.num_ports", &error);
-	if (dbus_error_is_set(&error)) {
-		usbi_debug(NULL, 4, "Error getting the number of ports: %s", error.message);
-		dbus_error_free(&error);
-	}
-		
-	/* Validate what we have so far */
-	if (devnum < 1 || devnum >= USB_MAX_DEVICES_PER_BUS ||
-			max_children >= USB_MAX_DEVICES_PER_BUS ||
-			pdevnum >= USB_MAX_DEVICES_PER_BUS) {
-		usbi_debug(NULL, 1, "invalid device number or parent device");
-		libhal_free_string(bus);
-		return;
-	}
-
-	/* Make sure we don't have two root devices */
-	if (!pdevnum && ibus->root && ibus->root->found) {
-		usbi_debug(NULL, 1, "cannot have two root devices");
-		libhal_free_string(bus);
-		return;
-	}
-
-	/* Only add this device if it's new */
-	/* If we don't have a device by this number yet, it must be new */
-	idev = ibus->priv->dev_by_num[devnum];
-	if (!idev) {
-		int ret;
-
-		ret = create_new_device(&idev, ibus, devnum, max_children);
-		if (ret) {
-			usbi_debug(NULL, 1, "ignoring new device because of errors");
-			libhal_free_string(bus);
-			return;
-		}
-
-		/* set the parent device number */
-		idev->priv->pdevnum = pdevnum;
-		
-		/* copy the udi */
-		idev->priv->udi = strdup(udi);
-		
-		/* add the device */
-		usbi_add_device(ibus, idev);
-
-		/* Setup the parent relationship, if this device is new */
-		if (idev->priv->pdevnum) {
-			idev->parent = ibus->priv->dev_by_num[idev->priv->pdevnum];
-		} else {
-			ibus->root = idev;
-		}
-
-	}
-
-	/* Mark the device as found */
-	idev->found = 1;
-
-	/* free the property strings */
-	libhal_free_string(bus);
-
-	return;
-}
-
-
-
-/*
- * Invoked when a device is added to the Global Device List.
+ *  Invoked when a device is removed from the Global Device List.
  *
  */
-void device_added (LibHalContext *ctx, const char *udi)
-{
-	struct usbi_device *idev = NULL;
-	struct usbi_handle *handle, *thdl;
+void device_removed(struct udev_device* dev, const char* path)
+{ 
+ 	struct usbi_device *idev = NULL;
+ 	
+ 	usbi_debug(NULL, 4, "Event: device_removed, path='%s'", path);
+ 	
+ 	idev = find_device_by_sysfspath(path);
+ 	if (idev) {
+ 	
+ 	  /* Make sure the device gets closed (we don't care about the status) */
+    linux_close(idev->priv->hdev);
 
-	usbi_debug(NULL, 4, "Event: device_added, udi='%s'", udi);
+    /* Clear the dev_by_num field */
+   	idev->bus->priv->dev_by_num[idev->devid] = NULL;
 
-	idev = find_device_by_udi(udi);
-	if (idev) {
-		/* old device re-inserted */
-		usbi_debug(NULL, 4, "old device: %d", (int)idev->devid);
-		pthread_mutex_lock(&usbi_handles.lock);
-		list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list) {
-			/* every openusb instance should get notification
-			 * of this event */
-			usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
-		}
-		pthread_mutex_unlock(&usbi_handles.lock);
-	} else {
-		pthread_mutex_lock(&linuxdbus_lock);
-		process_new_device(ctx, udi, NULL);
-		pthread_mutex_unlock(&linuxdbus_lock);
-	}
-}
-
-
-
-/*
- * Invoked when a device is removed from the Global Device List.
- *
- */
-void device_removed(LibHalContext *ctx, const char *udi)
-{
-	struct usbi_device	*idev = NULL;
-	
-	usbi_debug(NULL, 4, "Event: device_removed, udi='%s'", udi);
-	
-	idev = find_device_by_udi(udi);
-	if (idev) {
-
-		/* Make sure the device gets closed (we don't care about the status) */
-		linux_close(idev->priv->hdev);
-
-		/* Clear the dev_by_num field */
-		idev->bus->priv->dev_by_num[idev->devid] = NULL;
-		
-		/* removed the device */
-		usbi_remove_device(idev);
-	}
-
-	/* If the device wasn't found we don't do anything */
-	return;
-}
+    /* removed the device */
+    usbi_remove_device(idev);
+  }
+   	
+  /* If the device wasn't found we don't do anything */
+  return;
+} 
 
 
 
 /*
  * hotplug event monitoring thread
+ *
+ * This function runs in a separate thread, so we allow it to block while
+ * waiting for a device to connect. We'll shut it down when openusb closes.
  */
-void *hal_hotplug_event_thread(void *unused)
+void *udev_hotplug_event_thread(void *unused)
 {
-	LibHalContext		*hal_ctx = NULL;
-	DBusConnection	*conn = NULL;
-	DBusError				error;
-	GMainContext		*gmaincontext = NULL;
-	
-	pthread_mutex_lock(&linuxdbus_lock);
+  struct udev_monitor* udevMonitor;
+  struct udev_device*  dev;
+  struct udev*         udev;
 
-	usbi_debug(NULL, 4, "starting hotplug thread...");
-	
-	/* Create the gmaincontext and the event loop */
-	gmaincontext = g_main_context_new();
-	event_loop = g_main_loop_new (gmaincontext, FALSE);
+  /* create the new udev device */
+  udev = udev_new();
+  if (!udev) {
+    usbi_debug(NULL, 1, "error: udev_new");
+		return (OPENUSB_SYS_FUNC_FAILURE);
+  }
+  
+  /* Set up a monitor to check for new usb devices */
+	udevMonitor = udev_monitor_new_from_netlink(udev, "udev");
+	udev_monitor_filter_add_match_subsystem_devtype(udevMonitor, "usb", NULL);
+	udev_monitor_enable_receiving(udevMonitor);
 
-	/* Initialize the error structure */
-	dbus_error_init(&error);
-	
-	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, &error);
-	if (conn == NULL) {
-		usbi_debug(NULL, 1, "error: dbus_bus_get: %s: %s", error.name,
-							 error.message);
-		dbus_error_free(&error);
-		return (NULL);
-	}
+  while (1) {
 
-	/* Create & Initialize the HAL gmaincontext */
-	if ((hal_ctx = libhal_ctx_new()) == NULL) {
-		usbi_debug(NULL, 1, "error: libhal_ctx_new");
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		return (NULL);
-	}
-	
-	/* setup the glib/DBUS connection */
-	dbus_connection_setup_with_g_main(conn, gmaincontext);
-
-	/* Set the DBUS connection */
-	if (!libhal_ctx_set_dbus_connection (hal_ctx, conn)) {
-		usbi_debug(NULL, 1, "error: libhal_ctx_set_dbus_connection: %s: %s\n",
-							 error.name, error.message);
-		libhal_ctx_free (hal_ctx);
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		return (NULL);
-	}
-
-	/* Initialize the HAL gmaincontext */
-	if (!libhal_ctx_init (hal_ctx, &error)) {
-		if (dbus_error_is_set(&error)) {
-			usbi_debug(NULL, 1, "error: libhal_ctx_init: %s: %s\n",
-								 error.name, error.message);
-			dbus_error_free(&error);
-		}
-
-		usbi_debug(NULL, 1, "Could not initialise connection to hald.");
-		usbi_debug(NULL, 1, "Normally this means the HAL daemon (hald) is");
-		usbi_debug(NULL, 1, "not running or not ready.");
-		libhal_ctx_free (hal_ctx);
-		dbus_connection_close (conn);
-		dbus_connection_unref (conn);
-		return (NULL);
-	}
-
-	libhal_ctx_set_device_added (hal_ctx, device_added);
-	libhal_ctx_set_device_removed (hal_ctx, device_removed);
-
-	/* unlock the dbus thread */
-	pthread_mutex_unlock(&linuxdbus_lock);
-
-	/* run the main loop */
-	if (event_loop != NULL) {
-		usbi_debug(NULL, 4, "hotplug thread running...");
-		g_main_loop_run (event_loop);
-		usbi_debug(NULL, 4, "hotplug thread exiting...");
-	}
-
-	/* hold the dbus lock */
-	pthread_mutex_lock(&linuxdbus_lock);
-
-	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE) {
-		dbus_error_free(&error);
-	}
-	libhal_ctx_free (hal_ctx);
-
-	dbus_connection_close (conn);
-	dbus_connection_unref (conn);
-	
-	g_main_context_unref(gmaincontext);
-	g_main_context_release(gmaincontext);
-	
-	pthread_mutex_unlock(&linuxdbus_lock);
-
-	return (NULL);
+    /* TODO: We may need to do a select call on a pipe to properly shutdown the monitor
+     * however, for now, let's hope we don't have to do that */
+    /* udev_monitor_receive_device will block. since this is running in a
+     * separate thread, that's ok */
+    dev = udev_monitor_receive_device(udevMonitor);
+    if (dev) {
+      const char* action  = udev_device_get_action(dev);
+      const char* syspath = udev_device_get_syspath(dev);
+      usbi_debug(NULL, 4, "device %s: %s", action, syspath);
+    
+      if (   (strcasecmp("add", action)    == 0) 
+          || (strcasecmp("change", action) == 0)
+          || (strcasecmp("move", action)   == 0) )
+      {      
+        device_added(dev, syspath);            
+      } else if (strcasecmp("remove", action) == 0) {    
+        device_removed(dev, syspath);            
+      }
+         
+    } /* end if (dev) ... */    
+  } /* end while(1) ... */
+  
+  return (NULL);
 }
 
 
-#endif
 
-
-
-
-
-
-
-
+/* Assigns the backend operations for linux */
 struct usbi_backend_ops backend_ops = {
 	.backend_version						= 1,
 	.io_pattern									= PATTERN_ASYNC,

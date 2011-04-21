@@ -162,7 +162,7 @@ typedef enum {
 /* Thread Functions */
 void *poll_io(void *usbihdl);
 void *poll_events(void *unused);
-void *hal_hotplug_event_thread(void *unused);
+void *udev_hotplug_event_thread(void *unused);
 
 
 /* Helper Functions */
@@ -223,7 +223,6 @@ struct usbi_dev_hdl_private
   /* The following variables tell us whether or not USBFS supports enchanced
    * handling of short bulk transfers when more than one URB is needed for the
    * full transfer */
-	char      supports_flag_short_not_ok; 
   char      supports_flag_bulk_continuation;
 };
 
