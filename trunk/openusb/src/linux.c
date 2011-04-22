@@ -30,9 +30,12 @@
 #define LINUX_MAX_CTRL_XFER       4096
 
 
-static pthread_t	      event_thread;
-static char		          device_dir[PATH_MAX + 1] = "";
-static int32_t		      linux_backend_inited = 0;
+static pthread_t  hotplug_thread;
+static int        hotplug_pipe[2] = {0, 0};
+static char		    device_dir[PATH_MAX + 1] = "";
+static int32_t		linux_backend_inited = 0;
+static int8_t     supports_flag_bulk_continuation = 0;
+
 
 
 /*
@@ -77,7 +80,7 @@ int32_t translate_errno(int errnum)
  *  Check to see if the bulk continuation URB flag is support. It is supported
  *  in kernel version 2.6.32+ 
  */ 
-int32_t supports_flag_bulk_continuation(void)
+int32_t check_bulk_continuation_flag(void)
 {
   struct utsname uts;
   int major, minor, sublevel;
@@ -99,6 +102,7 @@ int32_t supports_flag_bulk_continuation(void)
     }
   }
   
+  usbi_debug(NULL, 4, "kernel 2.6.32+ detected, using bulk continuation");
   return 1;
 }
 
@@ -210,12 +214,12 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
 		return (hdev->priv->fd);
 	}
 	
-  /* Check to see if the kernel supports the short_not_ok and bulk_continuation
-   * flags. */
-	hdev->priv->supports_flag_bulk_continuation = supports_flag_bulk_continuation();
-
 	/* setup the event pipe for this device */
-	pipe(hdev->priv->event_pipe);
+	ret = pipe(hdev->priv->event_pipe);
+	if (ret == -1) {
+	  usbi_debug(NULL, 1, "unable to create io event pipe: %d", ret);
+	  return (OPENUSB_SYS_FUNC_FAILURE);
+	}
 
 	/* Start up thread for polling io */
 	ret = pthread_create(&hdev->priv->io_thread, NULL, poll_io, (void*)hdev);
@@ -573,11 +577,21 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	} else {
 		usbi_debug(hdl, 1, "no USB device directory found");
 	}
-
+	
+	/* Does the kernel support bulk continuation? */
+  supports_flag_bulk_continuation = check_bulk_continuation_flag();
+	
+	/* Create the device pipe */
+	ret = pipe(hotplug_pipe);
+	if (ret == -1) {
+	  usbi_debug(NULL, 1, "unable to create hotplug pipe: %d", ret);
+	  return (OPENUSB_SYS_FUNC_FAILURE);
+	}
+	 
 	/* Start up thread for polling events */
-	ret = pthread_create(&event_thread, NULL, udev_hotplug_event_thread, (void*)NULL);
+	ret = pthread_create(&hotplug_thread, NULL, udev_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
-		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
+		usbi_debug(NULL, 1, "unable to create hotplug thread: %d", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
 	}
 
@@ -596,6 +610,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  */
 void linux_fini(struct usbi_handle *hdl)
 {
+  uint8_t buf;
 	
 	/* If we're not initailized, don't bother */
 	if (!linux_backend_inited) {
@@ -607,7 +622,19 @@ void linux_fini(struct usbi_handle *hdl)
 		linux_backend_inited--;
 		return;
 	}
-
+	
+	/* shutdown the hotplug thread */
+  if (write(hotplug_pipe[1], &buf, 1) == -1) {
+    usbi_debug(hdl, 1, "unable to write to the hotplug pipe, hanging...");
+  }
+	pthread_join(hotplug_thread, NULL);
+	
+	/* close the hotplug pipes */
+	if (hotplug_pipe[0] > 0)
+		close(hotplug_pipe[0]);
+	if (hotplug_pipe[1] > 0)
+		close(hotplug_pipe[1]);  
+	
 	/* We're no longer initialized */
 	linux_backend_inited--;
 
@@ -925,12 +952,12 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 		if (io->priv->num_urbs > 1)
 		{
 		  /* If USBFS supports enhanced handling of short transfers, set the flag */
-	  	if (hdev->priv->supports_flag_bulk_continuation) {
+	  	if (supports_flag_bulk_continuation) {
 		    urb->flags = USBK_URB_SHORT_NOT_OK;
 		  }
 		  /* To fully support handling short transfers this flag must be set for all
 		   * URBs except the first one */
-		  if ((i > 0) && hdev->priv->supports_flag_bulk_continuation) {
+		  if ((i > 0) && supports_flag_bulk_continuation) {
 		    urb->flags |= USBK_URB_BULK_CONTINUATION;
 		  }
 		}
@@ -1804,7 +1831,9 @@ void *poll_io(void *devhdl)
 
 		/* if there is data to be read on the event pipe read it and discard */
 		if (FD_ISSET(hdev->priv->event_pipe[0], &readfds)) {
-			read(hdev->priv->event_pipe[0], buf, 1);
+			if (read(hdev->priv->event_pipe[0], buf, 1) == -1) {
+			  usbi_debug(hdev->lib_hdl, 1, "failed to read from the io event pipe");
+			}
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
 				pthread_mutex_unlock(&hdev->lock);
@@ -1819,7 +1848,9 @@ void *poll_io(void *devhdl)
 		 * longer be able to submit io requests (because the file buffer will
 		 * fill up. */
 		if (FD_ISSET(hdev->event_pipe[0], &readfds)) {
-			read(hdev->event_pipe[0], buf, 1);
+			if (read(hdev->event_pipe[0], buf, 1) == -1) {
+			  usbi_debug(hdev->lib_hdl, 1, "failed to read from the event pipe");
+			}
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
 				pthread_mutex_unlock(&hdev->lock);
@@ -2420,8 +2451,6 @@ void device_added(struct udev_device* dev, const char* path)
   struct usbi_device *idev = NULL;
   struct usbi_handle *handle, *thdl;
   
-  usbi_debug(NULL, 4, "Event device added, path='%s'", path);
-  
   /* search for the device in our list, if we already have it just notify that
    * the device has been reconnected, otherwise process it as a new device */
   idev = find_device_by_sysfspath(path);
@@ -2451,8 +2480,6 @@ void device_removed(struct udev_device* dev, const char* path)
 { 
  	struct usbi_device *idev = NULL;
  	
- 	usbi_debug(NULL, 4, "Event: device_removed, path='%s'", path);
- 	
  	idev = find_device_by_sysfspath(path);
  	if (idev) {
  	
@@ -2480,44 +2507,80 @@ void device_removed(struct udev_device* dev, const char* path)
  */
 void *udev_hotplug_event_thread(void *unused)
 {
-  struct udev_monitor* udevMonitor;
+  struct udev*         udev           = NULL;
+  struct udev_monitor* udevMonitor    = NULL;
   struct udev_device*  dev;
-  struct udev*         udev;
-
-  /* create the new udev device */
+  int                  udevfd, maxfd;
+  fd_set               fds;
+  struct timeval       tv;
+  int                  ret;
+  uint8_t 						 buf;
+ 
+ 	/* Create the udev reference for the event thread */
   udev = udev_new();
   if (!udev) {
     usbi_debug(NULL, 1, "error: udev_new");
-		return (OPENUSB_SYS_FUNC_FAILURE);
+		return (NULL);
   }
-  
+ 
   /* Set up a monitor to check for new usb devices */
 	udevMonitor = udev_monitor_new_from_netlink(udev, "udev");
 	udev_monitor_filter_add_match_subsystem_devtype(udevMonitor, "usb", NULL);
 	udev_monitor_enable_receiving(udevMonitor);
+	udevfd = udev_monitor_get_fd(udevMonitor);
 
   while (1) {
-
-    /* TODO: We may need to do a select call on a pipe to properly shutdown the monitor
-     * however, for now, let's hope we don't have to do that */
-    /* udev_monitor_receive_device will block. since this is running in a
-     * separate thread, that's ok */
-    dev = udev_monitor_receive_device(udevMonitor);
-    if (dev) {
-      const char* action  = udev_device_get_action(dev);
-      const char* syspath = udev_device_get_syspath(dev);
-      usbi_debug(NULL, 4, "device %s: %s", action, syspath);
+    /* Setup select() to block, more or less forever (1 hour), when we have
+     * when it unblocks we either have data on the udev monitor, or we're
+     * shutting down */
+    FD_ZERO(&fds);
+    FD_SET(udevfd, &fds);
+    FD_SET(hotplug_pipe[0], &fds);
+    gettimeofday(&tv, NULL);
+    tv.tv_sec = tv.tv_sec + (60*60);      
     
-      if (   (strcasecmp("add", action)    == 0) 
-          || (strcasecmp("change", action) == 0)
-          || (strcasecmp("move", action)   == 0) )
-      {      
-        device_added(dev, syspath);            
-      } else if (strcasecmp("remove", action) == 0) {    
-        device_removed(dev, syspath);            
+    /* determine the max fd for select() */
+    if (udevfd > hotplug_pipe[0]) {
+      maxfd = udevfd;
+    } else {
+      maxfd = hotplug_pipe[0];
+    }
+    
+    /* Call select and then check our result to decide what comes next */
+    ret = select(maxfd+1, &fds, NULL, NULL, &tv);
+    if ((ret > 0) && FD_ISSET(udevfd, &fds)) {
+
+      /* select ensured that this call will NOT block */
+      dev = udev_monitor_receive_device(udevMonitor);
+      if (dev) {
+        const char* action  = udev_device_get_action(dev);
+        const char* syspath = udev_device_get_syspath(dev);
+        usbi_debug(NULL, 4, "device %s: %s", action, syspath);
+    
+        if (   (strcasecmp("add", action)    == 0) 
+            || (strcasecmp("change", action) == 0)
+            || (strcasecmp("move", action)   == 0) )
+        {      
+          device_added(dev, syspath);            
+        } else if (strcasecmp("remove", action) == 0) {    
+          device_removed(dev, syspath);            
+        }
+      } /* end if (dev) ... */   
+    } /* end if ((ret > 0) ... */
+    
+    /* Check to see if we're closing */
+    if ((ret > 0) && FD_ISSET(hotplug_pipe[0], &fds)) {
+      usbi_debug(NULL, 4, "shutting down the hotplug thread");
+      if (read(hotplug_pipe[0], &buf, 1) == -1) {
+        usbi_debug(NULL, 1, "failed to read from the hotplug pipe");
       }
-         
-    } /* end if (dev) ... */    
+      
+      /* Close down our monitor, udev connect and break out */
+      udev_monitor_unref(udevMonitor);
+      udev_unref(udev);
+      break;
+    }
+    
   } /* end while(1) ... */
   
   return (NULL);

@@ -219,11 +219,6 @@ struct usbi_dev_hdl_private
 	int       event_pipe[2]; /* let's us know when things are happening */
 	int16_t		reattachdrv;	 /* do we need to reattach the kernel driver */
 	pthread_t io_thread;     /* thread for processing io requests */
-
-  /* The following variables tell us whether or not USBFS supports enchanced
-   * handling of short bulk transfers when more than one URB is needed for the
-   * full transfer */
-  char      supports_flag_bulk_continuation;
 };
 
 
