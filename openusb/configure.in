@@ -186,6 +186,7 @@ AC_CHECK_FUNCS(memmove)
 dnl
 dnl Check for glib, gthread, dbus, dbus-glib, hal, libusb
 dnl
+PKG_PROG_PKG_CONFIG
 if test "$os_support" = "darwin"; then
 
    PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
