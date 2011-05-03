@@ -58,7 +58,7 @@ static volatile int32_t event_callback_exit = 0;
 
 
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
-	uint32_t line, char *fmt, ...)
+	uint32_t line, const char *fmt, ...)
 {
 	char str[512];
 	va_list ap;
