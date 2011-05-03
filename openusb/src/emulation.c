@@ -44,7 +44,7 @@ static  int usb_error_errno;
 static  usb_error_type_t usb_error_type = USB_ERROR_TYPE_NONE;
 
 static void
-wr_error_str(int x, char *format, ...)
+wr_error_str(int x, const char *format, ...)
 {
 	va_list ap;
 
@@ -590,8 +590,8 @@ int usb_close(struct usb_dev_handle *dev)
 /* internal bulk transfer function
  * throw all validity check work to openusb1.0 API
  */
-int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
-	int timeout)
+static int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
+	int size, int timeout)
 {
 	openusb_bulk_request_t bulk;
 	struct usb_dev_handle_internal *devh = 
@@ -635,8 +635,8 @@ int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
  * internal interrupt transfer function
  * throw all validity check work to openusb1.0 API
  */
-int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
-	int timeout)
+static int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
+	int size, int timeout)
 {
 	openusb_intr_request_t intr;
 	int ret;
