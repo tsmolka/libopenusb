@@ -38,8 +38,7 @@ dist-hook: openusb.spec
 	     $(SHELL) config.status \
 	     && cp INSTALL.openusb LICENSE README $(distdir) ; \
 	fi \
-	&& cp openusb.spec $(distdir)
-	&& cp buildosframework.sh $(distdir)
+	&& cp buildosframework.sh openusb.spec $(distdir)
 	test -e $(top_srcdir)/doc/html && cp -r $(top_srcdir)/doc/html $(distdir)/doc || echo "no built doc"
 #	-$(MAKE) dist-bzip2 # create .tar.bz2 dist package if supported
 
