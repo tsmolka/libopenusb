@@ -8,7 +8,7 @@ AM_CFLAGS = -g -Werror
 
 configincludedir = $(pkglibdir)/include
 
-EXTRA_DIST = linux.c linux.h bsd.c darwin.c sunos.c sunos.h
+EXTRA_DIST = linux.c linux.h bsd.c darwin.c darwin.h sunos.c sunos.h
 
 libopenusb_la_CFLAGS = $(LIBUSB_CFLAGS)
 
@@ -34,7 +34,7 @@ endif
 if DARWIN_API
 usblib_LTLIBRARIES = darwin.la
 
-darwin_la_SOURCES = darwin.c
+darwin_la_SOURCES = darwin.c darwin.h
 darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX10.5.sdk -mmacosx-version-min=10.5 -arch i386 -arch x86_64
 darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
 darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=10.5 -syslibroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -arch x86_64
