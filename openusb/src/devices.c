@@ -1006,6 +1006,7 @@ static uint8_t *usbi_nth_desc(uint8_t *buffer, uint16_t buflen, uint8_t type,
 	uint8_t n, uint8_t stop_type)
 {
 	uint8_t *sp =buffer;
+	int len;
 
 	while (buflen >= 2) {
 		if ((sp != buffer) && (sp[1] == stop_type))
@@ -1019,8 +1020,9 @@ static uint8_t *usbi_nth_desc(uint8_t *buffer, uint16_t buflen, uint8_t type,
 		if ((sp[0] == 0) || (buflen < sp[0]))
 			return NULL;
 
-		sp += sp[0];
-		buflen -= sp[0];
+		len = sp[0];
+		sp += len;
+		buflen -= len;
 	}
 	
 	return NULL;
