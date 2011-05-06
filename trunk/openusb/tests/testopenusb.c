@@ -1003,6 +1003,7 @@ static int async_xfer_test(openusb_handle_t devh,
 uint32_t m_len[ISOC_PKT_NUM];
 uint8_t *m_buffers[ISOC_PKT_NUM];
 
+#if 0
 static int32_t multi_callback(struct openusb_multi_request_handle *mreq,
 	uint32_t bufidx, openusb_request_result_t *result)
 {
@@ -1098,6 +1099,7 @@ static int multi_xfer_test(openusb_dev_handle_t devh)
 
 	return ret;
 }
+#endif
 
 static int test_get_device_data(void)
 {
