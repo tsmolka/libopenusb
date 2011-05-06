@@ -1143,7 +1143,7 @@ int usbi_timeval_compare(struct timeval *tva, struct timeval *tvb)
 
 static struct errorstr {
 	int code;
-	char *msg;
+	const char *msg;
 } errorstrs[] = {
 	{ OPENUSB_SUCCESS,		"Call success" },
 	{ OPENUSB_PLATFORM_FAILURE,	"Unspecified kernel/driver failure" },
