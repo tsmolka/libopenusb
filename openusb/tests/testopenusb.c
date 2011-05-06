@@ -1132,13 +1132,13 @@ static int test_get_device_data(void)
 			if (ret < 0) {
 				printf("Get device(%d) data error: %s\n", i,
 						openusb_strerror(ret));
-				return -1;
 			}
-			
-			dump_dev_data(devdata);
+			else
+			{
+				dump_dev_data(devdata);
 
-			openusb_free_device_data(devdata);
-
+				openusb_free_device_data(devdata);
+			}
 		}
 		openusb_free_devid_list(devids);
 	}
