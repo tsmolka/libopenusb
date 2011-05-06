@@ -151,7 +151,7 @@ int usb_find_busses(void)
 	return 1;
 }
 
-int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
+static int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
 {
 	struct usbi_device *idev, *tdev;
 	struct usb_device *dev, *ndev;
@@ -255,7 +255,7 @@ int usb_find_devices(void)
  * given a usb_device, find a corresponding device in openusb1.0
  * return the devid of openusb1.0
  */
-openusb_devid_t wr_find_device(struct usb_device *dev)
+static openusb_devid_t wr_find_device(struct usb_device *dev)
 {
 	openusb_devid_t devid = -1;
 	struct usbi_bus *ibus;
@@ -299,7 +299,7 @@ struct usb_dev_handle_internal {
 	int alt;
 };
 
-int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
+static int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 	struct usbi_altsetting *alt)
 {
 	int num_eps;
@@ -347,7 +347,7 @@ int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 	return 0;
 }
 
-int wr_parse_interface(struct usb_interface * ifc01,
+static int wr_parse_interface(struct usb_interface * ifc01,
 	struct usbi_interface *ifc10)
 {
 	int num_alts;
