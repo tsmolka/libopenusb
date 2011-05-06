@@ -25,7 +25,7 @@ static openusb_devid_t cur_device_id = 1;
 /*
  * Bus code
  */
-void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
+static void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
 {
 	/* FIXME: Handle busid rollover gracefully? */
 	pthread_mutex_lock(&ibus->lock);
@@ -60,7 +60,7 @@ void usbi_free_bus(struct usbi_bus *ibus)
 	free(ibus);
 }
 
-void usbi_remove_bus(struct usbi_bus *ibus)
+static void usbi_remove_bus(struct usbi_bus *ibus)
 {
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_del(&ibus->list);
@@ -69,7 +69,7 @@ void usbi_remove_bus(struct usbi_bus *ibus)
 	usbi_free_bus(ibus);
 }
 
-struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
+static struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
 {
 	struct usbi_bus *ibus;
 
