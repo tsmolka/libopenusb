@@ -462,7 +462,7 @@ static int usbi_init_common(void)
 
 
 /* called upon last openusb instance fini */
-static void usbi_fini_common()
+static void usbi_fini_common(void)
 {
 	/* XXX need to free device, bus and backend list */
 
