@@ -144,7 +144,8 @@ fi
 AC_DIVERT_POP()dnl
 
 dnl declare --enable-* args and collect ac_help strings
-AC_ARG_ENABLE(debug, [  --enable-debug=[no/minimum/yes] turn on debugging [default=$debug_default]],,enable_debug=$debug_default)
+AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug=[no/minimum/yes]],
+	[turn on debugging [default=$debug_default]]),,enable_debug=$debug_default)
 
 if test "x$enable_debug" = "xyes"; then
   test "$cflags_set" = set || CFLAGS="$CFLAGS -g"
@@ -252,7 +253,8 @@ fi
 
 # Check if the user wants to enable documentation
 AC_MSG_CHECKING(if we should build the documentation)
-AC_ARG_ENABLE(build-docs, [  --disable-build-docs    turn off building documentation],
+AC_ARG_ENABLE(build-docs, AC_HELP_STRING([--disable-build-docs],
+	[turn off building documentation]),
 	[ test "$enableval" != no && build_docs=yes || build_docs=no ],
 	build_docs=auto)
 AC_MSG_RESULT($build_docs)
