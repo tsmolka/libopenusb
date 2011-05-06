@@ -313,7 +313,7 @@ int32_t usbi_control_xfer(struct usbi_dev_handle *devh,int requesttype,
 	return ret;
 }
 
-int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbuf,
+static int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbuf,
                 int32_t *cfglen)
 {
 	char buf[8];
@@ -357,7 +357,7 @@ int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char **cfgbu
 	return 0;
 }
 
-void usbi_free_cfg(char *buf)
+static void usbi_free_cfg(char *buf)
 {
 	if (buf == NULL) {
 		return;
@@ -372,7 +372,7 @@ void usbi_free_cfg(char *buf)
  * But, we can't judge if a READ request is sent to an out endpoint, and
  * vice vesa.
  */
-int32_t check_req_valid(openusb_request_handle_t req, 
+static int32_t check_req_valid(openusb_request_handle_t req, 
 	struct usbi_dev_handle *dev)
 {
 	openusb_transfer_type_t type = req->type;
@@ -1092,7 +1092,7 @@ struct usbi_multi_req_args {
  * process individual previously submitted openusb_request_handle
  *
  */
-int32_t multi_req_callback(openusb_request_handle_t req)
+static int32_t multi_req_callback(openusb_request_handle_t req)
 {
 	openusb_multi_request_handle_t mreq;
 	struct usbi_multi_request *mi_req;
@@ -1170,7 +1170,7 @@ int32_t multi_req_callback(openusb_request_handle_t req)
  *		      ...
  *                    --> usbi_multi_req_args
  */
-int process_multi_request(void *arg)
+static int process_multi_request(void *arg)
 {
 	struct usbi_multi_request *mi_req = (struct usbi_multi_request *)arg;
 	int i;
@@ -1459,7 +1459,7 @@ int32_t openusb_start(openusb_multi_request_handle_t handle)
 	return ret;
 }
 
-int32_t usbi_add_or_stop(openusb_multi_request_handle_t handle, int flag)
+static int32_t usbi_add_or_stop(openusb_multi_request_handle_t handle, int flag)
 {
 	struct usbi_multi_request *mreq;
 	struct usbi_dev_handle *hdev;
@@ -1504,7 +1504,7 @@ int32_t usbi_add_or_stop(openusb_multi_request_handle_t handle, int flag)
  *    the previous buffers are safe to use. All the internal processing will
  *    use these buffers until user's callback is called.
  */
-int32_t openusb_add(openusb_multi_request_handle_t handle)
+static int32_t openusb_add(openusb_multi_request_handle_t handle)
 {
 	return (usbi_add_or_stop(handle, USBI_MREQ_NEW_BUF));
 }
