@@ -38,7 +38,7 @@ int testhotplug = 0;
 #define ISOC_PKT_NUM 12
 #define ISOC_PKT_LEN 128
 
-void print_endpoint(struct usb_endpoint_desc *ep)
+static void print_endpoint(struct usb_endpoint_desc *ep)
 { 
 	printf("      bEndpointAddress: %02xh\n", ep->bEndpointAddress);
 	printf("      bmAttributes:     %02xh\n", ep->bmAttributes);
@@ -49,8 +49,8 @@ void print_endpoint(struct usb_endpoint_desc *ep)
 	printf("\n");
 }
 
-void print_interface(openusb_devid_t devid, int cfgidx, int ifcidx,int alt,
-		struct usb_interface_desc *intf)
+static void print_interface(openusb_devid_t devid, int cfgidx, int
+		ifcidx,int alt, struct usb_interface_desc *intf)
 { 
 	int i;
 	int ret;
@@ -80,7 +80,7 @@ void print_interface(openusb_devid_t devid, int cfgidx, int ifcidx,int alt,
 	}
 }
 
-void print_configuration(openusb_devid_t devid, int cfgidx,
+static void print_configuration(openusb_devid_t devid, int cfgidx,
 		struct usb_config_desc *cfg)
 {
 	int i;
@@ -114,7 +114,7 @@ void print_configuration(openusb_devid_t devid, int cfgidx,
 }
 
 /* print device descriptors */
-void print_device(openusb_devid_t devid, int indent)
+static void print_device(openusb_devid_t devid, int indent)
 {
 	struct usb_device_desc dev;
 	unsigned char *buf=NULL;
@@ -161,7 +161,7 @@ void print_device(openusb_devid_t devid, int indent)
 }
 
 
-void event_cb(openusb_handle_t handle, openusb_devid_t devid,
+static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		openusb_event_t event, void *arg)
 {
 	char *evstring;
@@ -186,7 +186,7 @@ void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		(long long)handle, (long long)devid, evstring, arg);
 }
 
-int convert_string(char *buf, usb_string_desc_t *st, int buflen)
+static int convert_string(char *buf, usb_string_desc_t *st, int buflen)
 {
 	int di, si;
 	unsigned char *tbuf = (unsigned char *)st;
@@ -208,7 +208,7 @@ int convert_string(char *buf, usb_string_desc_t *st, int buflen)
 	return di;
 }
 
-void dump_dev_data(openusb_dev_data_t *pdev)
+static void dump_dev_data(openusb_dev_data_t *pdev)
 {
 	struct usb_device_desc *pdesc;
 	int i;
@@ -275,7 +275,7 @@ void dump_dev_data(openusb_dev_data_t *pdev)
 #define CTRL_LEN 0xab
 
 /* test SYNC control xfer */
-int test_ctrl_sync(openusb_dev_handle_t devh)
+static int test_ctrl_sync(openusb_dev_handle_t devh)
 {
 	openusb_ctrl_request_t ctrl;
 	int ret;
@@ -328,7 +328,7 @@ int test_ctrl_sync(openusb_dev_handle_t devh)
  * Use EZ-USB FX2 as the test device
  * load bulkloop firmware
  */
-int test_bulk_sync(openusb_handle_t devh)
+static int test_bulk_sync(openusb_handle_t devh)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -405,7 +405,7 @@ int test_bulk_sync(openusb_handle_t devh)
  * Use EZ-USB FX2 as the test device.
  * Load intrsrc or intrloop firmware
  */
-int test_intr_sync(openusb_handle_t devh, int flag)
+static int test_intr_sync(openusb_handle_t devh, int flag)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -484,7 +484,7 @@ int test_intr_sync(openusb_handle_t devh, int flag)
  * Test ISOC sync xfer
  * Use EZ-USB FX2 as test device. Load isoc firmware
  */
-int test_isoc_sync(openusb_handle_t devh)
+static int test_isoc_sync(openusb_handle_t devh)
 {
 	unsigned char bulkdata[ISOC_PKT_NUM*ISOC_PKT_LEN];
 	unsigned char bulkrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
@@ -562,7 +562,7 @@ int test_isoc_sync(openusb_handle_t devh)
 	return 0;
 }
 
-int async_xfer_ctrl_test(openusb_dev_handle_t devh)
+static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -683,7 +683,8 @@ int async_xfer_ctrl_test(openusb_dev_handle_t devh)
  * Async xfer test for INTR, BULK, ISOC
  * Load different firmware accordingly
  */
-int async_xfer_test(openusb_handle_t devh, openusb_transfer_type_t type, int flag)
+static int async_xfer_test(openusb_handle_t devh,
+		openusb_transfer_type_t type, int flag)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -1002,7 +1003,7 @@ int async_xfer_test(openusb_handle_t devh, openusb_transfer_type_t type, int fla
 uint32_t m_len[ISOC_PKT_NUM];
 uint8_t *m_buffers[ISOC_PKT_NUM];
 
-int32_t multi_callback(struct openusb_multi_request_handle *mreq,
+static int32_t multi_callback(struct openusb_multi_request_handle *mreq,
 	uint32_t bufidx, openusb_request_result_t *result)
 {
 	int i;
@@ -1028,7 +1029,7 @@ int32_t multi_callback(struct openusb_multi_request_handle *mreq,
 /*
  * Not mature
  */
-int multi_xfer_test(openusb_dev_handle_t devh)
+static int multi_xfer_test(openusb_dev_handle_t devh)
 {
 	int ret = 0;
 	int i;
@@ -1098,7 +1099,7 @@ int multi_xfer_test(openusb_dev_handle_t devh)
 	return ret;
 }
 
-int test_get_device_data(void)
+static int test_get_device_data(void)
 {
 	int ret;
 	openusb_dev_data_t *devdata;
@@ -1134,7 +1135,7 @@ int test_get_device_data(void)
 	return 0;
 }
 
-int test_sync_xfer(openusb_dev_handle_t devh)
+static int test_sync_xfer(openusb_dev_handle_t devh)
 {
 	int ret;
 
@@ -1160,7 +1161,7 @@ int test_sync_xfer(openusb_dev_handle_t devh)
 	return 0;
 }
 
-int test_async_xfer(openusb_dev_handle_t devh)
+static int test_async_xfer(openusb_dev_handle_t devh)
 {
 	int ret;
 
@@ -1179,7 +1180,7 @@ int test_async_xfer(openusb_dev_handle_t devh)
 	return 0;
 }
 
-int advance_xfer_test(void)
+static int advance_xfer_test(void)
 {
 	int ret = 0;
 	openusb_dev_handle_t devh;
@@ -1329,7 +1330,7 @@ err:
 	return ret;
 }
 
-void usage(char *prog)
+static void usage(char *prog)
 {
 	printf("usage:\n");
 	printf("%s\n", prog);
@@ -1349,7 +1350,7 @@ void usage(char *prog)
 }
 
 
-int parse_option(int argc, char *argv[])
+static int parse_option(int argc, char *argv[])
 {
 	char c;
 	while((c = getopt(argc, argv, "t:lmaps")) != -1) {
@@ -1407,7 +1408,7 @@ err1:
  * Get all buses on the system.
  * Get every device's data and print them. 
  */
-int basic_test(void)
+static int basic_test(void)
 {
 	int ret;
 	uint32_t flags = 0;
@@ -1455,7 +1456,7 @@ int basic_test(void)
 	return 0;
 }
 
-void cleanup(void)
+static void cleanup(void)
 {
 	openusb_free_busid_list(bus);
 
