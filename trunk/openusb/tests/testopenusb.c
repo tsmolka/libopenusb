@@ -1363,7 +1363,7 @@ static void usage(char *prog)
 
 static int parse_option(int argc, char *argv[])
 {
-	char c;
+	int c;
 	while((c = getopt(argc, argv, "t:lmaps")) != -1) {
 		switch (c) {
 			case 't':
