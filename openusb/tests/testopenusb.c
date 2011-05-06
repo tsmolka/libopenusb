@@ -1114,7 +1114,7 @@ static int test_get_device_data(void)
 {
 	int ret;
 	openusb_dev_data_t *devdata;
-	int i,j;
+	unsigned int i, j;
 
 	for(j=0;j<busnum;j++) {
 		ret = openusb_get_devids_by_bus(libhandle, bus[j], &devids,
