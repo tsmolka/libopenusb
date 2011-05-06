@@ -1178,7 +1178,7 @@ static struct errorstr {
 
 const char *openusb_strerror(int32_t error)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof (errorstrs) / sizeof (errorstrs[0]); i++) {
 		if (errorstrs[i].code == error)
