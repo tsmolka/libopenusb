@@ -1426,7 +1426,7 @@ static int basic_test(void)
 
 	ret = openusb_init(flags, &libhandle);
 	if(ret < 0) {
-		printf("error init\n");
+		printf("error init: %s (%d)\n", openusb_strerror(ret), ret);
 		exit(1);
 	}
 	printf("lib handle=%llu \n", (long long)libhandle);
