@@ -80,7 +80,7 @@ int32_t translate_errno(int errnum)
  *  Check to see if the bulk continuation URB flag is support. It is supported
  *  in kernel version 2.6.32+ 
  */ 
-int32_t check_bulk_continuation_flag(void)
+static int32_t check_bulk_continuation_flag(void)
 {
   struct utsname uts;
   int major, minor, sublevel;
@@ -112,7 +112,7 @@ int32_t check_bulk_continuation_flag(void)
  *
  *  Opens the device, by opening a file descriptor for it
  */
-int32_t device_open(struct usbi_device *idev)
+static int32_t device_open(struct usbi_device *idev)
 {
 	int32_t fd;
 
@@ -140,7 +140,7 @@ int32_t device_open(struct usbi_device *idev)
  *
  *  Close the device and return it to it's original state
  */
-int32_t linux_close(struct usbi_dev_handle *hdev)
+static int32_t linux_close(struct usbi_dev_handle *hdev)
 {
 	/* Validate... */
 	if (!hdev)
@@ -190,7 +190,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
  *
  *   Prepare the device and make the default endpoint accessible
  */
-int32_t linux_open(struct usbi_dev_handle *hdev)
+static int32_t linux_open(struct usbi_dev_handle *hdev)
 {
 	int ret;
 
@@ -242,7 +242,7 @@ int32_t linux_open(struct usbi_dev_handle *hdev)
  *
  *  Sets the usb configuration, via IOCTL_USB_SETCONFIG
  */
-int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
+static int32_t linux_set_configuration(struct usbi_dev_handle *hdev, uint8_t cfg)
 {
 	int32_t	ret;
 	int			config = (int)cfg;
@@ -314,7 +314,7 @@ int32_t linux_get_configuration(struct usbi_dev_handle *hdev, uint8_t *cfg)
  *
  *  Claims the USB Interface, via IOCTL_USB_CLAIMINTF
  */
-int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
+static int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
                                openusb_init_flag_t flags)
 {
 	int32_t ret;
@@ -385,7 +385,7 @@ int32_t linux_claim_interface(struct usbi_dev_handle *hdev, uint8_t ifc,
  * 
  *  Releases the specified interface, via IOCTL_USB_RELEASEINTF
  */
-int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
+static int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
 {
 	int32_t ret;
 	int			interface = (int)ifc;
@@ -425,7 +425,7 @@ int32_t linux_release_interface(struct usbi_dev_handle *hdev, uint8_t ifc)
  *
  *  Sets the alternate setting, via IOCTL_USB_SETINTF
  */
-int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
+static int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
 														 uint8_t alt)
 {
 	struct usbk_setinterface setintf;
@@ -468,7 +468,7 @@ int32_t linux_set_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
  *  Gets the alternate setting from our cached value. There is no usbdevfs IOCTL
  *  to do this so this is the best we can do.
  */
-int32_t linux_get_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
+static int32_t linux_get_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
 														 uint8_t *alt)
 {
 	/* Validate... */
@@ -487,7 +487,7 @@ int32_t linux_get_altsetting(struct usbi_dev_handle *hdev, uint8_t ifc,
  *
  *   Reset device by resetting the port
  */
-int32_t linux_reset(struct usbi_dev_handle *hdev)
+static int32_t linux_reset(struct usbi_dev_handle *hdev)
 {
 	int32_t ret;
 
@@ -511,7 +511,7 @@ int32_t linux_reset(struct usbi_dev_handle *hdev)
  *
  *  Clear halted endpoint, for backward compatibility with openusb 0.1
  */
-int32_t linux_clear_halt(struct usbi_dev_handle *hdev, uint8_t ept)
+static int32_t linux_clear_halt(struct usbi_dev_handle *hdev, uint8_t ept)
 {
 	int32_t ret;
 
@@ -536,7 +536,7 @@ int32_t linux_clear_halt(struct usbi_dev_handle *hdev, uint8_t ept)
  *  Backend initialization, called in openusb_init()
  *    flags - inherited from openusb_init(), TBD
  */
-int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
+static int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 {
 	int32_t 				ret;
 
@@ -608,7 +608,7 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  *
  *  Backend specific data cleanup, called in openusb_fini()
  */
-void linux_fini(struct usbi_handle *hdl)
+static void linux_fini(struct usbi_handle *hdl)
 {
   uint8_t buf;
 	
@@ -647,7 +647,7 @@ void linux_fini(struct usbi_handle *hdl)
  *
  *  Seearch USB buses under the control of the backend and return the bus list
  */
-int32_t linux_find_buses(struct list_head *buses)
+static int32_t linux_find_buses(struct list_head *buses)
 {
 	DIR            *dir;
 	struct dirent  *entry;
@@ -735,7 +735,7 @@ int32_t linux_find_buses(struct list_head *buses)
  *  Cleanup backend specific data in the usbi_device structure. Called when the
  *  device node is to be removed from the device list.
  */
-void linux_free_device(struct usbi_device *idev)
+static void linux_free_device(struct usbi_device *idev)
 {
 
 	/* Free the udi and the private data structure */
@@ -761,7 +761,7 @@ void linux_free_device(struct usbi_device *idev)
  *
  *  Submits an io request to the control endpoint
  */
-int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
+static int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
 	openusb_ctrl_request_t *ctrl;
 	uint8_t 							setup[USBI_CONTROL_SETUP_LEN];
@@ -860,7 +860,7 @@ int32_t linux_submit_ctrl(struct usbi_dev_handle *hdev, struct usbi_io *io)
  *
  *  Submits an io request to a bulk or interrupt endpoint
  */
-int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
+static int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
 	int32_t		ret;
 	int32_t		i;
@@ -1005,7 +1005,7 @@ int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_io *io)
  *
  *  Submits an isochronous io request
  */
-int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
+static int32_t linux_submit_isoc(struct usbi_dev_handle *hdev, struct usbi_io *io)
 {
 	openusb_isoc_request_t	*isoc = NULL;
 	int32_t									ret;
@@ -1710,7 +1710,7 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
  *  hasn't been completed.
  *
  */
-int32_t linux_io_cancel(struct usbi_io *io)
+static int32_t linux_io_cancel(struct usbi_io *io)
 {
 	io->status = USBI_IO_CANCEL;
 	
@@ -1983,7 +1983,7 @@ int32_t wakeup_io_thread(struct usbi_dev_handle *hdev)
  *  Get the raw descriptor specified. These are already cached by
  *  create_new_device, so we'll just copy over the data we need
  */
-int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
+static int32_t linux_get_raw_desc(struct usbi_device *idev, uint8_t type,
                            uint8_t descidx, uint16_t langid,
                            uint8_t **buffer, uint16_t *buflen)
 {
@@ -2226,7 +2226,7 @@ int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
  *  Get all of the information openusb needs to know about the device based
  *  on the udev device pointer and path (for logging)
  */
-void process_new_device(struct usbi_bus* ibus, struct udev_device* dev, const char* path)
+static void process_new_device(struct usbi_bus* ibus, struct udev_device* dev, const char* path)
 {    
   int8_t              DO_ONCE = 1;
 	int 	              busnum  = 0, pdevnum = 0, devnum = 0, max_children = 0;
@@ -2342,7 +2342,7 @@ void process_new_device(struct usbi_bus* ibus, struct udev_device* dev, const ch
  *  The device nodes that have been detached from the system would be removed 
  *  from the list.
  */
-int32_t linux_refresh_devices(struct usbi_bus* ibus)
+static int32_t linux_refresh_devices(struct usbi_bus* ibus)
 {
   struct udev*            udev;
   struct udev_enumerate*  udevEnumeration;
@@ -2416,7 +2416,7 @@ int32_t linux_refresh_devices(struct usbi_bus* ibus)
  * This function will find the device in our list of known devices with
  * the specified sysfs path
  */
-struct usbi_device *find_device_by_sysfspath(const char *path)
+static struct usbi_device *find_device_by_sysfspath(const char *path)
 {
 	struct usbi_device* idev = NULL;
  	struct usbi_list*   pusbi_devices = usbi_get_devices_list();
@@ -2446,7 +2446,7 @@ struct usbi_device *find_device_by_sysfspath(const char *path)
  *
  *  Adds a new device to our list of known devices
  */
-void device_added(struct udev_device* dev, const char* path)
+static void device_added(struct udev_device* dev, const char* path)
 {
   struct usbi_device *idev = NULL;
   struct usbi_handle *handle, *thdl;
@@ -2476,7 +2476,7 @@ void device_added(struct udev_device* dev, const char* path)
  *  Invoked when a device is removed from the Global Device List.
  *
  */
-void device_removed(struct udev_device* dev, const char* path)
+static void device_removed(struct udev_device* dev, const char* path)
 { 
  	struct usbi_device *idev = NULL;
  	
