@@ -164,7 +164,7 @@ static void print_device(openusb_devid_t devid, int indent)
 static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		openusb_event_t event, void *arg)
 {
-	char *evstring;
+	const char *evstring;
 	switch(event) {
 	case USB_ATTACH:
 		evstring = "USB_ATTACH";
