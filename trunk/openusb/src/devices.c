@@ -18,8 +18,6 @@
 #include "usbi.h"
 
 extern struct list_head backends;
-extern struct usbi_list usbi_buses;
-extern struct usbi_list usbi_devices;
 
 static openusb_busid_t cur_bus_id = 1;
 static openusb_devid_t cur_device_id = 1;
