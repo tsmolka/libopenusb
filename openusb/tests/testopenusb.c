@@ -1098,7 +1098,7 @@ int multi_xfer_test(openusb_dev_handle_t devh)
 	return ret;
 }
 
-int test_get_device_data()
+int test_get_device_data(void)
 {
 	int ret;
 	openusb_dev_data_t *devdata;
