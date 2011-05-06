@@ -178,6 +178,15 @@ static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 	case USB_RESUME:
 		evstring = "USB_RESUME";
 		break;
+	case USB_HC_ATTACH:
+		evstring = "USB_HC_ATTACH";
+		break;
+	case USB_HC_REMOVE:
+		evstring = "USB_HC_REMOVE";
+		break;
+	case USB_COLDPLUG_COMPLETED:
+		evstring = "USB_COLDPLUG_COMPLETED";
+		break;
 	default:
 		evstring = "Unknown";
 		break;
