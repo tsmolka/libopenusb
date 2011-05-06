@@ -506,7 +506,7 @@ struct usbi_handle *usbi_find_handle(openusb_handle_t handle)
 }
 
 /* malloc and init usbi_handle */
-struct usbi_handle *usbi_init_handle(void)
+static struct usbi_handle *usbi_init_handle(void)
 {
 	struct usbi_handle *hdl;
 	int ret;
@@ -550,7 +550,7 @@ struct usbi_handle *usbi_init_handle(void)
 }
 
 /* destroy a usbi_handle and free its resouces */
-void usbi_destroy_handle(struct usbi_handle *hdl)
+static void usbi_destroy_handle(struct usbi_handle *hdl)
 {
 	usbi_debug(NULL, 4, "Begin");
 
@@ -686,7 +686,7 @@ void openusb_fini(openusb_handle_t handle)
 	usbi_debug(NULL, 4, "End");
 }
 
-void usbi_coldplug_complete(struct usbi_handle *hdl)
+static void usbi_coldplug_complete(struct usbi_handle *hdl)
 {
 	if (!hdl) {
 		return;
