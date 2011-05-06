@@ -73,11 +73,16 @@ AM_INIT_AUTOMAKE($PACKAGE, $VERSION, no-define)
 # Specify a configuration file
 AM_CONFIG_HEADER(config.h)
 
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MAJOR_VERSION, $LIBOPENUSB_MAJOR_VERSION)
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MINOR_VERSION, $LIBOPENUSB_MINOR_VERSION)
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MICRO_VERSION, $LIBOPENUSB_MICRO_VERSION)
-AC_DEFINE_UNQUOTED(LIBOPENUSB_INTERFACE_AGE, $LIBOPENUSB_INTERFACE_AGE)
-AC_DEFINE_UNQUOTED(LIBOPENUSB_BINARY_AGE, $LIBOPENUSB_BINARY_AGE)
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MAJOR_VERSION, $LIBOPENUSB_MAJOR_VERSION,
+				   [Major version])
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MINOR_VERSION, $LIBOPENUSB_MINOR_VERSION,
+				   [Minor version])
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MICRO_VERSION, $LIBOPENUSB_MICRO_VERSION,
+				   [Micro version])
+AC_DEFINE_UNQUOTED(LIBOPENUSB_INTERFACE_AGE, $LIBOPENUSB_INTERFACE_AGE,
+				   [Binary interface age])
+AC_DEFINE_UNQUOTED(LIBOPENUSB_BINARY_AGE, $LIBOPENUSB_BINARY_AGE,
+				   [Binary age])
 
 dnl Initialize libtool
 AM_PROG_LIBTOOL
@@ -91,28 +96,28 @@ AM_MAINTAINER_MODE
 AC_MSG_CHECKING(for what USB OS support)
 case $host in
   *-linux*)
-    AC_DEFINE(LINUX_API)
+    AC_DEFINE(LINUX_API, 1, [Linux])
     AC_SUBST(LINUX_API)
     os_support=linux
     AC_MSG_RESULT(Linux)
     OSLIBS=""
     ;;
   *-freebsd*|*-openbsd*|*-netbsd*)
-    AC_DEFINE(BSD_API)
+    AC_DEFINE(BSD_API, 1, [BSD system])
     AC_SUBST(BSD_API)
     os_support=bsd
     AC_MSG_RESULT(FreeBSD, OpenBSD and/or NetBSD)
     OSLIBS=""
     ;;
   *-darwin*)
-    AC_DEFINE(DARWIN_API)
+    AC_DEFINE(DARWIN_API, 1, [Darwin])
     AC_SUBST(DARWIN_API)
     os_support=darwin
     AC_MSG_RESULT(Darwin and/or MacOS 10)
     OSLIBS="-lIOKit"
     ;;
   *-solaris*)
-   AC_DEFINE(SUNOS_API)
+   AC_DEFINE(SUNOS_API, 1, [Solaris])
    AC_SUBST(SUNOS_API)
    os_support=sunos
    AC_MSG_RESULT(Solaris)
@@ -242,7 +247,7 @@ if test "$os_support" = "bsd"; then
      }],
     [AC_MSG_RESULT(yes)],
     [AC_MSG_RESULT(no)
-    AC_DEFINE(HAVE_OLD_DEV_USB_USB_H)])
+    AC_DEFINE(HAVE_OLD_DEV_USB_USB_H, 1, [Old dev/usb/usb.h])])
 fi
 
 # Check if the user wants to enable documentation
