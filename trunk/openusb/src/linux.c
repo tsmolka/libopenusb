@@ -32,8 +32,8 @@
 
 static pthread_t  hotplug_thread;
 static int        hotplug_pipe[2] = {0, 0};
-static char		    device_dir[PATH_MAX + 1] = "";
-static int32_t		linux_backend_inited = 0;
+static char	  device_dir[PATH_MAX + 1] = "";
+static int32_t	  linux_backend_inited = 0;
 static int8_t     supports_flag_bulk_continuation = 0;
 
 
@@ -951,10 +951,13 @@ static int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_
 		 * however, if we don't have more than one transfer, it doesn't matter */
 		if (io->priv->num_urbs > 1)
 		{
-		  /* If USBFS supports enhanced handling of short transfers, set the flag */
-	  	if (supports_flag_bulk_continuation) {
-		    urb->flags = USBK_URB_SHORT_NOT_OK;
+		  /* If USBFS supports enhanced handling of short transfers, set the SHORT_NOT_OK_FLAG */
+	  	if ((io->req->endpoint & USB_ENDPOINT_DIR_MASK) == USB_ENDPOINT_IN) {
+	  	  if ((i < io->priv->num_urbs - 1) && supports_flag_bulk_continuation) {
+		      urb->flags = USBK_URB_SHORT_NOT_OK;
+		    }
 		  }
+		  
 		  /* To fully support handling short transfers this flag must be set for all
 		   * URBs except the first one */
 		  if ((i > 0) && supports_flag_bulk_continuation) {
@@ -964,7 +967,6 @@ static int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_
 
 		/* submit the urb */
 		ret = urb_submit(hdev, urb);
-		
 		if (ret < 0) {
 
 			/* if this is the first URB we've submitted, things are simple */
@@ -976,6 +978,13 @@ static int32_t linux_submit_bulk_intr(struct usbi_dev_handle *hdev, struct usbi_
 				pthread_mutex_unlock(&io->lock);
 				pthread_mutex_unlock(&hdev->lock);
 				return translate_errno(errno);
+			}
+  
+      /* Check to see if the request was completed early */
+      if (ret == -EREMOTEIO)
+      {
+        io->priv->reap_action = COMPLETED_EARLY;
+        break;
 			}
 
 			/* if it's not the first urb then the logic gets more complicated */
@@ -1407,6 +1416,11 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 			} else {
 				io->priv->urbs_to_cancel--;
 			}
+		} else if ((urb->status == -ECONNRESET) && (urb->flags & USBK_URB_BULK_CONTINUATION)) {
+
+		  /* these are the URBs that usbfs canceled on it's own */
+		  io->priv->urbs_to_cancel--;
+		
 		} else if (urb->status == 0) {
 			usbi_debug(hdev->lib_hdl, 4, "completed urb found");
 
@@ -1443,7 +1457,7 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 				case STALL:
 					usbi_debug(hdev->lib_hdl, 2, "A stall was reported after the io "
 										 "request has been reported as complete");
-					// We don't want to free the urbs in this case, so just return
+					/* We don't want to free the urbs in this case, so just return */
 					return;
 
 				case CANCELED:
@@ -1501,7 +1515,6 @@ void handle_bulk_intr_complete(struct usbi_dev_handle *hdev,
 
 		/* cancel the remaining urbs */
 		handle_partial_xfer(hdev, io, urb_index + 1, COMPLETED_EARLY);
-
 		return;
 	}
 
@@ -1648,6 +1661,7 @@ void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
 	  /* If USBFS supports enchanced handling of short transfers we don't need to
 	   * discard any remaining URBs ourselves */
 	  if (io->priv->urbs[i].flags & USBK_URB_BULK_CONTINUATION) {
+	    io->priv->urbs_to_cancel++;
       continue;
     }
 	
@@ -1664,8 +1678,8 @@ void handle_partial_xfer(struct usbi_dev_handle *hdev, struct usbi_io *io,
 	}
 
 	usbi_debug(NULL, 4,
-						 "partial xfer: waiting on %d cancels and %d reaps before reporting"
-						 " an error", io->priv->urbs_to_cancel, io->priv->urbs_to_reap);
+						 "partial xfer: waiting on %d cancels and %d reaps",
+						 io->priv->urbs_to_cancel, io->priv->urbs_to_reap);
 	return;
 }
 
