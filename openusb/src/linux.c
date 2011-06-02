@@ -146,6 +146,9 @@ static int32_t linux_close(struct usbi_dev_handle *hdev)
 	if (!hdev)
 		return (OPENUSB_BADARG);
 
+  /* don't try and close the device if it's not open */
+  if (hdev->state != USBI_DEVICE_OPENED) { return (OPENUSB_SUCCESS); }
+
 	/* Make sure we know we're closing */
 	pthread_mutex_lock(&hdev->lock);
 	hdev->state = USBI_DEVICE_CLOSING;
@@ -587,7 +590,7 @@ static int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 	  usbi_debug(NULL, 1, "unable to create hotplug pipe: %d", ret);
 	  return (OPENUSB_SYS_FUNC_FAILURE);
 	}
-	 
+	
 	/* Start up thread for polling events */
 	ret = pthread_create(&hotplug_thread, NULL, udev_hotplug_event_thread, (void*)NULL);
 	if (ret < 0) {
@@ -610,7 +613,7 @@ static int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
  */
 static void linux_fini(struct usbi_handle *hdl)
 {
-  uint8_t buf;
+  uint8_t buf[1] = {0};
 	
 	/* If we're not initailized, don't bother */
 	if (!linux_backend_inited) {
@@ -624,7 +627,7 @@ static void linux_fini(struct usbi_handle *hdl)
 	}
 	
 	/* shutdown the hotplug thread */
-  if (write(hotplug_pipe[1], &buf, 1) == -1) {
+  if (write(hotplug_pipe[1], buf, 1) == -1) {
     usbi_debug(hdl, 1, "unable to write to the hotplug pipe, hanging...");
   }
 	pthread_join(hotplug_thread, NULL);
@@ -1932,6 +1935,7 @@ int32_t create_new_device(struct usbi_device **dev, struct usbi_bus *ibus,
 
 	*dev = idev;
 	ibus->priv->dev_by_num[devnum] = idev;
+	
 
 	return (OPENUSB_SUCCESS);
 }
@@ -2444,6 +2448,7 @@ static struct usbi_device *find_device_by_sysfspath(const char *path)
  	  }
  	
  	  if (strcmp(path, idev->priv->sysfspath) == 0) {
+   	  usbi_debug(NULL, 4, "device found: %s", path);
    	  pthread_mutex_unlock(&usbi_devices.lock);
   	  return (idev);
  	  }
@@ -2529,7 +2534,7 @@ void *udev_hotplug_event_thread(void *unused)
   struct timeval       tv;
   int                  ret;
   uint8_t 						 buf;
- 
+  
  	/* Create the udev reference for the event thread */
   udev = udev_new();
   if (!udev) {
