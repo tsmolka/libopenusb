@@ -1,0 +1,1239 @@
+#ifndef __OPENUSB_H__
+#define __OPENUSB_H__
+
+/*
+ * Prototypes, structure definitions and macros.
+ *
+ * Copyright 2000-2005 Johannes Erdfelt <johannes@erdfelt.com>
+ *
+ * Copyright 2004-2007 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ *
+ * This file (and only this file) may alternatively be licensed under the
+ * BSD license as well, read LICENSE for details.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <inttypes.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdarg.h>
+
+/*
+ *********************************************************************
+ * USB spec information
+ *
+ * This is all stuff grabbed from various USB specs and is pretty much
+ * not subject to change
+ *********************************************************************
+ */
+
+/*
+ * Device and/or Interface Class codes
+ */
+#define	USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
+#define	USB_CLASS_AUDIO			1
+#define	USB_CLASS_COMM			2
+#define	USB_CLASS_HID			3
+#define	USB_CLASS_PHYSICAL		5
+#define	USB_CLASS_STILL_IMAGE		6
+#define	USB_CLASS_PRINTER		7
+#define	USB_CLASS_MASS_STORAGE		8
+#define	USB_CLASS_HUB			9
+#define	USB_CLASS_CDC_DATA		10
+#define	USB_CLASS_SMART_CARD		11
+#define	USB_CLASS_CONT_SECURITY		13
+#define	USB_CLASS_VIDEO			14
+#define	USB_CLASS_DIAGNOSTIC		0xdc
+
+#ifndef USB_CLASS_WIRELESS
+#define	USB_CLASS_WIRELESS		0xe0
+#endif
+
+#ifndef USB_CLASS_MISC
+#define	USB_CLASS_MISC			0xef
+#endif
+
+#define	USB_CLASS_APP_SPEC		0xfe
+
+#ifndef USB_CLASS_VENDOR_SPEC
+#define	USB_CLASS_VENDOR_SPEC		0xff
+#endif
+
+/*
+ * Descriptor types
+ */
+#define	USB_DESC_TYPE_DEVICE			0x01
+#define	USB_DESC_TYPE_CONFIG			0x02
+#define	USB_DESC_TYPE_STRING			0x03
+#define	USB_DESC_TYPE_INTERFACE			0x04
+#define	USB_DESC_TYPE_ENDPOINT			0x05
+#define	USB_DESC_TYPE_DEVICE_QUALIFIER		0x06
+#define	USB_DESC_TYPE_OTHER_SPEED_CONFIG	0x07
+#define	USB_DESC_TYPE_INTERFACE_POWER		0x08
+#define	USB_DESC_TYPE_OTG			0x09
+#define	USB_DESC_TYPE_DEBUG			0x0a
+#define	USB_DESC_TYPE_INTERFACE_ASSOCIATION	0x0b
+
+/* Device descriptor */
+typedef struct usb_device_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bcdUSB;
+	uint8_t		bDeviceClass;
+	uint8_t		bDeviceSubClass;
+	uint8_t		bDeviceProtocol;
+	uint8_t		bMaxPacketSize0;
+	uint16_t	idVendor;
+	uint16_t	idProduct;
+	uint16_t	bcdDevice;
+	uint8_t		iManufacturer;
+	uint8_t		iProduct;
+	uint8_t		iSerialNumber;
+	uint8_t		bNumConfigurations;
+} usb_device_desc_t;
+
+/* Configuration & other speed configuration descriptor */
+typedef struct usb_config_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	wTotalLength;
+	uint8_t		bNumInterfaces;
+	uint8_t		bConfigurationValue;
+	uint8_t		iConfiguration;
+	uint8_t		bmAttributes;
+	uint8_t		bMaxPower;
+} usb_config_desc_t;
+
+/* bmAttributes for configuration desc */
+#define	USB_CFG_ATTR_SELFPWR		0x40
+#define	USB_CFG_ATTR_REMOTE_WAKEUP	0x20
+
+/* Interface descriptor */
+typedef struct usb_interface_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bInterfaceNumber;
+	uint8_t		bAlternateSetting;
+	uint8_t		bNumEndpoints;
+	uint8_t		bInterfaceClass;
+	uint8_t		bInterfaceSubClass;
+	uint8_t		bInterfaceProtocol;
+	uint8_t		iInterface;
+} usb_interface_desc_t;
+
+/* Endpoint descriptor */
+typedef struct usb_endpoint_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bEndpointAddress;
+	uint8_t		bmAttributes;
+	uint16_t	wMaxPacketSize;
+	uint8_t		bInterval;
+	uint8_t		bRefresh; /* AC Int EP */
+	uint8_t		bSynchAddress; /* AC Int EP */
+} usb_endpoint_desc_t;
+
+/* bEndpointAddress for endpoint desc */
+#define	USB_ENDPOINT_NUM_MASK		0x0f	/* endpoint number mask */
+#define	USB_ENDPOINT_DIR_MASK		0x80	/* direction mask */
+#define	USB_ENDPOINT_IN			0x80	/* IN endpoint */
+#define	USB_ENDPOINT_OUT		0x00	/* OUT endpoint */
+
+/* bmAttributes for endpoint desc */
+#define	USB_ENDPOINT_TYPE_MASK		0x03	/* transfer type mask */
+
+#ifndef USB_ENDPOINT_TYPE_CONTROL
+
+#define	USB_ENDPOINT_TYPE_CONTROL	0x00	/* control transfer */
+#define	USB_ENDPOINT_TYPE_ISOCHRONOUS	0x01	/* isochronous transfer */
+#define	USB_ENDPOINT_TYPE_BULK		0x02	/* bulk transfer */
+#define	USB_ENDPOINT_TYPE_INTERRUPT	0x03	/* interrupt transfer */
+
+#endif
+
+#define	USB_ENDPOINT_SYNC_MASK		0x0c	/* synchronization mask */
+#define	USB_ENDPOINT_SYNC_NONE		0x00	/* no synchronization */
+#define	USB_ENDPOINT_SYNC_ASYNC		0x04	/* asynchronous */
+#define	USB_ENDPOINT_SYNC_ADPT		0x08	/* adaptive */
+#define	USB_ENDPOINT_SYNC_SYNC		0x0c	/* synchronous */
+
+#define	USB_ENDPOINT_USAGE_MASK		0x30	/* sync feedback mask */
+#define	USB_ENDPOINT_USAGE_DATA		0x00	/* data endpoint */
+#define	USB_ENDPOINT_USAGE_FEED		0x10	/* feedback endpoint */
+#define	USB_ENDPOINT_USAGE_IMPL_FEED	0x20	/* implicit feedback ep */
+
+/* wMaxPacketSize for endpoint desc */
+#define	USB_ENDPOINT_MAX_PKTSZ_MASK	0x03ff	/* Mask for packetsize bits */
+#define	USB_ENDPOINT_MAX_XACTS_MASK	0x0c00	/* Max Transactns/microframe */
+#define	USB_ENDPOINT_MAX_XACTS_SHIFT	11	/* 11 bits from end */
+
+/* String descriptor of index zero */
+typedef struct usb_string_desc_zero {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	wLANGID[];	/* flexible array member */
+} usb_string_desc_zero_t;
+
+/* UNICODE String descriptor */
+typedef struct usb_string_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bString[];	/* flexible array member */
+} usb_string_desc_t;
+
+/* Device qualifier descriptor */
+typedef struct usb_device_qualif_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint16_t	bcdUSB;
+	uint8_t		bDeviceClass;
+	uint8_t		bDeviceSubClass;
+	uint8_t		bDeviceProtocol;
+	uint8_t		bMaxPacketSize0;
+	uint8_t		bNumConfigurations;
+	uint8_t		bReserved;
+} usb_device_qualif_desc_t;
+
+/* OTG descriptor */
+typedef struct usb_otg_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bmAttributes;
+} usb_otg_desc_t;
+
+/* bmAttributes for OTG desc */
+#define	USB_OTG_SRP			0x00
+#define	USB_OTG_HNP			0x01
+
+/* Debug descriptor */
+typedef struct usb_debug_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bDebugInEndpoint;
+	uint8_t		bDebugOutEndpoint;
+} usb_debug_desc_t;
+
+/* Interface association descriptor */
+typedef struct usb_interface_association_desc {
+	uint8_t		bLength;
+	uint8_t		bDescriptorType;
+	uint8_t		bFirstInterface;
+	uint8_t		bInterfaceCount;
+	uint8_t		bFunctionClass;
+	uint8_t		bFunctionSubClass;
+	uint8_t		bFunctionProtocol;
+	uint8_t		iFunction;
+} usb_interface_association_desc_t;
+
+/*
+ * Standard requests
+ */
+#define	USB_REQ_GET_STATUS		0x00
+#define	USB_REQ_CLEAR_FEATURE		0x01
+/* 0x02 is reserved */
+#define	USB_REQ_SET_FEATURE		0x03
+/* 0x04 is reserved */
+#define	USB_REQ_SET_ADDRESS		0x05
+#define	USB_REQ_GET_DESCRIPTOR		0x06
+#define	USB_REQ_SET_DESCRIPTOR		0x07
+#define	USB_REQ_GET_CONFIGURATION	0x08
+#define	USB_REQ_SET_CONFIGURATION	0x09
+
+#ifndef USB_REQ_GET_INTERFACE
+
+#define	USB_REQ_GET_INTERFACE		0x0a
+#define	USB_REQ_SET_INTERFACE		0x0b
+#define	USB_REQ_SYNCH_FRAME		0x0c
+
+#endif
+
+/* Bitmaps for bmRequestType */
+#define	USB_REQ_HOST_TO_DEV		0x00
+#define	USB_REQ_DEV_TO_HOST		0x80
+#define	USB_REQ_DIR_MASK		0x80
+
+#define	USB_REQ_TYPE_STANDARD		(0x00 << 5)
+#define	USB_REQ_TYPE_CLASS		(0x01 << 5)
+#define	USB_REQ_TYPE_VENDOR		(0x02 << 5)
+#define	USB_REQ_TYPE_RESERVED		(0x03 << 5)
+#define	USB_REQ_TYPE_MASK		0x60
+
+#define	USB_REQ_RECIP_DEVICE		0x00
+#define	USB_REQ_RECIP_INTERFACE		0x01
+#define	USB_REQ_RECIP_ENDPOINT		0x02
+#define	USB_REQ_RECIP_OTHER		0x03
+#define	USB_REQ_RECIP_MASK		0x1f
+
+/* Feature selector */
+#define	USB_FEATURE_EP_HALT		0
+#define	USB_FEATURE_DEV_REMOTE_WAKEUP	1
+
+/* Bits returned by GET_STATUS request */
+#define	USB_DEVICE_STATUS_SELFPWR	0x0001
+#define	USB_DEVICE_STATUS_REMOTE_WAKEUP	0x0002
+#define	USB_ENDPOINT_STATUS_HALT	0x0001
+
+
+/*
+ ************************************************************
+ * All openusb functions return an OS independent error code
+ * (ie. no OS specific errno).
+ * XXX more will be added during the implementation
+ ************************************************************
+ */
+#define	OPENUSB_SUCCESS			0	/* Call success */
+#define	OPENUSB_PLATFORM_FAILURE		-1	/* Unspecified kernel/driver failure */
+#define	OPENUSB_NO_RESOURCES		-2	/* No resources available */
+#define	OPENUSB_NO_BANDWIDTH		-3	/* No bandwidth available */
+#define	OPENUSB_NOT_SUPPORTED		-4	/* Not supported by HCD */
+#define	OPENUSB_HC_HARDWARE_ERROR	-5	/* USB host controller error */
+#define	OPENUSB_INVALID_PERM		-6	/* Privileged operation */
+#define	OPENUSB_BUSY			-7	/* Busy condition */
+#define	OPENUSB_BADARG			-8	/* Invalid parameter */
+#define	OPENUSB_NOACCESS			-9	/* Access to device denied */
+#define	OPENUSB_PARSE_ERROR		-10	/* Data could not be parsed */
+#define	OPENUSB_UNKNOWN_DEVICE		-11	/* Device id is stale or invalid */
+#define	OPENUSB_INVALID_HANDLE		-12	/* Handle is invalid */
+#define	OPENUSB_SYS_FUNC_FAILURE		-13	/* Call other system function failed */
+#define	OPENUSB_NULL_LIST		-14	/* Can not find bus or device */
+
+/* return values for asynchronous transfer callback function */
+#define	OPENUSB_CB_CONTINUE		-20	/* Continue with next request */
+#define	OPENUSB_CB_TERMINATE		-21	/* Stop doing next request */
+
+#define	OPENUSB_IO_STALL			-50	/* Endpoint stalled */
+#define	OPENUSB_IO_CRC_ERROR		-51	/* CRC error */
+#define	OPENUSB_IO_DEVICE_HUNG		-52	/* Device hung */
+#define	OPENUSB_IO_REQ_TOO_BIG		-53	/* Request too big */
+#define	OPENUSB_IO_BIT_STUFFING		-54	/* Bit stuffing error */
+#define	OPENUSB_IO_UNEXPECTED_PID	-55	/* Unexpected PID */
+#define	OPENUSB_IO_DATA_OVERRUN		-56	/* Data overrun */
+#define	OPENUSB_IO_DATA_UNDERRUN		-57	/* Data underrun */
+#define	OPENUSB_IO_BUFFER_OVERRUN	-58	/* Buffer overrun */
+#define	OPENUSB_IO_BUFFER_UNDERRUN	-59	/* Buffer underrun */
+#define	OPENUSB_IO_PID_CHECK_FAILURE	-60	/* PID check failure */
+#define	OPENUSB_IO_DATA_TOGGLE_MISMATCH	-61	/* Data toggle mismatch */
+#define	OPENUSB_IO_TIMEOUT		-62	/* I/O timeout */
+#define	OPENUSB_IO_CANCELED		-63 	/* I/O was canceled */
+
+
+/*
+ ********************************
+ * Library specific data types
+ ********************************
+ */
+
+typedef uint64_t openusb_devid_t; /* every devices in the USB bus has a devid */
+typedef uint64_t openusb_busid_t; /* every bus in a USB host has a busid */
+typedef uint64_t openusb_handle_t; /* every openusb instance has a lib handle */
+typedef uint64_t openusb_dev_handle_t;/* every OPENED USB device has a handle */
+
+typedef enum openusb_event {
+	USB_ATTACH = 0,
+	USB_REMOVE,
+	USB_SUSPEND,
+	USB_RESUME,
+	USB_HC_ATTACH,
+	USB_HC_REMOVE,
+	USB_COLDPLUG_COMPLETED,
+} openusb_event_t;
+
+#define	OPENUSB_EVENT_TYPE_COUNT		7
+
+typedef enum openusb_transfer_type {
+	USB_TYPE_ALL = 0,
+	USB_TYPE_CONTROL,
+	USB_TYPE_INTERRUPT,
+	USB_TYPE_BULK,
+	USB_TYPE_ISOCHRONOUS,
+	USB_TYPE_LAST
+} openusb_transfer_type_t;
+
+typedef void	(*openusb_event_callback_t)(openusb_handle_t handle,
+	openusb_devid_t devid, openusb_event_t event, void *arg);
+
+typedef void	(*openusb_debug_callback_t)(openusb_handle_t handle,
+	const char *fmt, va_list args);
+
+typedef struct openusb_dev_data {
+	openusb_busid_t		busid;
+	openusb_devid_t		devid;
+	uint8_t			bus_address;
+
+	/* parent device id, 0 for root-hub */
+	openusb_devid_t		pdevid;
+
+	/* parent port the device is connected to */
+	uint8_t			pport;
+
+	/* number of ports on the device, 0 for non-hub device */
+	uint8_t			nports;
+
+	/* descriptive path such as /dev/bus/usb/xxx */
+	char			*sys_path;
+
+	/* topological path such as 1.2.1 */
+	char			*bus_path;
+
+	usb_device_desc_t	dev_desc;
+	usb_config_desc_t	cfg_desc;
+
+	/* raw configuration desc cloud */
+	uint8_t			*raw_cfg_desc;
+  
+	/* string descriptors with the first langid */
+	usb_string_desc_t	*manufacturer;
+	usb_string_desc_t	*product;
+	usb_string_desc_t	*serialnumber;
+
+	/* max transfer size for each request, 0 if not supported */
+	uint32_t		ctrl_max_xfer_size;
+	uint32_t		intr_max_xfer_size;
+	uint32_t		bulk_max_xfer_size;
+	uint32_t		isoc_max_xfer_size;
+} openusb_dev_data_t;
+
+/* Data types for I/O */
+
+typedef struct openusb_request_result {
+	int32_t			status;
+	uint32_t		transferred_bytes;
+} openusb_request_result_t;
+
+typedef struct openusb_ctrl_request {
+	struct openusb_ctrl_setup {
+		uint8_t		bmRequestType;
+		uint8_t		bRequest;
+		uint16_t	wValue;
+		uint16_t	wIndex;
+
+		/* wLength set automatically based on length */
+	} setup;
+
+	uint8_t			*payload;
+	uint32_t		length; /* platform endian */
+	uint32_t		timeout;
+	uint32_t		flags;
+	openusb_request_result_t	result;
+	struct openusb_ctrl_request	*next;
+} openusb_ctrl_request_t;
+
+typedef struct openusb_intr_request {
+	uint16_t		interval;	/* may not work on some OS */
+	uint8_t			*payload;
+	uint32_t		length;
+	uint32_t		timeout;
+	uint32_t		flags;
+	openusb_request_result_t	result;
+	struct openusb_intr_request	*next;
+} openusb_intr_request_t;
+
+typedef struct openusb_bulk_request {
+	uint8_t			*payload;
+	uint32_t		length;
+	uint32_t		timeout;
+	uint32_t		flags;
+	openusb_request_result_t	result;
+	struct openusb_bulk_request	*next;
+} openusb_bulk_request_t;
+
+typedef struct openusb_isoc_pkts {
+	uint32_t		num_packets;
+	struct openusb_isoc_packet {
+		uint8_t		*payload;
+		uint32_t	length;
+	} *packets;
+} openusb_isoc_pkts_t;
+
+typedef struct openusb_isoc_request {
+	uint32_t		start_frame;
+	uint32_t		flags;
+	openusb_isoc_pkts_t	pkts;
+
+	/* pointer to isoc result array */
+	openusb_request_result_t	*isoc_results;
+
+	/* overall isoc transfer completion status */
+	int32_t			isoc_status;
+
+	struct openusb_isoc_request	*next;
+} openusb_isoc_request_t;
+
+struct openusb_request_handle {
+	openusb_dev_handle_t	dev;
+	uint8_t			interface;	/* ignored for ep0 */
+	uint8_t			endpoint;
+	openusb_transfer_type_t	type;
+
+	union openusb_request {
+		openusb_ctrl_request_t	*ctrl;
+		openusb_intr_request_t	*intr;
+		openusb_bulk_request_t	*bulk;
+		openusb_isoc_request_t	*isoc;
+	} req;
+
+	int32_t	(*cb)(struct openusb_request_handle *handle);
+	void	*arg;	/* additional arg for callback */
+};
+
+typedef struct openusb_request_handle *openusb_request_handle_t;
+
+/* flags for opening device and claiming interface */
+typedef enum openusb_init_flag {
+	USB_INIT_DEFAULT = 0,
+	USB_INIT_FAIL_FAST,	 /* fail if not immediately available */
+	USB_INIT_REVERSIBLE,	 /* try platform dependent things that are */
+				 /* guaranteed to be reversed on close */
+	USB_INIT_NON_REVERSIBLE, /* try advanced platform dependent */
+				 /* things that may not be guaranteed */
+				 /* to be reversible on close */
+} openusb_init_flag_t;
+
+/* Max length for device path of topological depiction */
+#define	OPENUSB_BUS_PATH_MAX		28
+
+/*
+ ****************************************
+ * Library function prototypes
+ ****************************************
+ */
+
+/*
+ *  openusb_init()
+ *
+ *   Arguments:
+ *	flags           - TBD
+ *	handle          - Libusb handle
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_BADARG           - Invalid structure data
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *
+ *   Notes:
+ *	This function must be called before any other openusb function, and
+ *	it returns one openusb handle upon each call
+ */
+int32_t openusb_init(uint32_t flags, openusb_handle_t *handle);
+
+/*
+ * Cleanup resources:
+ *
+ *  openusb_fini()
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *   Return Values:
+ *	none
+ *
+ *   Notes:
+ *	This function must be called at the end of each openusb application.
+ *	Each call to openusb_init() needs a call to openusb_fini()
+ */
+void openusb_fini(openusb_handle_t handle);
+
+/*
+ * Register with openusb framework for event callbacks:
+ *
+ *  openusb_set_event_callback()  ........... Set event callback
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *	type            - Event type
+ *	callback        - Pointer to event callback handler or NULL to unset
+ *	arg             - User specified argument
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_BADARG           - Invalid structure data
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ */
+int32_t openusb_set_event_callback(openusb_handle_t handle,
+	openusb_event_t type,
+	openusb_event_callback_t callback, void *arg);
+
+/*
+ * Block until end of coldplug events:
+ *
+ *  openusb_coldplug_callbacks_done()
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *
+ *   Return Values:
+ *	none
+ *
+ *   Notes:
+ *	For MT applications that can handle coldplug events and need to
+ *	know end of the events
+ */
+void openusb_coldplug_callbacks_done(openusb_handle_t handle);
+
+/*
+ *  openusb_set_debug() ............... Specify debug level
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *	level		- Debug level
+ *	flags		- TBD
+ *	callback	- Callback for user defined debug function
+ *			  If NULL, the library embedded debug function is
+ *			  is used and the messages will go to stderr
+ *
+ *   Return Values:
+ *	none
+ *
+ * Notes:
+ *	This function enables tracing of openusb with increasing level of detail
+ */
+void openusb_set_debug(openusb_handle_t handle, uint32_t level,
+	uint32_t flags, openusb_debug_callback_t callback);
+
+/*
+ * Set default timeout:
+ *
+ *  openusb_set_default_timeout() .. Set default timeout for a request type
+ *
+ *   Arguments:
+ *	handle          - Libusb handle
+ *	type            - Type of transfer
+ *	timeout         - Timeout in milliseconds (0 == infinite)
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ */
+int32_t openusb_set_default_timeout(openusb_handle_t handle,
+	openusb_transfer_type_t type, uint32_t timeout);
+
+/*
+ * Endianness conversion functions:
+ *
+ *  openusb_le16_to_cpu() ..... Convert LE 16 bit quantity to CPU endianess
+ *  openusb_le32_to_cpu() ..... Convert LE 32 bit quantity to CPU endianess
+ *
+ *   Arguments:
+ *	data        - Data to be converted
+ *
+ *   Return Values  - Converted data
+ */
+inline uint16_t openusb_le16_to_cpu(uint16_t data);
+inline uint32_t openusb_le32_to_cpu(uint32_t data);
+#define	openusb_cpu_to_le16	openusb_le16_to_cpu
+#define	openusb_cpu_to_le32	openusb_le32_to_cpu
+
+/*
+ *  openusb_strerror() ........ Return english text representation of error code
+ *
+ *   Arguments:
+ *	error       - Error code
+ *
+ *   Return Values  - Pointer to english text representation
+ */
+const char *openusb_strerror(int32_t error);
+
+/* 
+ * Unpack arbitrary little endian data (ie. descriptors)
+ *  
+ *  openusb_parse_data() 
+ *
+ *   Arguments:
+ *	format          - String indicating the format in b, w, d, eg. "2b4dw"
+ *                        which describes 2 bytes, 4 dwords, one word.
+ *                        A byte (b) is 8-bits, word (w) is 16-bits,
+ *                        dword (w) is 32-bits. The character '.' skips one
+ *                        byte in the source. The number prefix indicates
+ *                        the number of items of the subsequent type.
+ *	data            - Pointer to the LE data buffer
+ *	datalen         - Length of the data
+ *	structure       - Pointer to return structure where the unpacked data
+ *                        will be written
+ *	structlen       - Length of the return structure
+ *	count           - Number of bytes parsed
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PARSE_ERROR      - Data could not be parsed successfully
+ *
+ *   Notes:
+ *	for example to parse a descriptor such as:
+ *	struct {
+ *              uint8_t         a;
+ *              uint16_t        b;
+ *              uint8_t         c;
+ *              uint32_t        d;
+ *	};
+ *
+ * the application would call:
+ *
+ *	rv = openusb_parse_data("bwbd", buffer, sizeof (buffer),
+ *              (void *)my_descr, sizeof (my_descr), &count);
+ *
+ * this would result in inserting some padding to align structure
+ * members on natural boundaries (this is necessary on some processors such
+ * as SPARC). If you would dump memory of this structure on SPARC, you would
+ * see this:
+ *              uint8_t         a;
+ *              uint8_t         unused;
+ *              uint16_t        b;
+ *              uint8_t         c;
+ *              uint8_t         unused[3];
+ *              uint32_t        d;
+ */
+int32_t openusb_parse_data(char *format, uint8_t *data, uint32_t datalen,
+	void *structure, uint32_t structlen, uint32_t *count);
+
+/*
+ * Functions for searching busses:
+ *
+ *  openusb_get_busid_list() ........... Return all busids in unordered list
+ *  openusb_free_busid_list() .......... Free the returned buffer for busids
+ *
+ *   Arguments:
+ *	handle           - Libusb handle
+ *	busids           - Pointer to address of the busid list
+ *	num_busids       - Number of bus ids in the list
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ */
+int32_t openusb_get_busid_list(openusb_handle_t handle, openusb_busid_t **busids,
+	uint32_t *num_busids);
+void openusb_free_busid_list(openusb_busid_t *busids);
+
+/*
+ * Functions for searching devices:
+ *
+ *  openusb_get_devids_by_bus() .......... Return all devids on a bus, the
+ *                                        first devid in the list is root-hub;
+ *                                        or return all devids on all busses
+ *                                        if busid equals 0
+ *  openusb_get_devids_by_vendor() ....... Match on vid, pid
+ *  openusb_get_devids_by_class() ........ Match on class, subclass, protocol
+ *  openusb_free_devid_list() ............ Free the devid list returned above
+ *   
+ *   Arguments:
+ *	handle           - Libusb handle
+ *	busid            - Which bus (0 all busses)
+ *	vendor           - Vendor id (0 - 0xffff, -1 for all)
+ *	product          - Product id (0 - 0xffff, -1 for all)
+ *	devclass         - Device class (0 - 0xff, -1 for all)
+ *	subclass         - Subclass (0 - 0xff, -1 for all)
+ *	protocol         - Protocol (0 - 0xff, -1 for all)
+ *	devids           - Pointer to address of the devid list
+ *	num_devids       - Number of device ids in the list
+ *   
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ */ 
+int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid,
+	openusb_devid_t **devids, uint32_t *num_devids);
+int32_t openusb_get_devids_by_vendor(openusb_handle_t handle, int32_t vendor,
+	int32_t product, openusb_devid_t **devids, uint32_t *num_devids);
+int32_t openusb_get_devids_by_class(openusb_handle_t handle, int16_t devclass,
+	int16_t subclass, int16_t protocol, openusb_devid_t **devids,
+	uint32_t *num_devids);
+void openusb_free_devid_list(openusb_devid_t *devids);
+
+/*
+ * Get device data:
+ *
+ *  openusb_get_device_data()
+ *
+ *   Arguments:
+ *	handle           - Libusb handle
+ *	devid            - Device id
+ *	flags            - TBD
+ *	data             - Pointer to device data
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_UNKNOWN_DEVICE   - Device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	The data buffer is allocated by openusb
+ */
+int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
+	uint32_t flags, openusb_dev_data_t **data);
+
+/*
+ * Free device data:
+ *
+ *  openusb_free_device_data()
+ *
+ *   Arguments:
+ *	data             - Pointer to device data
+ *
+ *   Return Values:
+ *	none
+ */
+void openusb_free_device_data(openusb_dev_data_t *data);
+
+/*
+ * Get child ID  (return ID of device at specified hub port):
+ *
+ *  openusb_get_child_devid()
+ *
+ *   Arguments:
+ *	handle           - Libusb handle
+int32_t openusb_get_child_devid(openusb_handle_t handle,
+	openusb_devid_t hub_devid, uint8_t port,
+	openusb_devid_t *child_devid);
+*/
+
+/*
+ * Descriptor accessors:
+ *
+ * Getting standard descriptors from device
+ *  openusb_get_raw_desc() ........ Return a buffer that contains raw desc.
+ *  openusb_free_raw_desc() ....... Free the raw desc. buffer
+ *
+ * These are for parsing the raw descriptors getting above
+ *  openusb_parse_device_desc() ......... Get cooked device desc.
+ *  openusb_parse_config_desc() ......... Get cooked configuration desc.
+ *  openusb_parse_interface_desc() ...... Get cooked interface desc.
+ *  openusb_parse_endpoint_desc() ....... Get cooked endpoint desc.
+ *
+ *   Arguments:
+ *	handle           - Libusb handle
+ *	devid            - Device id
+ *	type             - descriptor type
+ *	descidx          - index for config/string desc., zero for others
+ *	langid           - language ID for string desc., zero for others
+ *	buffer           - Data buffer for raw desc.
+ *	buflen           - Length of raw desc.
+ *	devdesc          - Pointer to device desc.
+ *	cfgidx           - Configuration index
+ *	cfgdesc          - Pointer to configuration desc.
+ *	ifcidx           - Interface index
+ *	alt              - Alternate setting number
+ *	ifcdesc          - Pointer to interface desc.
+ *	eptidx           - Endpoint index
+ *	eptdesc          - Pointer to endpoint desc.
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	openusb_get_raw_desc() should be called before one can
+ *	get cooked descriptors. And the raw data buffer and buflen
+ *	are then passed to the parsing functions. The buffer passed
+ *	for getting cooked interface desc and endpoint desc is the
+ *	raw configuration desc buffer.
+ *	The parsing functions also accept NULL buffer pointer, in which
+ *	case user doesn't need to call openusb_get_raw_desc() beforehand,
+ *	the parsing functions would do that internally.
+ */
+int32_t openusb_get_raw_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t type, uint8_t descidx,
+	uint16_t langid, uint8_t **buffer, uint16_t *buflen);
+void openusb_free_raw_desc(uint8_t *buffer);
+int32_t openusb_parse_device_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	usb_device_desc_t *devdesc);
+int32_t openusb_parse_config_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, usb_config_desc_t *cfgdesc);
+int32_t openusb_parse_interface_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt,
+	usb_interface_desc_t *ifcdesc);
+int32_t openusb_parse_endpoint_desc(openusb_handle_t handle,
+	openusb_devid_t devid, uint8_t *buffer, uint16_t buflen,
+	uint8_t cfgidx, uint8_t ifcidx, uint8_t alt, uint8_t eptidx,
+	usb_endpoint_desc_t *eptdesc);
+
+
+/*
+ * Gets the maximum data transfer size per request based on
+ * the bus and type of transfer
+ *
+ * Arguments:
+ *	handle		- LibUSB Handle
+ *	bus				- Bus Id
+ *	type			- Transfer type
+ *	bytes			- Maximum data transfer size
+ *
+ * Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_INVALID_HANDLE	- Invalid LibUSB Handle
+ *	OPENUSB_UNKNOWN_DEVICE	- Bus Id is not valid
+ *	OPENUSB_NOT_SUPPORTED	- Operation not supported
+ */
+int32_t openusb_get_max_xfer_size(openusb_handle_t handle,
+	openusb_busid_t bus, openusb_transfer_type_t type, uint32_t *bytes);
+
+
+
+/*
+ * Function for preparing device and making the default
+ * endpoint accessible to openusb:
+ *
+ * openusb_open_device() .......... Prepare device for using by openusb
+ * openusb_close_device() ......... Return device to original state
+ *
+ *  Arguments:
+ *	handle            - Libusb handle
+ *	devid             - Device id
+ *	flags             - Initialization flag
+ *      dev               - Device handle
+ *
+ *  Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *	More TBD
+ *
+ *  Notes:
+ *	openusb_open_device() will
+ *	- trigger some reconfiguration on some platforms
+ *	- provide access to ep0
+ *	- return a dev handle
+ */
+int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
+	openusb_init_flag_t flags, openusb_dev_handle_t *dev);
+int32_t openusb_close_device(openusb_dev_handle_t dev);
+
+/*
+ * Extract device ID from device handle:
+ *
+ *  openusb_get_devid()
+ *
+ *   Arguments:
+ *	dev              - Device handle
+ *	devid            - Pointer to device handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_UNKNOWN_DEVICE - Device handle is no longer valid
+ */
+int32_t openusb_get_devid(openusb_dev_handle_t dev, openusb_devid_t *devid);
+
+/*
+ * Extract openusb handle from device handle:
+ *
+ *  openusb_get_lib_handle()
+ *
+ *   Arguments:
+ *	dev              - Device handle
+ *	lib_handle       - Pointer to openusb handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_UNKNOWN_DEVICE - Device handle is no longer valid
+ */
+int32_t openusb_get_lib_handle(openusb_dev_handle_t dev,
+	openusb_handle_t *lib_handle);
+
+/*  
+ * Configuration selection:
+ *   
+ *  openusb_get_configuration() .... Return bConfigurationValue
+ *  openusb_set_configuration() .... Set the configuration
+ *
+ *   Arguments:
+ *	dev             - Device handle
+ *	cfg             - Configuration value
+ *      
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	openusb_set_configuration() must be called before any interface
+ *	on the device is claimed
+ */
+int32_t openusb_get_configuration(openusb_dev_handle_t dev, uint8_t *cfg);
+int32_t openusb_set_configuration(openusb_dev_handle_t dev, uint8_t cfg);
+
+/*
+ * Interface claiming:
+ *
+ *  openusb_claim_interface() ........ Claim interface exclusively
+ *  openusb_release_interface() ...... Release interface
+ *  openusb_is_interface_claimed() ... Check if interface has been claimed
+ *
+ *   Arguments:
+ *	dev              - Device handle
+ *	ifc              - Interface number
+ *	flags            - Claiming flag (0 - default to open flag)
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	Need to reserve necessary bandwidth for periodic endpoints
+ */
+int32_t openusb_claim_interface(openusb_dev_handle_t dev, uint8_t ifc,
+	openusb_init_flag_t flags);
+int32_t openusb_release_interface(openusb_dev_handle_t dev, uint8_t ifc);
+int32_t openusb_is_interface_claimed(openusb_dev_handle_t dev, uint8_t ifc);
+
+/*
+ * Alternate interface selection:
+ *
+ *  openusb_get_altsetting() ....... Get alternate setting number
+ *  openusb_set_altsetting() ....... Set alternate setting
+ *
+ *   Arguments:
+ *	dev              - Device handle
+ *	ifc              - Interface number
+ *	alt              - Alternate setting number
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	May need to release old bandwidth reservation and make
+ *	reservation again
+ */
+int32_t openusb_get_altsetting(openusb_dev_handle_t dev, uint8_t ifc, uint8_t *alt);
+int32_t openusb_set_altsetting(openusb_dev_handle_t dev, uint8_t ifc, uint8_t alt);
+
+/*
+ * Intervention functions:
+ *
+ *  openusb_reset() ......... Reset device by resetting port
+ *                           (Full reset not guaranteed)
+ *   Arguments:
+ *	dev              - Device handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_IO_*             - USB host controller errors
+ */
+int32_t openusb_reset(openusb_dev_handle_t dev);
+
+/*
+ * I/O functions:
+ *
+ *  openusb_xfer_wait() .............. Issue synchronous I/O request
+ *  openusb_xfer_aio()  .............. Issue asynchronous I/O request
+ *
+ *   Arguments:
+ *	handle            - Pointer to request handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ */
+int32_t openusb_xfer_wait(openusb_request_handle_t handle);
+int32_t openusb_xfer_aio(openusb_request_handle_t handle);
+
+/*
+ * Wrapper functions for synchronous I/O:
+ *
+ *  openusb_ctrl_xfer() ............. Issue synchronous control request
+ *  openusb_intr_xfer() ............. Issue synchronous interrupt request
+ *  openusb_bulk_xfer() ............. Issue synchronous bulk request
+ *  openusb_isoc_xfer() ............. Issue synchronous isochronous request
+ *
+ *   Arguments:
+ *	dev               - Device handle
+ *      ifc               - Interface number
+ *      ept               - Endpoint number
+ *	ctrl              - Pointer to USB control request
+ *	intr              - Pointer to USB interrupt request
+ *	bulk              - Pointer to USB bulk request
+ *	isoc              - Pointer to USB isochronous request
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ *
+ *   Notes:
+ *	Please use openusb_xfer_wait() for synchronous I/O that needs
+ *	to be aborted. The wrapper functions don't support abort.
+ */
+int32_t openusb_ctrl_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	openusb_ctrl_request_t *ctrl);
+int32_t openusb_intr_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	openusb_intr_request_t *intr);
+int32_t openusb_bulk_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	openusb_bulk_request_t *bulk);
+int32_t openusb_isoc_xfer(openusb_dev_handle_t dev, uint8_t ifc, uint8_t ept,
+	openusb_isoc_request_t *isoc);
+
+/*
+ * Abort I/O request:
+ *
+ *  openusb_abort() ................ Abort previously submitted I/O request
+ *
+ *   Arguments:
+ *	handle            - Pointer to request handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ */
+int32_t openusb_abort(openusb_request_handle_t handle);
+
+/*
+ * I/O Support:
+ *
+ *  openusb_wait() ................. Wait for I/O request completion
+ *  openusb_poll() ................. Poll I/O request completion status
+ *
+ *   Arguments:
+ *	num_reqs          - Number of req handles in list
+ *	handles           - Pointer to list of request handles
+ *	handle            - Request handle that has completed
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE   - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES     - Memory allocation failures
+ *	OPENUSB_IO_*             - USB host controller errors
+ */
+int32_t openusb_wait(uint32_t num_reqs, openusb_request_handle_t *handles,
+	openusb_request_handle_t *handle);
+int32_t openusb_poll(uint32_t num_reqs, openusb_request_handle_t *handles,
+	openusb_request_handle_t *handle);
+
+
+/*
+ *********************************************************
+ * The following data types and functions are to support
+ * one request/multi-xfer mode
+ *********************************************************
+ */
+
+typedef struct openusb_multi_intr_request {
+	uint8_t		**payloads;	/* array of payload buffer pointers */
+	uint32_t	*lengths;	/* array of payload buffer lengths */
+	uint32_t	num_bufs;	/* buffer numbers */
+	uint32_t	rp;		/* index of buffer to read */
+	uint32_t	wp;		/* index of buffer to write */
+	uint16_t	interval;
+	uint32_t	timeout;
+	uint32_t	flags;
+} openusb_multi_intr_request_t;
+
+typedef struct openusb_multi_bulk_request {
+	uint8_t		**payloads;	/* array of payload buffer pointers */
+	uint32_t	*lengths;	/* array of payload buffer lengths */
+	uint32_t	num_bufs;	/* buffer numbers */
+	uint32_t	rp;		/* index of buffer to read */
+	uint32_t	wp;		/* index of buffer to write */
+	uint32_t	timeout;
+	uint32_t	flags;
+} openusb_multi_bulk_request_t;
+
+typedef struct openusb_multi_isoc_request {
+	uint32_t	start_frame;
+	uint32_t	flags;
+	openusb_isoc_pkts_t	*pkts;	/* array of pkts pointers */
+	uint32_t	num_pkts;	/* number of pkts pointers */
+	uint32_t	rp;		/* index of pkts to read */
+	uint32_t	wp;		/* index of pkts to write */
+} openusb_multi_isoc_request_t;
+
+struct openusb_multi_request_handle {
+	openusb_dev_handle_t	dev;
+	uint8_t			interface;
+	uint8_t			endpoint;
+	openusb_transfer_type_t	type;
+
+	union openusb_multi_request {
+		openusb_multi_intr_request_t	*intr;
+		openusb_multi_bulk_request_t	*bulk;
+		openusb_multi_isoc_request_t	*isoc;
+	} req;
+
+	/* callback function */
+	int32_t	(*cb)(struct openusb_multi_request_handle *handle,
+		uint32_t bufidx, openusb_request_result_t *result);
+
+	void	*arg; /* additional arg for callback */
+};
+
+typedef struct openusb_multi_request_handle *openusb_multi_request_handle_t;
+
+/*
+ * one request/multi-xfer I/O functions:
+ *
+ *  openusb_start()               .... Start multi-xfer mode I/O
+ *  openusb_stop()                .... Stop multi-xfer mode I/O
+ *
+ *   Arguments:
+ *	handle            - Pointer to multi-xfer request handle
+ *
+ *   Return Values:
+ *	OPENUSB_SUCCESS
+ *	OPENUSB_PLATFORM_FAILURE - Unspecified kernel/driver failure
+ *	OPENUSB_UNKNOWN_DEVICE - Bus id or device id is no longer valid
+ *	OPENUSB_NO_RESOURCES   - Memory allocation failures
+ *	OPENUSB_IO_*           - USB host controller errors
+ */
+int32_t openusb_start(openusb_multi_request_handle_t handle);
+int32_t openusb_stop(openusb_multi_request_handle_t handle);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __OPENUSB_H__ */
+

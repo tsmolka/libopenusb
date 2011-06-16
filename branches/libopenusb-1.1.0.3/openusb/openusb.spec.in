@@ -1,0 +1,62 @@
+# Note that this is NOT a relocatable package
+%define ver      @VERSION@
+%define  RELEASE 1
+%define  rel     %{?CUSTOM_RELEASE} %{!?CUSTOM_RELEASE:%RELEASE}
+%define prefix   /usr
+
+Summary: Application access to USB devices
+Name: openusb
+Version: %ver
+Release: %rel
+License: LGPL
+Group: Libraries
+Source: ftp://ftp.openusb.sourceforge.net/pub/openusb/openusb-%{ver}.tar.gz
+BuildRoot: /var/tmp/openusb-%{PACKAGE_VERSION}-root
+URL: http://openusb.sourceforge.net
+
+%description
+Provides a library for application access to USB devices. Development
+libs and headers are in openusb-devel
+
+%package devel
+Summary: Application USB device access library
+Group: System Environment/Libraries
+
+%description devel
+Static libraries and header files for the USB device access library
+
+
+%changelog
+
+%prep
+%setup
+
+%build
+%configure
+make
+
+%install
+rm -rf $RPM_BUILD_ROOT
+%makeinstall
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%post -p /sbin/ldconfig
+
+%postun -p /sbin/ldconfig
+
+%files
+%defattr(-, root, root)
+
+%doc AUTHORS COPYING LICENSE ChangeLog NEWS README
+%{prefix}/%{_lib}/openusb-1.0.so.*
+
+%files devel
+%defattr(-, root, root)
+
+%doc doc/html/*
+%{prefix}/%{_lib}/*.so
+%{prefix}/%{_lib}/*a
+%{prefix}/include/*
+%{prefix}/bin/*

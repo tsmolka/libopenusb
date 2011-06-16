@@ -1,0 +1,2218 @@
+  <title>Functions</title>
+
+  <chapter id="ref.core">
+    <title>Core</title>
+      <para>
+      These functions comprise the core of Openusb. They are used by
+      all applications that utilize libopenusb.
+      </para>
+
+    <refentry id="function.openusbinit">
+      <refnamediv>
+        <refname><function>openusb_init, openusb_fini</function></refname>
+        <refpurpose>Initialize or destroy a libopenusb instance</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>openusb_init</function></funcdef>
+	    <paramdef>uint32_t <parameter>flags </parameter> </paramdef>
+	    <paramdef>openusb_handle_t *<parameter>handle</parameter> </paramdef>
+	  </funcprototype>
+
+          <funcprototype>
+            <funcdef>void <function>openusb_fini</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle </parameter> </paramdef>
+          </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>    flags</parameter>   -     Not used in this release. Reserved.</para>
+
+    <para> <parameter>   handle</parameter>  -    Application should pass a valid address and upon successful
+                initialization of openusb_init, a openusb_handle will be returned
+                in it. This hanlde will be used by all operations related with
+                openusb instances.
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Just like the name implies, the <function>openusb_init()</function>
+      initialize a openusb instance and sets up some internal structures for that
+      openusb instance.  This function <emphasis>MUST</emphasis> be called before
+    any other openusb functions. It will load OS dependent backend and call
+    initialization function of that backend. It also scans for busses and
+    devices on the system.
+
+    Application should call <function>openusb_fini()</function> to destroy a openusb
+    instance when it finishes. <function>openusb_fini()</function> will destroy internal
+    structures associated with this instance. All  handles associated with this
+    instance become invalid after the  call to <function>openusb_fini()</function>.
+    </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para>Upon successful initialization of a openusb instance, the <function>openusb_init()
+    </function> function will return OPENUSB_SUCCESS. Otherwise, a failure will be returned.
+    </para>
+    <para>OPENUSB_PLATFORM_FAILURE  --    Unspecified kernel/driver failure. </para>
+
+    <para>OPENUSB_BADARG            --   An invalid argument is passed in. handle is invalid</para>
+
+    <para>OPENUSB_NO_RESOURCES       --  Memory allocation failure. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+    <refentry id="function.openusbsetdebug">
+      <refnamediv>
+        <refname><function>openusb_set_debug</function></refname>
+        <refpurpose>Set debug information</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>void <function>openusb_set_debug</function></funcdef>
+	    <paramdef>openusb_handle_t *<parameter>handle</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>level</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>openusb_debug_callback_t <parameter>callback</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An openusb instance handle, obtained in <function>openusb_init</function>.
+    </para>
+
+    <para><parameter>    level</parameter> -     Not used. Reserved.</para>
+    <para> <parameter>   flags </parameter>  -     Not used in this release. Reserved.</para>
+    <para><parameter>callback</parameter> - Application supplied debug routine.</para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>openusb_set_debug()</function> to enable tracing
+      of openusb with increasing level of detail. callback is application defined debug function.
+      If it is NULL, the library embedded debug function is used and debug messages, if any and
+      debug level set properly, will go to stderr. </para>
+      <para>This operation will override the <envar>USB_DEBUG</envar> environment variable, if set.
+    </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> None   </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+
+    <refentry id="function.openusbseteventcallback">
+      <refnamediv>
+        <refname><function>openusb_set_event_callback, openusb_coldplug_callbacks_done</function></refname>
+        <refpurpose>Set event callbacks or Waiting for coldplug events completion</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>openusb_set_event_callback</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_event_t <parameter>type</parameter> </paramdef>
+	    <paramdef>openusb_event_callback_t <parameter>callback</parameter> </paramdef>
+	    <paramdef>void *<parameter>arg</parameter> </paramdef>
+	  </funcprototype>
+
+	  <funcprototype>
+	    <funcdef>void <function>openusb_coldplug_callbacks_done</function></funcdef>
+	    <paramdef>openusb_handle_t<parameter> handle</parameter></paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An openusb instance handle, obtained in <function>openusb_init</function>.
+    </para>
+
+    <para><parameter>    type</parameter> -     Event type.</para>
+    <para> <parameter>   callback</parameter>  -     Pointer to callback function.</para>
+    <para><parameter>arg</parameter> - Arguments passed to <parameter>callback</parameter></para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>openusb_set_event_callback()</function> to register with
+      openusb for events and corresponding callbacks. When these events occur, the <parameter>callback
+      </parameter> will be called with <parameter>arg</parameter>, if any, as the parameter.
+      </para>
+      <para> The supported events type: </para>
+      <programlisting>
+      typedef enum openusb_event {
+            USB_ATTACH = 0,     /* attachment of device */
+            USB_REMOVE,         /* detachment of device */
+            USB_SUSPEND,        /* device suspend */
+            USB_RESUME,         /* device resume */
+            USB_HC_ATTACH,      /* host controller attachment */
+            USB_HC_REMOVE,      /* host controller detachment */
+            USB_COLDPLUG_COMPLETED, /* first scan of device completed */
+      } openusb_event_t;
+      </programlisting>
+
+      <para>openusb_event_callback_t has this prototype:</para>
+      <programlisting>
+      typedef void    (*openusb_event_callback_t)(openusb_handle_t handle,
+          openusb_devid_t devid, openusb_event_t event, void *arg);
+      </programlisting>
+
+      <para>
+      Application can call openusb_coldplug_callbacks_done() to block execution
+    until end of coldplug events.
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> <function>openusb_set_event_callback</function> returns 0 if succeed. Otherwise, a openusb
+    error will be returned.</para>
+    <para> OPENUSB_SUCCESS    -  Callback was successfully set. </para>
+
+    <para>OPENUSB_BADARG      - Invalid arguments, either invalid type or callback. </para>
+
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid handle. </para>
+
+    <para> OPENUSB_NO_RESOURCES - Memory allocation failure. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+
+    <refentry id="function.openusbsetdefaulttimeout">
+      <refnamediv>
+        <refname><function>openusb_set_default_timeout</function></refname>
+        <refpurpose>Set default timeout for USB transfer</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>openusb_set_default_timeout</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_transfer_type_t <parameter>type</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>timeout</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An openusb instance handle, obtained in
+    <function>openusb_init</function>.
+    </para>
+
+    <para><parameter>    type </parameter> -     Transfer type.</para>
+    <para> <parameter>   timeout </parameter>  -     Timeout value, in millisecond unit.</para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para>Application can call <function>openusb_set_default_timeout()</function>
+      to set default timeout for individual transfer type. <parameter>timeout</parameter> = 0
+      represents infinite timeout value.
+      OpenUSB supported transfer types are:
+      <programlisting>
+      typedef enum openusb_transfer_type {
+        USB_TYPE_ALL = 0,
+        USB_TYPE_CONTROL,
+        USB_TYPE_INTERRUPT,
+        USB_TYPE_BULK,
+        USB_TYPE_ISOCHRONOUS,
+      } openusb_transfer_type_t;
+      </programlisting>
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> OPENUSB_SUCCESS     -  New timeout was successfully set. </para>
+
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid openusb handle. </para>
+
+    <para>OPENUSB_BADARG     -  Invalid argument. Type is not a valid transfer type. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+</chapter>
+
+
+  <chapter id="ref.deviceops">
+    <title>Bus and Device Operations</title>
+      <para>This group of functions deal with the bus and device. Bus operations allows application
+      to scan busses on a system. Device operations allows application to search for specific device, open and close those devices as well standard USB operations like setting the configuration, alternate settings, clearing halts and resetting the device. It also provides OS level operations such as claiming and releasing interfaces.</para>
+
+    <refentry id="function.openusbgetbusidlist">
+      <refnamediv>
+        <refname><function>openusb_get_busid_list, openusb_free_busid_list</function></refname>
+        <refpurpose>Return all busids in the system, Free returned busids</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>uint32_t <function>openusb_get_busid_list</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_busid_t **<parameter>busids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_busids</parameter> </paramdef>
+	  </funcprototype>
+
+	  <funcprototype>
+	    <funcdef>void <function>openusb_free_busid_list</function></funcdef>
+	    <paramdef>openusb_busid_t *<parameter> busids</parameter></paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> -    An openusb instance handle, obtained in <function>openusb_init</function>.
+    </para>
+
+    <para><parameter>    busids</parameter> -     Pointer to address of the busid list.</para>
+    <para> <parameter>   num_busids</parameter>  -     Number of bus ids in the list.</para>
+
+     </refsect1>
+     <refsect1>
+     <title>Description</title>
+     <para><function>openusb_get_busid_list()</function> returns all the ids of busses in a system. The
+    busids are used by other openusb functions to search and match specific
+    devices that an application will operate on.
+
+    <function>openusb_free_busid_list()</function> frees the busids returned in
+    <function>openusb_get_busid_list()</function>.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> <function>openusb_get_busid_list</function> may have the following return values, </para>
+    <para> OPENUSB_SUCCESS    -  Callback was successfully set. </para>
+
+    <para>OPENUSB_BADARG      - Invalid argument. busids or num_busids is NULL. Or,
+                        (*busids) is NOT null, otherwise it will cause memory
+                        leak.. </para>
+
+    <para> OPENUSB_INVALID_HANDLE  -     Invalid handle. </para>
+    <para> OPENUSB_NULL_LIST   - The busids list is empty. </para>
+
+    <para> OPENUSB_NO_RESOURCES - Memory allocation failure. </para>
+
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+
+
+
+    <refentry id="function.openusbgetdevidsbybus">
+      <refnamediv>
+        <refname><function>openusb_get_devids_by_bus, openusb_get_devids_by_vendor,
+	openusb_get_devids_by_class, openusb_free_devid_list</function></refname>
+        <refpurpose>Return all devids matching a pattern, Free returned devids</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>uint32_t <function>openusb_get_devids_by_bus</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_busid_t <parameter>busid</parameter> </paramdef>
+	    <paramdef>openusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+   <funcprototype>
+            <funcdef>uint32_t <function>openusb_get_devids_by_vendor</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>int32_t <parameter>vendor </parameter> </paramdef>
+	    <paramdef>int32_t <parameter>product </parameter> </paramdef>
+	    <paramdef>openusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+
+   <funcprototype>
+            <funcdef>uint32_t <function>openusb_get_devids_by_class</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>int16_t <parameter>devclass</parameter></paramdef>
+	    <paramdef>int16_t <parameter>subclass</parameter></paramdef>
+	    <paramdef>int16_t <parameter>protocol</parameter></paramdef>
+	    <paramdef>openusb_devid_t **<parameter>devids</parameter> </paramdef>
+	    <paramdef>uint32_t *<parameter>num_devids</parameter> </paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>void <function>openusb_free_devid_list</function></funcdef>
+	    <paramdef>openusb_devid_t *<parameter> devids</parameter></paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+        <para><parameter>handle</parameter>  -    Libusb handle returned in openusb_init(). </para>
+
+        <para><parameter> busid</parameter>  -     Which bus (0 for all busses). </para>
+
+	<para><parameter>    devids </parameter> -    Pointer to address of the devid list, allocated by openusb. </para>
+
+	<para><parameter>    num_devids </parameter>- Number of device ids by this search/match. </para>
+
+	<para><parameter>    vendor </parameter>    - Vendor ID (0 - 0xFFFF, -1 for all). </para>
+
+	<para><parameter>    product  </parameter>  - Product ID (0 - 0xFFFF, -1 for all). </para>
+
+	<para><parameter>    class  </parameter>    - Class (0 - 0xFF, -1 for all). </para>
+
+	<para><parameter>    subclass </parameter>  - Subclass (0 - 0xFF, -1 for all). </para>
+
+	<para><parameter>    protocol</parameter>   - Protocol (0 - 0xFF, -1 for all). </para>
+
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+     <para> These functions are used to get/free device IDs of those devices that an
+    application is interested in. Application depends on these devids to do
+    any other operation on a device. For example, when application wants to
+    transfer data to a device, it has to specify the devid got here to call
+    corresponding openusb functions to open. </para>
+
+    <para><function>openusb_get_devids_by_bus()</function> returns all the ids of devices on a bus. If
+    <parameter>busid</parameter> is 0, it will return all <parameter>devids</parameter> in the system.
+    The returned devids are stored in <parameter>devids</parameter>.  The number of devids is in
+    <parameter>num_devids </parameter>.</para>
+
+    <para><function>openusb_get_devids_by_vendor()</function> returns all devids of devices that match
+    specific VID and PID. If <parameter>vendor</parameter> = -1, it will match any vendor's device.
+    If <parameter>product</parameter> = -1, it will match any devices of a vendor. If both are -1,
+    it will match any devices of any vendor.</para>
+
+    <para><function>openusb_get_devids_by_class()</function> returns all devids of devices that match
+    specific <parameter>class, subclass or protocol</parameter>. This function first uses application
+    supplied class, subclass and protocol to match their counterpart in Device
+    Descriptor of a device. If they don't match, then this function will try
+    to match class, subclass and protocol to their counterparts in invidual
+    Interface Descriptors of a device. If an argument is -1, it means to match
+    any class, subclass or protocol.</para>
+
+
+    <para><function>openusb_free_devid_list()</function> frees <parameter>devids</parameter> returned
+    in above interfaces.</para>
+
+     </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para>
+        openusb_get_devids_by_bus(), openusb_get_devids_by_vendor(),
+    openusb_get_devids_by_class() may have the following return values:
+    </para>
+
+     <para>
+    OPENUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    OPENUSB_BADARG      - Invalid argument. devids or num_devids is NULL;
+                        busid is invalid; vendor or product is out of range;
+                        class, subclass or product is out of range.
+     </para>
+    <para>
+    OPENUSB_NULL_LIST   - The devids list is empty.
+    </para>
+
+    <para>
+    OPENUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+
+    <refentry id="function.openusbgetdevicedata">
+      <refnamediv>
+        <refname><function>openusb_get_device_data,openusb_free_device_data </function></refname>
+        <refpurpose>Get a device's data, Free the device data</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>openusb_get_device_data</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_devid_t <parameter>devid</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>openusb_dev_data_t **<parameter>data</parameter></paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>void <function>openusb_free_device_data</function></funcdef>
+	    <paramdef>openusb_dev_data_t *<parameter>data</parameter></paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>handle</parameter> -     Libusb handle. </para>
+
+    <para><parameter>   devid</parameter> -      Device's devid. </para>
+
+    <para><parameter>    flags</parameter> -       Reserved. </para>
+
+    <para><parameter>    data</parameter>  -      Data returned by openusb of type openusb_dev_data_t </para>
+    </refsect1>
+
+
+
+     <refsect1>
+     <title>Description</title>
+    <para><function>openusb_get_device_data()</function> will return data of the specified device.
+    Application doesn't have to open the device before calling this function.The data
+    is stored in the openusb_dev_data_t structure, which has such members: </para>
+    <programlisting>
+        openusb_busid_t          busid; /* busid of the bus this device is on */
+        openusb_devid_t          devid; /* devid of this device */
+
+        /* bus address of the bus the device is on */
+        uint8_t                 bus_address;
+
+        /* parent device id, 0 for root-hub */
+        openusb_devid_t          pdevid;
+
+        /* parent port the device is connected to */
+        uint8_t                 pport;
+
+        /* number of ports on the device, 0 for non-hub device */
+        uint8_t                 nports;
+
+        /* descriptive path such as /dev/bus/usb/xxx */
+        char                    *sys_path;
+
+        /* topological path such as 1.2.1 */
+        char                    *bus_path;
+
+        usb_device_desc_t       dev_desc; /* device descriptor */
+        usb_config_desc_t       cfg_desc; /* configuration descriptors */
+
+        /* raw configuration desc cloud */
+        uint8_t                 *raw_cfg_desc;
+
+        /* string descriptors with the first langid */
+        usb_string_desc_t       *manufacturer;
+        usb_string_desc_t       *product;
+        usb_string_desc_t       *serialnumber;
+
+        /* max transfer size for each request, 0 if not supported */
+        uint32_t                ctrl_max_xfer_size;
+        uint32_t                intr_max_xfer_size;
+        uint32_t                bulk_max_xfer_size;
+        uint32_t                isoc_max_xfer_size;
+	</programlisting>
+
+
+     <para>Application should call <function>openusb_free_device_data</function> to
+     free memory space allocated in <function>openusb_get_device_data</function>.
+     </para>
+     </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> 
+    <function>openusb_get_device_data()</function> may have such return values:
+    </para>
+
+     <para>
+    OPENUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    OPENUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+     </para>
+    <para>
+    OPENUSB_PARSE_ERROR - Libusb fails to get device, configuration or
+                                string descriptors of this device.
+    </para>
+
+    <para>
+    OPENUSB_INVALID_HANDLE  -     Libusb handle is invalid.
+    </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+    </refentry>
+
+
+    <refentry id="function.openusbopendevice">
+      <refnamediv>
+        <refname><function>openusb_open_device,openusb_close_device</function></refname>
+        <refpurpose>Open/Close a device</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>int32_t <function>openusb_open_device</function></funcdef>
+	    <paramdef>openusb_handle_t <parameter>handle</parameter> </paramdef>
+	    <paramdef>openusb_devid_t <parameter>devid</parameter> </paramdef>
+	    <paramdef>uint32_t <parameter>flags</parameter> </paramdef>
+	    <paramdef>openusb_dev_handle_t *<parameter>dev</parameter></paramdef>
+	  </funcprototype>
+
+
+	  <funcprototype>
+	    <funcdef>int32_t <function>openusb_close_device</function></funcdef>
+	    <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter>handle</parameter> -     Libusb handle. </para>
+
+    <para><parameter>   devid</parameter> -      Device's devid. </para>
+
+    <para><parameter>    flags</parameter> -       Initialization flag. </para>
+
+    <para><parameter>    dev</parameter>  -      Device handle</para>
+    </refsect1>
+
+
+
+     <refsect1>
+     <title>Description</title>
+     <para><function>openusb_open_device</function> prepares a device and sets up internal
+     data structures for use by openusb. <function>openusb_close_device</function> returns the
+     opened device to its original state. </para>
+
+    <para>Application <emphasis>must</emphasis> call <function>openusb_open_device()</function>
+    to open a device before it can do any USB transfers on that device. The open <parameter>
+    flags</parameter> can be: </para>
+    <programlisting>
+       USB_INIT_DEFAULT		default behavior 
+
+       USB_INIT_FAIL_FAST		fail if not immediately available 
+
+       USB_INIT_REVERSIBLE	try platform dependent things that are
+                                guaranteed to be reversed on close 
+
+       USB_INIT_NON_REVERSIBLE	try advanced platform dependent things that may
+                                not be guaranteed to be reversible on close
+
+     </programlisting>
+     <para>Upon successful open of a device, the device handle is returned in <parameter>dev</parameter>.
+     All device associated operations will use this handle.</para>
+
+    <para><function>openusb_close_device()</function> will destroy some internal data structures associated
+    with the device handle <parameter>dev</parameter>.</para>
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> 
+    </para>
+
+     <para>
+    OPENUSB_SUCCESS   -   Success.
+    </para>
+
+     <para>
+    OPENUSB_NO_RESOURCES - Memory allocation failure.
+    </para>
+
+     <para>
+    OPENUSB_UNKNOWN_DEVICE - Can't find the device specified by <parameter>devid</parameter>.
+     </para>
+    <para>
+    OPENUSB_SYS_FUNC_FAILURE - System function fails.
+    </para>
+
+    <para>
+    OPENUSB_INVALID_HANDLE  -     Libusb <parameter>handle</parameter> is invalid.
+    </para>
+
+    <para>
+    OPENUSB_PLATFORM_FAILURE -    Unspecified kernel/driver failure. 
+    </para>
+
+    <para>
+    OPENUSB_IO_* -    USB host controller errors
+    </para>
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    <xref linkend="function.openusbinit"/>
+    <!--FIXME: point to correct link -->
+    </para>
+    </refsect1>
+
+    </refentry>
+
+
+
+
+<refentry id="function.openusbgetdevid">
+
+  <refnamediv>
+    <refname><function>openusb_get_devid</function></refname>
+
+    <refpurpose>Extract device ID from a device handle</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_devid</function></funcdef>
+
+        <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+        <paramdef>openusb_devid_t * <parameter> devid</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> devid</parameter> - Address stored the returned devid
+    value.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>openusb_get_devid()</function> gets the device ID of which
+    the device handle is dev.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_devid()</function> returns 0 on success.
+    Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS - No errors.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter> is not valid</para>
+
+    <para>OPENUSB_BADARG - <parameter>Devid</parameter> address is not
+    valid</para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+<refentry id="function.openusbgetlibhandle">
+
+  <refnamediv>
+    <refname><function>openusb_get_lib_handle</function></refname>
+
+    <refpurpose>Extract openusb handle from a device handle</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_lib_handle</function></funcdef>
+
+        <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+        <paramdef>openusb_handle_t *<parameter> lib_handle</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+
+    <para><parameter> lib_handle</parameter> - Address to store returned openusb handle </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>openusb_get_lib_handle()</function> gets the openusb handle of the device whose
+    device handle is <parameter>dev</parameter>.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_devid()</function> returns 0 on success.
+    Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS - No errors.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE - Device handle <parameter>dev</parameter>is not valid.</para>
+
+    <para>OPENUSB_BADARG - <parameter>lib_handle</parameter> is an invalid address</para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+<refentry id="function.openusbgetmaxxfersize">
+
+  <refnamediv>
+    <refname><function>openusb_get_max_xfer_size</function></refname>
+
+    <refpurpose>Get the maximum data transfer size per request based on the bus
+    and type
+    </refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_max_xfer_size</function></funcdef>
+
+        <paramdef>openusb_handle_t <parameter> handle</parameter></paramdef>
+
+        <paramdef>openusb_busid_t  <parameter> bus</parameter></paramdef>
+        <paramdef>openusb_transfer_type_t <parameter> type</parameter></paramdef>
+        <paramdef>uint32_t *<parameter> bytes</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle</parameter> - Libusb handle.</para>
+
+    <para><parameter> bus</parameter> - Bus ID.</para>
+    <para><parameter> type</parameter> - Transfer type.</para>
+    <para><parameter> bytes</parameter> - Max allowed size.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>openusb_get_max_xfer_size()</function> gets the maximum transfer size
+    that can be specified in openusb_request based on the which bus the target device is on
+    and the desired transfer type. The size value is returned in <parameter>bytes</parameter>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_max_xfer_size()</function> returns OPENUSB_SUCCESS on success.
+    Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS - No errors.</para>
+
+    <para>OPENUSB_INVALID_HANDLE - Invalid openusb handle.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE - Bus id<parameter>bus</parameter> is not valid</para>
+
+    <para>OPENUSB_BADARG - <parameter>type</parameter> is not valid or
+    <parameter>bytes</parameter> is NULL.</para>
+
+    <para>OPENUSB_NOT_SUPPORTED - Operation is not supported.</para>
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+
+<refentry id="function.openusbgetconfiguration">
+
+  <refnamediv>
+    <refname><function>openusb_get_configuration, openusb_set_configuration</function></refname>
+
+    <refpurpose>Get the current bConfigurationValue of a device,
+    Set a device's bConfigurationValue</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_configuration</function></funcdef>
+        <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+        <paramdef>uint8_t* <parameter>cfg</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t<function>openusb_set_configuration</function></funcdef>
+        <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+        <paramdef>uint8_t <parameter>cfg</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> cfg</parameter> - Configuration value.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>openusb_get_configuration()</function> gets the current active configuration
+    value of the device specified by dev. The bConfigurationValue is returned in
+    <parameter>cfg</parameter>.</para>
+
+    <para><function>openusb_set_configuration</function>() sets a device's bConfigurationValue
+    to <parameter>cfg</parameter>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_configuration</function>() or <function>openusb_set_configuration</function>() returns 0 on success.  Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_BADARG         <parameter>cfg</parameter> is an invalid address for openusb_get_configuration(), or not a valid bConfigurationValue for openusb_set_configuration()</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="function.openusbclaiminterface">
+
+  <refnamediv>
+    <refname><function>openusb_claim_interface, openusb_release_interface,
+    openusb_is_interface_claimed</function></refname>
+
+    <refpurpose>Claim interface exclusively, Release an interface,
+    Check if an interface has been claimed</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_claim_interface</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>openusb_init_flag_t <parameter>flags</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_release_interface</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_is_interface_claimed</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> ifc</parameter> - Interface number.</para>
+
+    <para><parameter> flags</parameter> - Claiming flags.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>openusb_claim_interface()</function> claims an interface of device <parameter>dev</parameter>.
+    See <function>openusb_open_device</function> for the meaning of <parameter>flags</parameter>. Application
+    <emphasis>must</emphasis> call <function>openusb_claim_interface</function>() before it further operates
+    on an interface. </para>
+    <para><function>openusb_release_interface</function>() releases a claimed interface <parameter>ifc</parameter>.
+    </para>
+    <para><function>openusb_is_interface_claimed</function> returns if the interface <parameter>ifc</parameter> has been claimed.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_claim_interface</function>() or <function>openusb_release_interface</function>() returns 0 on success. <function>openusb_is_interface_claimed</function> returns 0 if not claimed and 1 if already claimed. Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_BADARG         <parameter>ifc</parameter> is not valid.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+    <para>OPENUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="function.openusbopendevice"/></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="function.openusbgetaltsetting">
+
+  <refnamediv>
+    <refname><function>openusb_get_altsetting,openusb_set_altsetting</function></refname>
+
+    <refpurpose>Get alternate setting number, Set alternate setting</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_altsetting</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>openusb_init_flag_t* <parameter>alt</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_set_altsetting</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev</parameter> - Device handle.</para>
+
+    <para><parameter> ifc</parameter> - Interface number.</para>
+
+    <para><parameter> alt</parameter> - Alternate setting number</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>openusb_get_altsetting()</function> get the current alternate setting number of interface
+    <parameter>ifc</parameter>. The alternate number is returned in <parameter>alt</parameter>. 
+    </para>
+
+    <para>
+    <function>openusb_set_altsetting()</function> sets the active alternate setting of the interface
+    <parameter>ifc</parameter>.
+    Application should call this function to set proper alternate setting of an
+    interface before doing data transfer on endpoints in that setting.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_altsetting</function>(),  <function>openusb_set_altsetting</function>() returns 0 on success.
+    Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_BADARG         <parameter>ifc</parameter> or <parameter>alt</parameter> is not valid.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle is not valid</para>
+
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>OPENUSB_BUSY               The interface <parameter>ifc</parameter> has already been claimed.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="function.openusbclaiminterface"/></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="function.openusbreset">
+
+  <refnamediv>
+    <refname><function>openusb_reset</function></refname>
+
+    <refpurpose>Reset device</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_reset</function></funcdef>
+
+        <paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para><function>openusb_reset()</function> resets a device by resetting
+    its port. The full reset of a device is not guaranteed.  </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_get_devid()</function> returns 0 on success.
+    Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS No errors.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE Device handle is not valid</para>
+
+    <para>OPENUSB_NOT_SUPPORTED  Device reset is not supported.  </para>
+
+    <para>OPENUSB_IO_*	USB host controller errors </para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+</chapter>
+
+<chapter id ="ref.parsers">
+  <title> Device Descriptor Parsers </title>
+  <para> This group of functions are helpers to get and parse kinds of USB descriptors.  </para>
+
+  <refentry id="function.openusbgetrawdesc">
+
+  <refnamediv>
+    <refname><function>openusb_get_raw_desc, openusb_free_raw_desc, openusb_parse_device_desc,
+    openusb_parse_config_desc, openusb_parse_interface_desc, openusb_parse_endpoint_desc
+    </function></refname>
+    
+    <refpurpose>Get/Free raw device descriptors; Get cooked Device, Configuration, Interface,
+    Endpoint descriptors  </refpurpose>
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_get_raw_desc</function></funcdef>
+	<paramdef>openusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>openusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t <parameter>type</parameter></paramdef>
+	<paramdef>uint8_t <parameter>descidx</parameter></paramdef>
+	<paramdef>uint16_t <parameter>langid</parameter></paramdef>
+	<paramdef>uint8_t **<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t *<parameter>buflen</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_parse_device_desc</function></funcdef>
+	<paramdef>openusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>openusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>usb_device_desc_t *<parameter>devdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_parse_config_desc</function></funcdef>
+	<paramdef>openusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>openusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>usb_config_desc_t *<parameter>cfgdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_parse_interface_desc</function></funcdef>
+	<paramdef>openusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>openusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifcidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+	<paramdef>usb_interface_desc_t *<parameter>ifcdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_parse_endpoint_desc</function></funcdef>
+	<paramdef>openusb_handle_t <parameter>handle</parameter></paramdef>
+	<paramdef>openusb_devid_t <parameter>devid</parameter></paramdef>
+	<paramdef>uint8_t *<parameter>buffer</parameter></paramdef>
+	<paramdef>uint16_t <parameter>buflen</parameter></paramdef>
+	<paramdef>uint8_t <parameter>cfgidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifcidx</parameter></paramdef>
+	<paramdef>uint8_t <parameter>alt</parameter></paramdef>
+	<paramdef>uint8_t <parameter>eptidx</parameter></paramdef>
+	<paramdef>usb_endpoint_desc_t *<parameter>eptdesc</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>void <function>openusb_free_raw_desc</function></funcdef>
+	<paramdef>uint8_t <parameter>*buffer</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+ <refsect1>
+ <title> Parameters </title>
+
+   <para><parameter> handle</parameter>	Libusb handle. </para>
+
+<para><parameter>    devid</parameter>	Device's devid. </para>
+
+<para><parameter>    type</parameter>	Descriptor type. </para>
+
+<para><parameter>    descidx</parameter>	Index for config/string descriptor, zero for others </para>
+
+<para><parameter>    langid</parameter>	Language ID for string descriptor, zero for others </para>
+
+<para><parameter>    buffer</parameter>	Data buffer of raw descriptors data. </para>
+
+<para><parameter>    buflen</parameter>	Length of raw descriptors. </para>
+
+<para><parameter>    devdesc</parameter>	Pointer to device descriptor. </para>
+
+<para><parameter>    cfgidx</parameter>	Configuration descriptor index. </para>
+
+<para><parameter>    cfgdesc</parameter>	Pointer to configuration descriptor. </para>
+
+<para><parameter>    ifcidx</parameter>	Interface index. </para>
+
+<para><parameter>    alt	</parameter>	Alternate setting number. </para>
+
+<para><parameter>    ifcdesc</parameter>	Pointer to interface descriptor. </para>
+
+<para><parameter>    eptidx</parameter>	Endpoint index. </para>
+
+<para><parameter>    eptdesc</parameter>	Pointer to endpoint descriptor. </para>
+   </refsect1>
+
+  <refsect1>
+  <title> Description </title>
+
+    <para><function>openusb_get_raw_desc()</function> will return raw descriptors of <parameter>type, descidx and
+    langid</parameter> which an application specifies on calling this function. The raw
+    descriptor is returned in <parameter>buffer</parameter> and length of it is in
+    <parameter>buflen</parameter>.  </para>
+    
+    <para>Application should call <function>openusb_free_raw_desc()</function> to free descriptor memory
+    if it has called <function>openusb_get_raw_desc()</function>. </para>
+
+   <para><function> openusb_parse_device_desc()</function> returns the cooked device descriptors of the
+    specified <parameter>devid</parameter>.  </para>
+
+    <para><function>openusb_parse_config_desc()</function> returns the cooked configuration descriptor of
+    specified <parameter>devid</parameter> and <parameter>cfgidx</parameter>.  </para>
+
+   <para><function> openusb_parse_interface_desc()</function> returns the cooked interface descriptor of
+    number alt alternate setting of interface <parameter>ifcidx</parameter> in configuration
+    <parameter>cfgidx</parameter>. </para>
+
+   <para><function> openusb_parse_endpoint_desc()</function> returns an endpoint's descriptor of which is
+    in alternate setting <parameter>alt</parameter> of interface <parameter>ifcidx</parameter> in
+    configuration <parameter>cfgidx</parameter>. </para>
+
+
+    <para>For <function>openusb_parse_device_desc(), openusb_parse_config_desc(),
+    openusb_parse_interface_desc() and openusb_parse_endpoint_desc()</function>, application
+    can use the raw descriptor buffer got through <function>openusb_get_raw_desc()</function>. If
+    application pass a NULL buffer pointer, these four openusb functions will
+    call <function>openusb_get_raw_desc()</function> internally and return the cooked descriptors. </para>
+
+  </refsect1>
+  <refsect1>
+  <title> Return Values </title>
+
+   <para> OPENUSB_SUCCESS	Success. </para>
+
+<para>    OPENUSB_UNKNOWN_DEVICE	Can't find the device specified by devid. </para>
+
+   <para> OPENUSB_INVALID_HANDLE	Invalid openusb handle. </para>
+
+   <para> OPENUSB_NO_RESOURCES		Memory allocation failure. </para>
+
+   <para> OPENUSB_PARSE_ERROR		Fail to parse descriptors. </para>
+
+   <para> OPENUSB_PLATFORM_FAILURE	Kernel/driver failure. </para>
+
+   <para> OPENUSB_BADARG		Invalid arguments. devdesc, cfgdesc, ifcdesc or
+    				eptdesc is NULL. buflen is invalid if buffer is
+				not NULL. </para>
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para></para>
+    </refsect1>
+</refentry>
+
+
+
+<refentry id="function.openusbparsedata">
+
+  <refnamediv>
+    <refname><function>openusb_parse_data</function></refname>
+
+    <refpurpose>Unpack arbitrary little endian raw data</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>void <function>openusb_parse_data</function></funcdef>
+
+        <paramdef>char *<parameter>format</parameter></paramdef>
+        <paramdef>uint8_t *<parameter>data</parameter></paramdef>
+        <paramdef>uint32_t <parameter>datalen</parameter></paramdef>
+        <paramdef>void *<parameter>structure</parameter></paramdef>
+        <paramdef>uint32_t <parameter>structlen</parameter></paramdef>
+        <paramdef>uint32_t *<parameter>count</parameter></paramdef>
+
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter>    format </parameter>	A character string indicating the format that application
+    		requires. Character 'b' represents one byte, 'w' for word and
+		'd' for dword(4 bytes). Specially, character '.' indicates
+		skipping one byte of source data. </para>
+
+   <para><parameter> data </parameter>	Little endian raw data that will be parsed.  </para>
+
+   <para><parameter> datalen </parameter>	Length of data. </para>
+
+   <para><parameter> structure </parameter>	Address of the returned structure where the unpacked data will
+    		be stored  </para>
+    
+   <para><parameter> structlen </parameter>	Length of structure. </para>
+
+   <para><parameter> count </parameter>	Number of bytes parsed. </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+   <para><function>openusb_parse_data()</function> can parse little endian raw data and convert it to
+    structured data. It's basically used to parse USB descriptors. </para>
+
+    <para>For exampe, to parse a descriptor such as: </para>
+    <programlisting>
+
+	struct test_descr {
+		uint8_t		a;
+		uint16_t	b;
+		uint8_t		c;
+		uint32_t	d;
+	};
+
+    </programlisting>
+    <para>
+    The application would call:
+    </para>
+    <informalexample>
+    <programlisting>
+    	rv = openusb_parse_data("bwbd", buffer, sizeof (buffer), (void *)&amp;descr,
+		sizeof (descr), &amp;count);
+    </programlisting>
+    </informalexample>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para>OPENUSB_SUCCESS -	Parse data successfully.</para>
+
+    <para>OPENUSB_PARSE_ERROR -	Error happened during parsing.</para>
+
+    <para>OPENUSB_BADARG -	Invalid argument. <parameter>Format, data, structure or count</parameter> is
+    			NULL pointer.</para>
+
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+
+    <para></para>
+  </refsect1>
+</refentry>
+
+</chapter>
+
+
+
+<chapter id ="ref.transfer">
+  <title> USB Data Transfer </title>
+  <para>Functions in this group are used to transfer USB data. OpenUSB implements transfer APIs,
+  including synchronous and asynchronous, defined in openusb 1.0 interface. The synchronous means when such
+  API is used, it will block until a transfer request is accomplished or timeout. The asynchronous means
+  such interface will returns immediately no matter success or failure. Application can use callback
+  mechanism or other openusb 1.0 interface to check asynchronous request.
+  </para>
+
+  <refentry id="function.openusbxferwait">
+
+  <refnamediv>
+    <refname><function>openusb_xfer_wait, openusb_xfer_aio</function></refname>
+
+    <refpurpose>Issue synchronous I/O request, Issue asynchronous I/O request </refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_xfer_wait</function></funcdef>
+	<paramdef>openusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_xfer_aio</function></funcdef>
+	<paramdef>openusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> - Pointer to request handle.</para>
+    <para>Elements in openusb_request_handle structure:</para>
+   <programlisting>
+	   openusb_dev_handle_t     dev; /* device handle */
+	   uint8_t                 interface;      /* ignored for ep0 */
+	   uint8_t                 endpoint; 
+	   openusb_transfer_type_t  type; /* transfer type */
+
+	   union openusb_request {
+	       openusb_ctrl_request_t   *ctrl;
+	       openusb_intr_request_t   *intr;
+	       openusb_bulk_request_t   *bulk;
+	       openusb_isoc_request_t   *isoc;
+	   } req;
+
+	   int32_t (*cb)(struct openusb_request_handle *handle); /* callback of this request */
+	   void    *arg;   /* additional arg for callback */
+   </programlisting>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>openusb_xfer_wait()</function> can be called by application to do <emphasis>synchronous</emphasis>
+    USB transfers.  Alternately, application can call <function>openusb_xfer_aio()</function> to do
+    <emphasis>asynchronous</emphasis> USB transfer.
+    </para>
+
+    <para>
+    For both functions, application should allocate a
+    request handle and fill required parameters in it. When application calls <function>openusb_xfer_wait()</function>,
+    they don't have to set request callback. For <function>openusb_xfer_aio()</function>, if application wants to use
+    <function>openusb_wait()</function> or <function>openusb_poll()</function> to get completed request,
+    it must <emphasis>not</emphasis> set callback <parameter>cb</parameter> in the request handle. (In implementation
+    of OpenUSB, if <parameter>cb</parameter> is not NULL, it will be called immediately after this request is accomplished.
+    Otherwise, the completed request is put on a list for application to retrieve by using <function>openusb_wait/openusb_poll
+    </function>)
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_xfer_wait</function>(),  <function>openusb_xfer_aio</function>() returns 0 on success.
+    Otherwise, a openusb error is returned. NOTE, when an error happens, it just means submission of this request
+    fails. The data status should be checked in <parameter>result</parameter> of individual request type.</para>
+
+    <para></para>
+
+    <para><errorname>OPENUSB_SUCCESS</errorname>  - No errors.</para>
+
+    <para><errorname>OPENUSB_BADARG </errorname>  - <varname>handle</varname> or elements
+    				in <varname>handle</varname> is not valid.</para>
+
+    <para><errorname>OPENUSB_UNKNOWN_DEVICE</errorname>  -   Device handle
+    			<varname>dev </varname>is not valid.</para>
+
+    <para><errorname>OPENUSB_PLATFORM_FAILURE</errorname> -  Unspecified kernel/driver
+    			failure.</para>
+
+    <para><errorname>OPENUSB_NO_RESOURCES</errorname> -  Memory allocation failure.</para>
+
+    <para><errorname>OPENUSB_IO_* </errorname>  -    USB host controller errors.</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para><xref linkend="function.openusbwait"/></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="function.openusbctrlxfer">
+
+  <refnamediv>
+    <refname><function>openusb_ctrl_xfer, openusb_intr_xfer, openusb_bulk_xfer, openusb_isoc_xfer</function></refname>
+    <refpurpose>Issue synchronous Control, Interrupt, Bulk, Isochronous request </refpurpose>
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_ctrl_xfer</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>openusb_ctrl_request_t *<parameter>ctrl</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_intr_xfer</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>openusb_intr_request_t *<parameter>intr</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_bulk_xfer</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>openusb_bulk_request_t *<parameter>bulk</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_isoc_xfer</function></funcdef>
+	<paramdef>openusb_dev_handle_t <parameter>dev</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ifc</parameter></paramdef>
+	<paramdef>uint8_t <parameter>ept</parameter></paramdef>
+	<paramdef>openusb_isoc_request_t *<parameter>isoc</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> dev </parameter> - Device handle.</para>
+    <para><parameter> ifc </parameter> - Interface number.</para>
+    <para><parameter> ept </parameter> - Endpoint number.</para>
+    <para><parameter> ctrl </parameter> - Control request set by application.</para>
+    <para><parameter> intr </parameter> - Interrupt request set by application.</para>
+    <para><parameter> bulk </parameter> - Bulk request set by application.</para>
+    <para><parameter> isoc </parameter> - Isochronous request set by application.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>openusb_ctrl_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    CONTROL transfers. Application should allocate and fill a openusb_ctrl_request:
+    <programlisting>
+
+    struct openusb_ctrl_request {
+	    struct openusb_ctrl_setup {                                                                                           
+		    uint8_t         bmRequestType;                                                                               
+		    uint8_t         bRequest;                                                                                    
+		    uint16_t        wValue;                                                                                      
+		    uint16_t        wIndex;                                                                                      
+
+		    /* wLength set automatically based on length */                                                              
+	    } setup;                                                                                                             
+
+	    uint8_t                 *payload;                                                                                    
+	    uint32_t                length; /* platform endian */                                                                
+	    uint32_t                timeout;                                                                                     
+	    uint32_t                flags;                                                                                       
+	    openusb_request_result_t result;                                                                                      
+	    struct openusb_ctrl_request      *next;    
+    }
+    </programlisting>
+
+    <function>openusb_intr_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    INTERRUPT transfers. Application should allocate and fill a openusb_intr_request:
+    <programlisting>
+
+    struct openusb_intr_request {
+    	uint16_t                interval;       /* may not work on some OS */
+    	uint8_t                 *payload;
+    	uint32_t                length;
+    	uint32_t                timeout;
+    	uint32_t                flags;
+    	openusb_request_result_t result;
+    	struct openusb_intr_request      *next;
+    }
+    </programlisting>
+    </para>
+
+   <para>
+    <function>openusb_bulk_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    BULK transfers. Application should allocate and fill a openusb_bulk_request:
+    <programlisting>
+
+    struct openusb_bulk_request {
+	    uint8_t                 *payload;                                                                                    
+	    uint32_t                length;                                                                                      
+	    uint32_t                timeout;                                                                                     
+	    uint32_t                flags;                                                                                       
+	    openusb_request_result_t result;                                                                                      
+	    struct openusb_bulk_request      *next;    
+    }
+    </programlisting>
+    </para>
+
+    <para>
+    <function>openusb_isoc_xfer()</function> is used to do <emphasis>synchronous</emphasis> USB
+    ISOCHRONOUS transfers. Application should allocate and fill a openusb_isoc_request:
+    <programlisting>
+    typedef struct openusb_isoc_pkts {                                                                                            
+	    uint32_t                num_packets;                                                                                 
+	    struct openusb_isoc_packet {                                                                                          
+		    uint8_t         *payload;                                                                                    
+		    uint32_t        length;                                                                                      
+	    } *packets;                                                                                                          
+    } openusb_isoc_pkts_t;  
+
+    struct openusb_isoc_request {
+	    uint32_t                start_frame;                                                                                 
+	    uint32_t                flags;                                                                                       
+	    openusb_isoc_pkts_t      pkts;                                                                                        
+
+	    /* pointer to isoc result array */                                                                                   
+	    openusb_request_result_t *isoc_results;                                                                               
+
+	    /* overall isoc transfer completion status */                                                                        
+	    int32_t                 isoc_status;                                                                                 
+
+	    struct openusb_isoc_request      *next;  
+    }
+    </programlisting>
+    </para>
+
+
+    <para>
+    For <function>openusb_ctrl_xfer, openusb_intr_xfer and openusb_bulk_xfer</function>, the request status
+    is returned in <parameter>openusb_request_result</parameter>. Application may get transfer status and
+    length of its last request. For <function>openusb_isoc_xfer()</function>, every packet in the isoc request
+    has a corresponding <parameter>result</parameter>, application can check individual packet status 
+    from the <parameter>isoc_results</parameter>. Application <emphasis>must</emphasis> allocate enough
+    number of <parameter>isoc_results</parameter> for openusb to fill the status.
+    </para>
+    <para>
+    openusb_request_result_t has the following elements:
+    <programlisting>
+	   int32_t                 status;
+	   uint32_t                transferred_bytes;
+    </programlisting>
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_ctrl_xfer</function>,  <function>openusb_intr_xfer, openusb_bulk_xfer and openusb_isoc_xfer
+    </function>() returns 0 on success.
+    Otherwise, a openusb error is returned. NOTE, when there's no error, it just means submission of this request
+    succeed. Even if these functions didn't return failure, the data transfer may still have error and such kind of failure
+    is reflected in in <parameter>result</parameter> of individual request.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_BADARG         <parameter>handle</parameter> or elements in <parameter>handle</parameter>
+    				is not valid.</para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE     Device handle <parameter>dev </parameter>is not valid</para>
+
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>OPENUSB_NO_RESOURCES       Memory allocation failure</para>
+
+    <para>OPENUSB_IO_*               USB host controller errors</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+<refentry id="function.openusbabort">
+
+  <refnamediv>
+    <refname><function>openusb_abort</function></refname>
+
+    <refpurpose>Abort previous I/O request</refpurpose>
+
+
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_abort</function></funcdef>
+	<paramdef>openusb_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+    </funcsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> - Request handle.</para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+    <function>openusb_abort()</function> is used to abort an I/O request submitted previously by
+    <function>openusb_xfer_wait/openusb_xfer_aio</function>.
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_abort</function> returns 0 on success.  Otherwise, a openusb error is returned.</para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_INVALID_HANDLE         <parameter>handle</parameter> is not valid.</para>
+
+    <para>OPENUSB_NO_RESOURCES           Memory allocation failure. </para>
+    
+    <para>OPENUSB_IO_*                   USB host controller errors. </para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+
+
+<refentry id="function.openusbwait">
+
+  <refnamediv>
+    <refname><function>openusb_wait, openusb_poll</function></refname>
+
+    <refpurpose>Wait for I/O request completion, Poll completion status of I/O request</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_wait</function></funcdef>
+	<paramdef>uint32_t <parameter>num_reqs</parameter></paramdef>
+	<paramdef>openusb_request_handle_t* <parameter>handles</parameter></paramdef>
+	<paramdef>openusb_request_handle_t* <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_poll</function></funcdef>
+	<paramdef>uint32_t <parameter>num_reqs</parameter></paramdef>
+	<paramdef>openusb_request_handle_t* <parameter>handles</parameter></paramdef>
+	<paramdef>openusb_request_handle_t* <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> num_reqs </parameter> Number of requests to wait/poll.</para>
+    <para><parameter> handles </parameter>  Array of request handles to wait/poll.</para>
+    <para><parameter> handle </parameter>  Completed request handle.</para>
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>
+
+    <function>openusb_wait()</function> can be called to wait for completion on <parameter>num_reqs
+    </parameter> of request handles. If one request was completed, <function>openusb_wait</function>
+    will return its handle in <parameter>handle</parameter>. Otherwise, <function>openusb_wait</function>
+    will block until one request gets completed.  
+    </para>
+    <para>
+    <function>openusb_poll()</function> is different from <function>openusb_wait</function>. It
+    checks if any request in <parameter>handles</parameter> has been completed. If there's one,
+    <function>openusb_poll</function> will return this request's handle in <parameter>handle</parameter>.
+    Otherwise, it returns immediately with <parameter>handle</parameter> set to NULL. No block at all.
+    </para>
+
+    <para>
+    For both functions, caller should allocate an array of <parameter>num_reqs</parameter> elements
+    for <parameter>handles</parameter> and set every element to the request handles to be checked.
+    </para>
+
+    <para>If application has set callback in request when submitting it in <function>openusb_xfer_aio
+    </function>, it should <emphasis>NOT</emphasis> call the above functions to wait/poll that request.
+
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+
+    <para><function>openusb_wait</function>(),  <function>openusb_poll</function>() returns 0 on success.
+    Otherwise, a openusb error is returned. </para>
+
+    <para></para>
+
+    <para>OPENUSB_SUCCESS     No errors.</para>
+
+    <para>OPENUSB_BADARG         <parameter>handles</parameter> or <parameter>handle</parameter>
+    				is not valid. Either they are NULL or some member of request is
+				invalid.
+    </para>
+
+    <para>OPENUSB_UNKNOWN_DEVICE     Can't find the device specified in request.</para>
+
+    <para>OPENUSB_PLATFORM_FAILURE   Unspecified kernel/driver failure</para>
+
+    <para>OPENUSB_NO_RESOURCES       Memory allocation failure</para>
+
+    <para>OPENUSB_IO_*               USB host controller errors</para>
+
+ 
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+<refentry id="function.openusbstart">
+
+
+  <refnamediv>
+    <refname><function>openusb_start, openusb_stop</function></refname>
+
+    <refpurpose> Start multi-xfer mode I/O; Stop multi-xfer mode I/O</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <funcsynopsis>
+      <funcprototype>
+        <funcdef>int32_t <function>openusb_start</function></funcdef>
+	<paramdef>openusb_multi_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+      <funcprototype>
+	<funcdef>int32_t<function>openusb_stop</function></funcdef>
+	<paramdef>openusb_multi_request_handle_t <parameter>handle</parameter></paramdef>
+      </funcprototype>
+
+    </funcsynopsis>
+    <para></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Parameters</title>
+
+    <para><parameter> handle </parameter> Pointer to multi-xfer request handle.</para>
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para> These two functions are to be implemented by OpenUSB. 
+    </para>
+
+    <para></para>
+  </refsect1>
+
+  <refsect1>
+    <title>Return Value</title>
+    <para>TBD</para>
+
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para></para>
+  </refsect1>
+</refentry>
+
+
+</chapter>
+
+
+
+<chapter id="ref.helper">
+<title>Helper Utilities</title>
+<para>Some handy functions. </para>
+    <refentry id="function.openusbstrerror">
+      <refnamediv>
+        <refname><function>openusb_strerror</function></refname>
+        <refpurpose>Return english text corresponding to an error code</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>const char *<function>openusb_strerror</function></funcdef>
+	    <paramdef>int32_t <parameter>error</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> error</parameter> -   Error code. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>openusb_strerror()</function> returns a string of English text representing
+      an error code <parameter>error</parameter>
+      </para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> A none NULL pointer to string </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
+    </refentry>
+
+    <refentry id="function.openusbcputole">
+      <refnamediv>
+        <refname><function>openusb_cpu_to_le16,openusb_cpu_to_le32</function></refname>
+        <refpurpose>Convert data from CPU endianess to Little Endian</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>uint16_t <function>openusb_cpu_to_le16</function></funcdef>
+	    <paramdef>uint16_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
+
+          <funcprototype>
+            <funcdef>uint32_t <function>openusb_cpu_to_le32</function></funcdef>
+	    <paramdef>uint32_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> data </parameter> -   To be converted data. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>openusb_cpu_to_le16()</function> converts one word (2bytes) of data from
+      byte order in CPU endian to Little Endian.
+      </para>
+      <para><function>openusb_cpu_to_le32</function> converts a Dword(4bytes) data from CPU byte
+      order to little endian order.</para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> The return value is converted data. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
+    </refentry>
+
+    <refentry id="function.openusbletocpu">
+      <refnamediv>
+        <refname><function>openusb_le16_to_cpu,openusb_le32_to_cpu</function></refname>
+        <refpurpose>Convert data from little endian to CPU byte order.</refpurpose>
+      </refnamediv>
+
+     <refsynopsisdiv>	
+        <funcsynopsis>
+          <funcprototype>
+            <funcdef>uint16_t <function>openusb_le16_to_cpu</function></funcdef>
+	    <paramdef>uint16_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
+
+          <funcprototype>
+            <funcdef>uint32_t <function>openusb_le32_to_cpu</function></funcdef>
+	    <paramdef>uint32_t <parameter>data</parameter> </paramdef>
+	  </funcprototype>
+        </funcsynopsis>
+     </refsynopsisdiv>	
+
+    <refsect1>
+    <title>Parameters</title>
+    <para><parameter> data </parameter> -   To be converted data. 
+    </para>
+    </refsect1>
+
+     <refsect1>
+     <title>Description</title>
+      <para><function>openusb_le16_to_cpu()</function> converts one Word (2bytes) of data from
+      little endian order to CPU byte order.
+      </para>
+      <para><function>openusb_cpu_to_le32</function> converts a Dword(4bytes) data from little 
+      endian order to CPU order.</para>
+    
+    </refsect1>
+
+    <refsect1>
+    <title> Return Value </title>
+    <para> The return value is converted data. </para>
+
+    </refsect1>
+
+    <refsect1>
+    <title> See Also </title>
+    <para>
+    </para>
+    </refsect1>
+    </refentry>
+
+</chapter>
+
+
+

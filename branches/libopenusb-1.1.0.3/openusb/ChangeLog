@@ -1,0 +1,23 @@
+2008-10-27  OpenUSB Community  <libusb-devel@lists.sourceforge.net>
+
+	* Version updated from 1.0.1 to 1.0.2
+	* Added preliminary darwin backend supporting
+	* Fixed bugs in USB io transfers
+	* Changed LIBUSB_* to OPENUSB_*
+	* Enhanced multi-thread supporting
+	* Fixed bugs in setting and getting device's configuration
+	* Changed malloc() to calloc() to get zero'ed memory
+	* Fixed device discovery on multiporcess systems
+	* Fixed bugs in lock and unlock
+
+2008-02-22  OpenUSB Community <libusb-devel@lists.sourceforge.net>
+
+	* Version 1.0.1 was released to fix minor issues of OpenUSB version 1.0
+
+2007-12-21  OpenUSB Community <libusb-devel@lists.sourceforge.net>
+
+	* Initial implementation of OpenUSB interfaces, with Solaris and Linux
+	  backend support
+	* Supported mulit-thread safe
+	* Supported isochronous transfer
+	* See more information on http://openusb.sourceforge.net/

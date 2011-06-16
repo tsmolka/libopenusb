@@ -1,0 +1,10 @@
+To compile openusb from CVS:
+
+./autogen.sh
+make
+
+If you update the sources from CVS and things are acting weird, try running
+autogen.sh again.
+
+--jerdfelt 05/23/2002
+

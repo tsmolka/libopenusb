@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!-- DTD location: http://www.oasis-open.org/docbook/xml/4.0/docbookx.dtd -->
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" [
+<!ENTITY intro SYSTEM "intro.xml">
+<!ENTITY api SYSTEM "api.xml">
+<!ENTITY functions SYSTEM "functions.xml">
+<!ENTITY examples SYSTEM "examples.xml">
+
+<!-- I'm lazy -->
+<!ENTITY usb "<acronym>USB</acronym>">
+]>
+
+<!-- This manual uses libusb 1.0 developer guide docbook template written by
+     Johannes Erdfelt as a reference. It also references some source of that
+     document.
+-->
+
+<book id="manual">
+  <title>OpenUSB Developers Guide</title>
+
+  <bookinfo>
+
+  <authorgroup>
+    <author>
+      <firstname>lei_chen</firstname>
+      <surname></surname>
+      <affiliation><orgname> </orgname></affiliation>
+    </author>
+  </authorgroup>
+
+    <keywordset>
+      <keyword>libusb</keyword>
+      <keyword>OpenUSB</keyword>
+    </keywordset>
+
+  </bookinfo>
+
+  <preface id="preface">
+    <title>Preface</title>
+
+
+    <abstract>
+      <simpara>This document's purpose is to explain the API for OpenUSB and how to use it to
+      make a &usb; aware application.</simpara>
+      <simpara>Any suggestions, corrections and comments regarding this document can be
+      sent to the author: <ulink url="mailto:@sun.com">Lei Chen</ulink> or the
+      <ulink url="mailto:libusb-devel@lists.sourceforge.net">libusb developers mailing
+      list</ulink>. Any bugs or new feature requirements of OpenUSB, please report to
+      <ulink url="mailto:libusb-devel@lists.sourceforge.net">libusb developers mailing list
+      </ulink>
+      </simpara>
+    </abstract>
+  </preface>
+
+  <part id="intro">
+&intro;
+  </part>
+
+  <part id="api">
+&api;
+  </part>
+
+  <part id="functions">
+&functions;
+  </part>
+
+  <part id="examples">
+&examples;
+  </part>
+</book>
+
