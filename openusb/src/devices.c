@@ -18,6 +18,8 @@
 #include "usbi.h"
 
 extern struct list_head backends;
+extern struct usbi_list usbi_buses;
+extern struct usbi_list usbi_devices;
 
 static openusb_busid_t cur_bus_id = 1;
 static openusb_devid_t cur_device_id = 1;
@@ -25,7 +27,7 @@ static openusb_devid_t cur_device_id = 1;
 /*
  * Bus code
  */
-static void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
+void usbi_add_bus(struct usbi_bus *ibus, struct usbi_backend *backend)
 {
 	/* FIXME: Handle busid rollover gracefully? */
 	pthread_mutex_lock(&ibus->lock);
@@ -60,7 +62,7 @@ void usbi_free_bus(struct usbi_bus *ibus)
 	free(ibus);
 }
 
-static void usbi_remove_bus(struct usbi_bus *ibus)
+void usbi_remove_bus(struct usbi_bus *ibus)
 {
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_del(&ibus->list);
@@ -69,7 +71,7 @@ static void usbi_remove_bus(struct usbi_bus *ibus)
 	usbi_free_bus(ibus);
 }
 
-static struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
+struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
 {
 	struct usbi_bus *ibus;
 
@@ -1019,8 +1021,8 @@ static uint8_t *usbi_nth_desc(uint8_t *buffer, uint16_t buflen, uint8_t type,
 		if ((sp[0] == 0) || (buflen < sp[0]))
 			return NULL;
 
-		buflen -= sp[0];
 		sp += sp[0];
+		buflen -= sp[0];
 	}
 	
 	return NULL;

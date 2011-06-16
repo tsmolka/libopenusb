@@ -36,9 +36,9 @@ ifdef([AC_DIVERSION_NOTICE], [AC_DIVERT_PUSH(AC_DIVERSION_NOTICE)],
 #
 LIBOPENUSB_MAJOR_VERSION=1
 LIBOPENUSB_MINOR_VERSION=1
-LIBOPENUSB_MICRO_VERSION=5
-LIBOPENUSB_INTERFACE_AGE=5
-LIBOPENUSB_BINARY_AGE=5
+LIBOPENUSB_MICRO_VERSION=0
+LIBOPENUSB_INTERFACE_AGE=0
+LIBOPENUSB_BINARY_AGE=0
 LIBOPENUSB_VERSION=$LIBOPENUSB_MAJOR_VERSION.$LIBOPENUSB_MINOR_VERSION.$LIBOPENUSB_MICRO_VERSION
 dnl
 AC_DIVERT_POP()dnl
@@ -73,16 +73,11 @@ AM_INIT_AUTOMAKE($PACKAGE, $VERSION, no-define)
 # Specify a configuration file
 AM_CONFIG_HEADER(config.h)
 
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MAJOR_VERSION, $LIBOPENUSB_MAJOR_VERSION,
-				   [Major version])
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MINOR_VERSION, $LIBOPENUSB_MINOR_VERSION,
-				   [Minor version])
-AC_DEFINE_UNQUOTED(LIBOPENUSB_MICRO_VERSION, $LIBOPENUSB_MICRO_VERSION,
-				   [Micro version])
-AC_DEFINE_UNQUOTED(LIBOPENUSB_INTERFACE_AGE, $LIBOPENUSB_INTERFACE_AGE,
-				   [Binary interface age])
-AC_DEFINE_UNQUOTED(LIBOPENUSB_BINARY_AGE, $LIBOPENUSB_BINARY_AGE,
-				   [Binary age])
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MAJOR_VERSION, $LIBOPENUSB_MAJOR_VERSION)
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MINOR_VERSION, $LIBOPENUSB_MINOR_VERSION)
+AC_DEFINE_UNQUOTED(LIBOPENUSB_MICRO_VERSION, $LIBOPENUSB_MICRO_VERSION)
+AC_DEFINE_UNQUOTED(LIBOPENUSB_INTERFACE_AGE, $LIBOPENUSB_INTERFACE_AGE)
+AC_DEFINE_UNQUOTED(LIBOPENUSB_BINARY_AGE, $LIBOPENUSB_BINARY_AGE)
 
 dnl Initialize libtool
 AM_PROG_LIBTOOL
@@ -96,28 +91,28 @@ AM_MAINTAINER_MODE
 AC_MSG_CHECKING(for what USB OS support)
 case $host in
   *-linux*)
-    AC_DEFINE(LINUX_API, 1, [Linux])
+    AC_DEFINE(LINUX_API)
     AC_SUBST(LINUX_API)
     os_support=linux
     AC_MSG_RESULT(Linux)
     OSLIBS=""
     ;;
   *-freebsd*|*-openbsd*|*-netbsd*)
-    AC_DEFINE(BSD_API, 1, [BSD system])
+    AC_DEFINE(BSD_API)
     AC_SUBST(BSD_API)
     os_support=bsd
     AC_MSG_RESULT(FreeBSD, OpenBSD and/or NetBSD)
     OSLIBS=""
     ;;
   *-darwin*)
-    AC_DEFINE(DARWIN_API, 1, [Darwin])
+    AC_DEFINE(DARWIN_API)
     AC_SUBST(DARWIN_API)
     os_support=darwin
     AC_MSG_RESULT(Darwin and/or MacOS 10)
     OSLIBS="-lIOKit"
     ;;
   *-solaris*)
-   AC_DEFINE(SUNOS_API, 1, [Solaris])
+   AC_DEFINE(SUNOS_API)
    AC_SUBST(SUNOS_API)
    os_support=sunos
    AC_MSG_RESULT(Solaris)
@@ -144,8 +139,7 @@ fi
 AC_DIVERT_POP()dnl
 
 dnl declare --enable-* args and collect ac_help strings
-AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug=[no/minimum/yes]],
-	[turn on debugging [default=$debug_default]]),,enable_debug=$debug_default)
+AC_ARG_ENABLE(debug, [  --enable-debug=[no/minimum/yes] turn on debugging [default=$debug_default]],,enable_debug=$debug_default)
 
 if test "x$enable_debug" = "xyes"; then
   test "$cflags_set" = set || CFLAGS="$CFLAGS -g"
@@ -192,22 +186,11 @@ AC_CHECK_FUNCS(memmove)
 dnl
 dnl Check for glib, gthread, dbus, dbus-glib, hal, libusb
 dnl
-PKG_PROG_PKG_CONFIG
 if test "$os_support" = "darwin"; then
 
    PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
    AC_SUBST(LIBUSB_CFLAGS)
    AC_SUBST(LIBUSB_LIBS)
-
-elif test "$os_support" = "linux"; then
-
-   PKG_CHECK_MODULES(LIBUSB, libusb, HAVE_LIBUSB="yes")
-   AC_SUBST(LIBUSB_CFLAGS)
-   AC_SUBST(LIBUSB_LIBS)
-   
-   PKG_CHECK_MODULES(UDEV, libudev, HAVE_UDEV="yes")
-   AC_SUBST(UDEV_CFLAGS)
-   AC_SUBST(UDEV_LIBS)
 
 else
 
@@ -248,13 +231,12 @@ if test "$os_support" = "bsd"; then
      }],
     [AC_MSG_RESULT(yes)],
     [AC_MSG_RESULT(no)
-    AC_DEFINE(HAVE_OLD_DEV_USB_USB_H, 1, [Old dev/usb/usb.h])])
+    AC_DEFINE(HAVE_OLD_DEV_USB_USB_H)])
 fi
 
 # Check if the user wants to enable documentation
 AC_MSG_CHECKING(if we should build the documentation)
-AC_ARG_ENABLE(build-docs, AC_HELP_STRING([--disable-build-docs],
-	[turn off building documentation]),
+AC_ARG_ENABLE(build-docs, [  --disable-build-docs    turn off building documentation],
 	[ test "$enableval" != no && build_docs=yes || build_docs=no ],
 	build_docs=auto)
 AC_MSG_RESULT($build_docs)
@@ -284,6 +266,7 @@ AC_OUTPUT([
   doc/Makefile
   src/Makefile
   tests/Makefile
+  examples/Makefile
   src/openusb.h
   openusb.spec
   openusb-config

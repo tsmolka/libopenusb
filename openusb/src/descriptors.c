@@ -17,7 +17,7 @@
 /*
  * Get device descriptors through the Default endpoint
  */
-static int usbi_get_descriptor(openusb_dev_handle_t dev, unsigned char type,
+int usbi_get_descriptor(openusb_dev_handle_t dev, unsigned char type,
 	unsigned char index, void *buf, unsigned int buflen)
 {
 	int ret;
@@ -44,13 +44,13 @@ static int usbi_get_descriptor(openusb_dev_handle_t dev, unsigned char type,
 }
 
 /* FIXME: Should we return OPENUSB_NO_RESOURCES on buffer overflow? */
-int openusb_parse_data(const char *format, uint8_t *source, uint32_t sourcelen,
+int openusb_parse_data(char *format, uint8_t *source, uint32_t sourcelen,
 	void *dest, uint32_t destlen, uint32_t *count)
 {
 	unsigned char *sp = source, *dp = dest;
 	uint16_t w;
 	uint32_t d;
-	const char *cp;
+	char *cp;
 
 	if (!format || !source || !dest || !count) {
 		return OPENUSB_BADARG;

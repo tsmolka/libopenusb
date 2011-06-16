@@ -8,7 +8,7 @@ AM_CFLAGS = -g -Werror
 
 configincludedir = $(pkglibdir)/include
 
-EXTRA_DIST = linux.c linux.h bsd.c darwin.c darwin.h sunos.c sunos.h
+EXTRA_DIST = linux.c linux.h bsd.c darwin.c sunos.c sunos.h
 
 libopenusb_la_CFLAGS = $(LIBUSB_CFLAGS)
 
@@ -18,10 +18,12 @@ usblibdir = $(libdir)/openusb_backend
 
 if LINUX_API
 usblib_LTLIBRARIES = linux.la
-linux_la_CFLAGS = $(UDEV_CFLAGS)
+
+#to use hal for hotplug event support
+linux_la_CFLAGS = $(GLIB_CFLAGS) $(GTHREADS_CFLAGS) $(DBUSGLIB_CFLAGS) $(HAL_CFLAGS)
 linux_la_SOURCES = linux.c linux.h
 linux_la_LDFLAGS = -avoid-version -module -L.libs
-linux_la_LIBADD = -lopenusb $(UDEV_LIBS)
+linux_la_LIBADD = -lopenusb $(GLIB_LIBS) $(GTHREADS_LIBS) $(DBUSGLIB_LIBS) $(HAL_LIBS)
 endif
 
 if BSD_API
@@ -34,10 +36,10 @@ endif
 if DARWIN_API
 usblib_LTLIBRARIES = darwin.la
 
-darwin_la_SOURCES = darwin.c darwin.h
-darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX10.5.sdk -mmacosx-version-min=10.5 -arch i386 -arch x86_64
+darwin_la_SOURCES = darwin.c
+darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX10.4u.sdk -mmacosx-version-min=10.4 -arch ppc -arch i386 -arch ppc64 -arch x86_64
 darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
-darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=10.5 -syslibroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -arch x86_64
+darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=10.4 -syslibroot /Developer/SDKs/MacOSX10.4u.sdk -arch ppc -arch i386 -arch ppc64 -arch x86_64
 endif
 
 if SUNOS_API
@@ -67,14 +69,14 @@ libopenusb_la_LIBADD = -ldl
 if DARWIN_API
 
 libopenusb_la_CFLAGS += \
-	-mmacosx-version-min=10.5 \
-	-isysroot /Developer/SDKs/MacOSX10.5.sdk \
-	-arch i386 -arch x86_64
+	-mmacosx-version-min=10.4 \
+	-isysroot /Developer/SDKs/MacOSX10.4u.sdk \
+	-arch ppc -arch i386 -arch ppc64 -arch x86_64
 
 libopenusb_la_LDFLAGS = \
-	-mmacosx-version-min=10.5 \
-	-syslibroot /Developer/SDKs/MacOSX10.5.sdk \
-	-arch i386 -arch x86_64 \
+	-mmacosx-version-min=10.4 \
+	-syslibroot /Developer/SDKs/MacOSX10.4u.sdk \
+	-arch ppc -arch i386 -arch ppc64 -arch x86_64 \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	-dynamiclib \
 	-lpthread \

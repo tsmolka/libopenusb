@@ -710,7 +710,7 @@ const char *openusb_strerror(int32_t error);
  *              uint8_t         unused[3];
  *              uint32_t        d;
  */
-int32_t openusb_parse_data(const char *format, uint8_t *data, uint32_t datalen,
+int32_t openusb_parse_data(char *format, uint8_t *data, uint32_t datalen,
 	void *structure, uint32_t structlen, uint32_t *count);
 
 /*

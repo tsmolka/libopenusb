@@ -1784,7 +1784,6 @@ int32_t darwin_get_raw_desc(struct usbi_device *idev, uint8_t type,
   kern_return_t   kresult;
   IOUSBDevRequest req;
 
-
   /* Validate... */
   if (!idev || !buflen)
     return OPENUSB_BADARG;
@@ -1824,10 +1823,9 @@ int32_t darwin_get_raw_desc(struct usbi_device *idev, uint8_t type,
       goto done;
     }
 
-    
-	/* retreive entire descriptor */
-	req.wLength = OSSwapLittleToHostInt16(cfg_hdr.wTotalLength);
-	req.pData   = calloc (1, req.wLength);
+    /* retreive entire descriptor */
+    req.wLength = NXSwapLittleShortToHost (cfg_hdr.wTotalLength);
+    req.pData   = calloc (1, req.wLength);
     devdescr    = req.pData;
 
     kresult = (*(darwin_device))->DeviceRequest(darwin_device, &req);

@@ -13,6 +13,10 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <glib.h>
+#include <dbus/dbus-glib-lowlevel.h>
+#include <dbus/dbus-glib.h>
+#include <libhal.h>
 
 #include "openusb.h"
 #include "usbi.h"
@@ -62,10 +66,8 @@ struct usbk_getdriver {
   char driver[USBK_MAXDRIVERNAME + 1];
 };
 
-#define USBK_URB_DISABLE_SPD	      0x01
-#define USBK_URB_ISO_ASAP	          0x02
-#define USBK_URB_SHORT_NOT_OK       0x01
-#define USBK_URB_BULK_CONTINUATION  0x04
+#define USBK_URB_DISABLE_SPD	0x01
+#define USBK_URB_ISO_ASAP	0x02
 
 #define USBK_URB_TYPE_ISO	0
 #define USBK_URB_TYPE_INTERRUPT	1
@@ -162,7 +164,7 @@ typedef enum {
 /* Thread Functions */
 void *poll_io(void *usbihdl);
 void *poll_events(void *unused);
-void *udev_hotplug_event_thread(void *unused);
+void *hal_hotplug_event_thread(void *unused);
 
 
 /* Helper Functions */
@@ -181,7 +183,9 @@ int32_t linux_attach_kernel_driver(struct usbi_dev_handle *hdev,
 int32_t linux_detach_kernel_driver(struct usbi_dev_handle *hdev,
 																	 uint8_t interface);
 struct usbi_device *find_device_by_udi(const char *udi);
-int32_t linux_refresh_device(struct usbi_bus* ibus);
+void process_new_device(LibHalContext *ctx, const char *udi, struct usbi_bus *ibus);
+void device_added(LibHalContext *ctx, const char *udi);
+void device_removed(LibHalContext *ctx, const char *udi);
 int32_t urb_submit(struct usbi_dev_handle *hdev, struct usbk_urb *urb);
 void free_isoc_urbs(struct usbi_io *io);
 void discard_urbs(struct usbi_dev_handle *hdev, struct usbi_io *io,
@@ -208,17 +212,17 @@ struct usbi_dev_private
 	time_t  mtime;                    /* modify time to detect dev changes */
 	int     found;                    /* flag to denote if we saw this dev during rescan */
 	int			pdevnum;									/* the device number of this devices parent */
-	char		*sysfspath;				        /* Full SYSFS path to the device */
+	char		*udi;											/* HAL unique identifier */
 	struct usbi_dev_handle	*hdev;		/* Pointer to this devices handle (for closing on remove) */
 };
 
 
 struct usbi_dev_hdl_private
 {
-	int       fd;            /* file descriptor for usbdevfs entry */
-	int       event_pipe[2]; /* let's us know when things are happening */
-	int16_t		reattachdrv;	 /* do we need to reattach the kernel driver */
-	pthread_t io_thread;     /* thread for processing io requests */
+	int             fd;            /* file descriptor for usbdevfs entry */
+	int             event_pipe[2]; /* let's us know when things are happening */
+	int16_t					reattachdrv;	 /* do we need to reattach the kernel driver */
+	pthread_t       io_thread;     /* thread for processing io requests */
 };
 
 

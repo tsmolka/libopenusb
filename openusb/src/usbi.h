@@ -354,7 +354,7 @@ int usbi_timeval_compare(struct timeval *tva, struct timeval *tvb);
 struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev);
 
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
-        uint32_t line, const char *fmt, ...);
+        uint32_t line, char *fmt, ...);
 
 void usbi_add_event_callback(struct usbi_handle *hdl, openusb_devid_t devid,
         openusb_event_t type);

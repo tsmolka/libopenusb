@@ -58,7 +58,7 @@ static volatile int32_t event_callback_exit = 0;
 
 
 void _usbi_debug(struct usbi_handle *hdl, uint32_t level, const char *func,
-	uint32_t line, const char *fmt, ...)
+	uint32_t line, char *fmt, ...)
 {
 	char str[512];
 	va_list ap;
@@ -462,7 +462,7 @@ static int usbi_init_common(void)
 
 
 /* called upon last openusb instance fini */
-static void usbi_fini_common(void)
+static void usbi_fini_common()
 {
 	/* XXX need to free device, bus and backend list */
 
@@ -506,7 +506,7 @@ struct usbi_handle *usbi_find_handle(openusb_handle_t handle)
 }
 
 /* malloc and init usbi_handle */
-static struct usbi_handle *usbi_init_handle(void)
+struct usbi_handle *usbi_init_handle(void)
 {
 	struct usbi_handle *hdl;
 	int ret;
@@ -550,7 +550,7 @@ static struct usbi_handle *usbi_init_handle(void)
 }
 
 /* destroy a usbi_handle and free its resouces */
-static void usbi_destroy_handle(struct usbi_handle *hdl)
+void usbi_destroy_handle(struct usbi_handle *hdl)
 {
 	usbi_debug(NULL, 4, "Begin");
 
@@ -686,7 +686,7 @@ void openusb_fini(openusb_handle_t handle)
 	usbi_debug(NULL, 4, "End");
 }
 
-static void usbi_coldplug_complete(struct usbi_handle *hdl)
+void usbi_coldplug_complete(struct usbi_handle *hdl)
 {
 	if (!hdl) {
 		return;
@@ -1143,7 +1143,7 @@ int usbi_timeval_compare(struct timeval *tva, struct timeval *tvb)
 
 static struct errorstr {
 	int code;
-	const char *msg;
+	char *msg;
 } errorstrs[] = {
 	{ OPENUSB_SUCCESS,		"Call success" },
 	{ OPENUSB_PLATFORM_FAILURE,	"Unspecified kernel/driver failure" },
@@ -1178,7 +1178,7 @@ static struct errorstr {
 
 const char *openusb_strerror(int32_t error)
 {
-	size_t i;
+	int i;
 
 	for (i = 0; i < sizeof (errorstrs) / sizeof (errorstrs[0]); i++) {
 		if (errorstrs[i].code == error)

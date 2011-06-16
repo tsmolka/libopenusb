@@ -38,7 +38,7 @@ int testhotplug = 0;
 #define ISOC_PKT_NUM 12
 #define ISOC_PKT_LEN 128
 
-static void print_endpoint(struct usb_endpoint_desc *ep)
+void print_endpoint(struct usb_endpoint_desc *ep)
 { 
 	printf("      bEndpointAddress: %02xh\n", ep->bEndpointAddress);
 	printf("      bmAttributes:     %02xh\n", ep->bmAttributes);
@@ -49,8 +49,8 @@ static void print_endpoint(struct usb_endpoint_desc *ep)
 	printf("\n");
 }
 
-static void print_interface(openusb_devid_t devid, int cfgidx, int
-		ifcidx,int alt, struct usb_interface_desc *intf)
+void print_interface(openusb_devid_t devid, int cfgidx, int ifcidx,int alt,
+		struct usb_interface_desc *intf)
 { 
 	int i;
 	int ret;
@@ -80,7 +80,7 @@ static void print_interface(openusb_devid_t devid, int cfgidx, int
 	}
 }
 
-static void print_configuration(openusb_devid_t devid, int cfgidx,
+void print_configuration(openusb_devid_t devid, int cfgidx,
 		struct usb_config_desc *cfg)
 {
 	int i;
@@ -114,7 +114,7 @@ static void print_configuration(openusb_devid_t devid, int cfgidx,
 }
 
 /* print device descriptors */
-static void print_device(openusb_devid_t devid, int indent)
+void print_device(openusb_devid_t devid, int indent)
 {
 	struct usb_device_desc dev;
 	unsigned char *buf=NULL;
@@ -161,10 +161,10 @@ static void print_device(openusb_devid_t devid, int indent)
 }
 
 
-static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
+void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		openusb_event_t event, void *arg)
 {
-	const char *evstring;
+	char *evstring;
 	switch(event) {
 	case USB_ATTACH:
 		evstring = "USB_ATTACH";
@@ -178,15 +178,6 @@ static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 	case USB_RESUME:
 		evstring = "USB_RESUME";
 		break;
-	case USB_HC_ATTACH:
-		evstring = "USB_HC_ATTACH";
-		break;
-	case USB_HC_REMOVE:
-		evstring = "USB_HC_REMOVE";
-		break;
-	case USB_COLDPLUG_COMPLETED:
-		evstring = "USB_COLDPLUG_COMPLETED";
-		break;
 	default:
 		evstring = "Unknown";
 		break;
@@ -195,7 +186,7 @@ static void event_cb(openusb_handle_t handle, openusb_devid_t devid,
 		(long long)handle, (long long)devid, evstring, arg);
 }
 
-static int convert_string(char *buf, usb_string_desc_t *st, int buflen)
+int convert_string(char *buf, usb_string_desc_t *st, int buflen)
 {
 	int di, si;
 	unsigned char *tbuf = (unsigned char *)st;
@@ -217,7 +208,7 @@ static int convert_string(char *buf, usb_string_desc_t *st, int buflen)
 	return di;
 }
 
-static void dump_dev_data(openusb_dev_data_t *pdev)
+void dump_dev_data(openusb_dev_data_t *pdev)
 {
 	struct usb_device_desc *pdesc;
 	int i;
@@ -238,7 +229,7 @@ static void dump_dev_data(openusb_dev_data_t *pdev)
 	pdesc = &pdev->dev_desc;	
 
 	printf("Device descriptor:\n");
-	printf("\tclass: %02x subclass: %02x vid: %04hx pid: %04hx\n",
+	printf("\tclass:%02x subclass:%02x vid:%04hx pid:%04hx\n",
 			pdesc->bDeviceClass,
 			pdesc->bDeviceSubClass,pdesc->idVendor,
 			pdesc->idProduct);
@@ -284,7 +275,7 @@ static void dump_dev_data(openusb_dev_data_t *pdev)
 #define CTRL_LEN 0xab
 
 /* test SYNC control xfer */
-static int test_ctrl_sync(openusb_dev_handle_t devh)
+int test_ctrl_sync(openusb_dev_handle_t devh)
 {
 	openusb_ctrl_request_t ctrl;
 	int ret;
@@ -308,7 +299,7 @@ static int test_ctrl_sync(openusb_dev_handle_t devh)
 	ret = openusb_ctrl_xfer(devh, 0, 0, &ctrl);
 	if (ret != 0) {
 		openusb_free_devid_list(devids);
-		printf("ctrl xfer fail: %s\n", openusb_strerror(ret));
+		printf("ctrl xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -337,7 +328,7 @@ static int test_ctrl_sync(openusb_dev_handle_t devh)
  * Use EZ-USB FX2 as the test device
  * load bulkloop firmware
  */
-static int test_bulk_sync(openusb_handle_t devh)
+int test_bulk_sync(openusb_handle_t devh)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -359,7 +350,7 @@ static int test_bulk_sync(openusb_handle_t devh)
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -367,7 +358,7 @@ static int test_bulk_sync(openusb_handle_t devh)
 
 	ret = openusb_set_altsetting(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -377,7 +368,7 @@ static int test_bulk_sync(openusb_handle_t devh)
 	ret = openusb_bulk_xfer(devh, 0, 2, &bulk);
 
 	if (ret != 0) {
-		printf("BULK sync xfer test fail: %s\n", openusb_strerror(ret));
+		printf("BULK sync xfer test fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 	printf("bulk sync xfer result.status = %d,xfer_bytes=%d, ret=%d\n",
@@ -387,7 +378,7 @@ static int test_bulk_sync(openusb_handle_t devh)
 	bulk.payload = bulkrd;
 	ret = openusb_bulk_xfer(devh, 0, 0x86, &bulk);
 	if (ret != 0) {
-		printf("bulk sync xfer fail: %s\n", openusb_strerror(ret));
+		printf("bulk sync xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -414,7 +405,7 @@ static int test_bulk_sync(openusb_handle_t devh)
  * Use EZ-USB FX2 as the test device.
  * Load intrsrc or intrloop firmware
  */
-static int test_intr_sync(openusb_handle_t devh, int flag)
+int test_intr_sync(openusb_handle_t devh, int flag)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -435,7 +426,7 @@ static int test_intr_sync(openusb_handle_t devh, int flag)
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -443,7 +434,7 @@ static int test_intr_sync(openusb_handle_t devh, int flag)
 
 	ret = openusb_set_altsetting(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -454,7 +445,7 @@ static int test_intr_sync(openusb_handle_t devh, int flag)
 		ret = openusb_intr_xfer(devh, 0, 2, &intr);
 
 		if (ret != 0) {
-			printf("xfer fail: %s\n", openusb_strerror(ret));
+			printf("xfer fail:%s\n", openusb_strerror(ret));
 			return -1;
 		}
 
@@ -467,7 +458,7 @@ static int test_intr_sync(openusb_handle_t devh, int flag)
 	ret = openusb_intr_xfer(devh, 0, 0x86, &intr);
 	
 	if (ret != 0) {
-		printf("intr xfer sync fail: %s\n", openusb_strerror(ret));
+		printf("intr xfer sync fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -493,7 +484,7 @@ static int test_intr_sync(openusb_handle_t devh, int flag)
  * Test ISOC sync xfer
  * Use EZ-USB FX2 as test device. Load isoc firmware
  */
-static int test_isoc_sync(openusb_handle_t devh)
+int test_isoc_sync(openusb_handle_t devh)
 {
 	unsigned char bulkdata[ISOC_PKT_NUM*ISOC_PKT_LEN];
 	unsigned char bulkrd[ISOC_PKT_NUM*ISOC_PKT_LEN];
@@ -511,7 +502,7 @@ static int test_isoc_sync(openusb_handle_t devh)
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -519,7 +510,7 @@ static int test_isoc_sync(openusb_handle_t devh)
 
 	ret = openusb_set_altsetting(devh,0,3);/* alt 3, depends on the fw */
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -541,7 +532,7 @@ static int test_isoc_sync(openusb_handle_t devh)
 	ret = openusb_isoc_xfer(devh, 0, 0x82, &isoc); /* in */
 
 	if (ret != 0) {
-		printf("ISOC xfer fail: %s\n", openusb_strerror(ret));
+		printf("ISOC xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -571,7 +562,7 @@ static int test_isoc_sync(openusb_handle_t devh)
 	return 0;
 }
 
-static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
+int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -608,7 +599,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -616,7 +607,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 
 	ret = openusb_set_altsetting(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -626,7 +617,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 
 	ret = openusb_xfer_aio(req);
 	if (ret != 0) {
-		printf("xfer fail: %s\n", openusb_strerror(ret));
+		printf("xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -651,7 +642,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 			ret);
 
 	if (ret != 0) {
-		printf("Ctrl async xfer fail: %s\n", openusb_strerror(ret));
+		printf("Ctrl async xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -659,7 +650,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
 	while(1) {
 		ret = openusb_poll(1, &req, &completed);
 		if (ret != 0) {
-			printf("async xfer poll: %s\n", openusb_strerror(ret));
+			printf("async xfer poll:%s\n", openusb_strerror(ret));
 			return -1;
 		}
 
@@ -692,8 +683,7 @@ static int async_xfer_ctrl_test(openusb_dev_handle_t devh)
  * Async xfer test for INTR, BULK, ISOC
  * Load different firmware accordingly
  */
-static int async_xfer_test(openusb_handle_t devh,
-		openusb_transfer_type_t type, int flag)
+int async_xfer_test(openusb_handle_t devh, openusb_transfer_type_t type, int flag)
 {
 	unsigned char bulkdata[BULK_DATA_LEN];
 	unsigned char bulkrd[BULK_DATA_LEN];
@@ -753,7 +743,7 @@ static int async_xfer_test(openusb_handle_t devh,
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -766,7 +756,7 @@ static int async_xfer_test(openusb_handle_t devh,
 	}
 
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -829,7 +819,7 @@ static int async_xfer_test(openusb_handle_t devh,
 		}
 
 		if (ret != 0) {
-			printf("xfer fail: %s\n", openusb_strerror(ret));
+			printf("xfer fail:%s\n", openusb_strerror(ret));
 			return -1;
 		}
 
@@ -911,7 +901,7 @@ static int async_xfer_test(openusb_handle_t devh,
 
 
 	if (ret != 0) {
-		printf("async xfer fail: %s\n", openusb_strerror(ret));
+		printf("async xfer fail:%s\n", openusb_strerror(ret));
 		return -1;
 	}
 
@@ -933,7 +923,7 @@ static int async_xfer_test(openusb_handle_t devh,
 	while(count < loopcnt) {
 		ret = openusb_poll(loopcnt, reqs, &completed);
 		if (ret != 0) {
-			printf("async xfer poll: %s\n", openusb_strerror(ret));
+			printf("async xfer poll:%s\n", openusb_strerror(ret));
 			return -1;
 		}
 		if (completed == NULL) {
@@ -1012,8 +1002,7 @@ static int async_xfer_test(openusb_handle_t devh,
 uint32_t m_len[ISOC_PKT_NUM];
 uint8_t *m_buffers[ISOC_PKT_NUM];
 
-#if 0
-static int32_t multi_callback(struct openusb_multi_request_handle *mreq,
+int32_t multi_callback(struct openusb_multi_request_handle *mreq,
 	uint32_t bufidx, openusb_request_result_t *result)
 {
 	int i;
@@ -1039,7 +1028,7 @@ static int32_t multi_callback(struct openusb_multi_request_handle *mreq,
 /*
  * Not mature
  */
-static int multi_xfer_test(openusb_dev_handle_t devh)
+int multi_xfer_test(openusb_dev_handle_t devh)
 {
 	int ret = 0;
 	int i;
@@ -1048,7 +1037,7 @@ static int multi_xfer_test(openusb_dev_handle_t devh)
 
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -1056,7 +1045,7 @@ static int multi_xfer_test(openusb_dev_handle_t devh)
 
 	ret = openusb_set_altsetting(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		return -1;
@@ -1108,19 +1097,18 @@ static int multi_xfer_test(openusb_dev_handle_t devh)
 
 	return ret;
 }
-#endif
 
-static int test_get_device_data(void)
+int test_get_device_data()
 {
 	int ret;
 	openusb_dev_data_t *devdata;
-	unsigned int i, j;
+	int i,j;
 
 	for(j=0;j<busnum;j++) {
 		ret = openusb_get_devids_by_bus(libhandle, bus[j], &devids,
 				&devnum);
 		if(ret < 0) {
-			printf("Error get devids by bus: %s\n",
+			printf("Error get devids by bus:%s\n",
 					openusb_strerror(ret));
 			return -1;
 		}
@@ -1130,15 +1118,15 @@ static int test_get_device_data(void)
 			ret = openusb_get_device_data(libhandle, devids[i], 0,
 					&devdata);
 			if (ret < 0) {
-				printf("Get device(%d) data error: %s\n", i,
+				printf("Get device(%d) data error:%s\n", i,
 						openusb_strerror(ret));
+				return -1;
 			}
-			else
-			{
-				dump_dev_data(devdata);
+			
+			dump_dev_data(devdata);
 
-				openusb_free_device_data(devdata);
-			}
+			openusb_free_device_data(devdata);
+
 		}
 		openusb_free_devid_list(devids);
 	}
@@ -1146,7 +1134,7 @@ static int test_get_device_data(void)
 	return 0;
 }
 
-static int test_sync_xfer(openusb_dev_handle_t devh)
+int test_sync_xfer(openusb_dev_handle_t devh)
 {
 	int ret;
 
@@ -1172,7 +1160,7 @@ static int test_sync_xfer(openusb_dev_handle_t devh)
 	return 0;
 }
 
-static int test_async_xfer(openusb_dev_handle_t devh)
+int test_async_xfer(openusb_dev_handle_t devh)
 {
 	int ret;
 
@@ -1191,7 +1179,7 @@ static int test_async_xfer(openusb_dev_handle_t devh)
 	return 0;
 }
 
-static int advance_xfer_test(void)
+int advance_xfer_test(void)
 {
 	int ret = 0;
 	openusb_dev_handle_t devh;
@@ -1209,13 +1197,13 @@ static int advance_xfer_test(void)
 	ret = openusb_get_devids_by_class(libhandle, 0xff,
 		-1, -1, &devids, &devnum);
 	if(ret < 0) {
-		printf("Error get devids by class: %s\n",openusb_strerror(ret));
+		printf("Error get devids by class:%s\n",openusb_strerror(ret));
 		return -1;
 	}
 
 	ret = openusb_open_device(libhandle,devids[0],0,&devh);
 	if (ret != 0) {
-		printf("Open device(%d) error: %s\n",(int)devids[0],
+		printf("Open device(%d) error:%s\n",(int)devids[0],
 				openusb_strerror(ret));
 		goto err;
 	}
@@ -1224,14 +1212,14 @@ static int advance_xfer_test(void)
 
 	ret = openusb_get_devid(devh, &devid);
 	if(ret < 0) {
-		printf("Error get devids by handle: %s\n",openusb_strerror(ret));
+		printf("Error get devids by handle:%s\n",openusb_strerror(ret));
 		goto err;
 	}
 	printf("devh=%x devid=%x\n",(int)devh,(int)devid);
 
 	ret = openusb_get_lib_handle(devh,&libh);
 	if (ret != 0) {
-		printf("Get device(%llu) lib handle error: %s\n",
+		printf("Get device(%llu) lib handle error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1242,7 +1230,7 @@ static int advance_xfer_test(void)
 	ret = multi_xfer_test(devh);
 	if(ret !=0) {
 		openusb_free_devid_list(devids);
-		printf("multi_xfer_test error: %s\n", openusb_strerror(ret));
+		printf("multi_xfer_test error:%s\n", openusb_strerror(ret));
 		return -1;
 
 	}
@@ -1267,7 +1255,7 @@ static int advance_xfer_test(void)
 #if 1	/* configuration test */
 	ret = openusb_set_configuration(devh,1);
 	if (ret != 0) {
-		printf("Set device(%llu) config error: %s\n",
+		printf("Set device(%llu) config error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1275,7 +1263,7 @@ static int advance_xfer_test(void)
 
 	ret = openusb_get_configuration(devh,&cfg);
 	if (ret != 0) {
-		printf("Get device(%llu) config error: %s\n",
+		printf("Get device(%llu) config error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1287,7 +1275,7 @@ static int advance_xfer_test(void)
 #if 1	/* claim interface test */
 	ret = openusb_claim_interface(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) claim interface error: %s\n",
+		printf("Device(%llu) claim interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1300,7 +1288,7 @@ static int advance_xfer_test(void)
 
 	ret = openusb_set_altsetting(devh,0,0);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) set alt: %s\n",
+		printf("Device(%llu) interface(0) set alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1309,7 +1297,7 @@ static int advance_xfer_test(void)
 
 	ret = openusb_get_altsetting(devh,0,&alt);
 	if (ret != 0) {
-		printf("Device(%llu) interface(0) get alt: %s\n",
+		printf("Device(%llu) interface(0) get alt:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1318,7 +1306,7 @@ static int advance_xfer_test(void)
 
 	ret = openusb_release_interface(devh,0);
 	if (ret != 0) {
-		printf("Device(%llu) release interface error: %s\n",
+		printf("Device(%llu) release interface error:%s\n",
 				(long long)devids[0],
 				openusb_strerror(ret));
 		goto err;
@@ -1327,7 +1315,7 @@ static int advance_xfer_test(void)
 	   ret = openusb_reset(devh);
 	   if (ret != 0) {
 	   openusb_free_devid_list(devids);
-	   printf("Device(%llu) reset error: %s\n",devids[0],
+	   printf("Device(%llu) reset error:%s\n",devids[0],
 	   openusb_strerror(ret));
 	   return -1;
 	   }
@@ -1341,7 +1329,7 @@ err:
 	return ret;
 }
 
-static void usage(char *prog)
+void usage(char *prog)
 {
 	printf("usage:\n");
 	printf("%s\n", prog);
@@ -1361,9 +1349,9 @@ static void usage(char *prog)
 }
 
 
-static int parse_option(int argc, char *argv[])
+int parse_option(int argc, char *argv[])
 {
-	int c;
+	char c;
 	while((c = getopt(argc, argv, "t:lmaps")) != -1) {
 		switch (c) {
 			case 't':
@@ -1419,14 +1407,14 @@ err1:
  * Get all buses on the system.
  * Get every device's data and print them. 
  */
-static int basic_test(void)
+int basic_test(void)
 {
 	int ret;
 	uint32_t flags = 0;
 
 	ret = openusb_init(flags, &libhandle);
 	if(ret < 0) {
-		printf("error init: %s (%d)\n", openusb_strerror(ret), ret);
+		printf("error init\n");
 		exit(1);
 	}
 	printf("lib handle=%llu \n", (long long)libhandle);
@@ -1452,7 +1440,7 @@ static int basic_test(void)
 		return -1;
 	}
 
-	printf("openusb_set_default_timeout: PASS\n");
+	printf("openusb_set_default_timeout : PASS\n");
 
 	/*get buses */
 	ret = openusb_get_busid_list(libhandle,&bus,&busnum);
@@ -1467,7 +1455,7 @@ static int basic_test(void)
 	return 0;
 }
 
-static void cleanup(void)
+void cleanup(void)
 {
 	openusb_free_busid_list(bus);
 

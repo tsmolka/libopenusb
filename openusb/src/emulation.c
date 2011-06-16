@@ -44,7 +44,7 @@ static  int usb_error_errno;
 static  usb_error_type_t usb_error_type = USB_ERROR_TYPE_NONE;
 
 static void
-wr_error_str(int x, const char *format, ...)
+wr_error_str(int x, char *format, ...)
 {
 	va_list ap;
 
@@ -151,7 +151,7 @@ int usb_find_busses(void)
 	return 1;
 }
 
-static int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
+int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus) 
 {
 	struct usbi_device *idev, *tdev;
 	struct usb_device *dev, *ndev;
@@ -255,7 +255,7 @@ int usb_find_devices(void)
  * given a usb_device, find a corresponding device in openusb1.0
  * return the devid of openusb1.0
  */
-static openusb_devid_t wr_find_device(struct usb_device *dev)
+openusb_devid_t wr_find_device(struct usb_device *dev)
 {
 	openusb_devid_t devid = -1;
 	struct usbi_bus *ibus;
@@ -299,7 +299,7 @@ struct usb_dev_handle_internal {
 	int alt;
 };
 
-static int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
+int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 	struct usbi_altsetting *alt)
 {
 	int num_eps;
@@ -347,7 +347,7 @@ static int wr_parse_endpoint(struct usb_interface_descriptor *ifdesc,
 	return 0;
 }
 
-static int wr_parse_interface(struct usb_interface * ifc01,
+int wr_parse_interface(struct usb_interface * ifc01,
 	struct usbi_interface *ifc10)
 {
 	int num_alts;
@@ -590,8 +590,8 @@ int usb_close(struct usb_dev_handle *dev)
 /* internal bulk transfer function
  * throw all validity check work to openusb1.0 API
  */
-static int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
-	int size, int timeout)
+int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
+	int timeout)
 {
 	openusb_bulk_request_t bulk;
 	struct usb_dev_handle_internal *devh = 
@@ -622,7 +622,7 @@ static int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
 int usb_bulk_write(struct usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
-	return (usb0_bulk_xfer(dev, ep, (char*)bytes, size, timeout));
+	return (usb0_bulk_xfer(dev, ep, bytes, size, timeout));
 }
 
 int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
@@ -635,8 +635,8 @@ int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
  * internal interrupt transfer function
  * throw all validity check work to openusb1.0 API
  */
-static int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
-	int size, int timeout)
+int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes, int size,
+	int timeout)
 {
 	openusb_intr_request_t intr;
 	int ret;
@@ -665,7 +665,7 @@ static int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
 int usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout)
 {
-	return (usb0_intr_xfer(dev, ep, (char*)bytes, size, timeout));
+	return (usb0_intr_xfer(dev, ep, bytes, size, timeout));
 }
 
 int usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, int size,
