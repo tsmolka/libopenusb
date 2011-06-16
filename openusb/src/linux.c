@@ -27,11 +27,12 @@
 #define LINUX_MAX_ISOC_XFER				32768
 
 
-static pthread_t	event_thread;
-static char		device_dir[PATH_MAX + 1] = "";
-static GMainLoop	*event_loop;
-static int32_t		linux_backend_inited = 0;
-static pthread_mutex_t linuxdbus_lock;
+static pthread_t	      event_thread;
+static char		          device_dir[PATH_MAX + 1] = "";
+static GMainLoop	      *event_loop;
+static int32_t		      linux_backend_inited = 0;
+static pthread_mutex_t  linuxdbus_lock;
+
 
 
 /*
@@ -112,11 +113,13 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
 	/* Make sure we know we're closing */
 	pthread_mutex_lock(&hdev->lock);
+	usbi_debug(NULL, 4, "linux_close: device is closing");
 	hdev->state = USBI_DEVICE_CLOSING;
 	pthread_mutex_unlock(&hdev->lock);
 
 	/* Stop the IO processing (polling) thread */
 	wakeup_io_thread(hdev);
+	sched_yield();
 	pthread_join(hdev->priv->io_thread, NULL);
 	
 	/* close the event pipes */
@@ -128,6 +131,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 	/* If we've already closed the file, we're done */
 	if (hdev->priv->fd <= 0) {
 		free(hdev->priv);
+		usbi_debug(NULL, 4, "linux_close: device is closed");
 		return (OPENUSB_SUCCESS);
 	}
 
@@ -143,7 +147,7 @@ int32_t linux_close(struct usbi_dev_handle *hdev)
 
 	/* free our private data */
 	free(hdev->priv);
-
+  usbi_debug(NULL, 4, "linux_close: device is closed");
 	return (OPENUSB_SUCCESS);
 } 
 
@@ -540,14 +544,14 @@ int32_t linux_init(struct usbi_handle *hdl, uint32_t flags )
 
 	/* Initialize the dbus mutex (which will prevent the hotplug thread from
 	 * running before we've done the first pass of refresh devices) */
-	pthread_mutex_init(&linuxdbus_lock, NULL);	
+	pthread_mutex_init(&linuxdbus_lock, NULL);
 
 	/* Initialize thread support in GLib (if it's not already) */
 	if (!g_thread_supported()) g_thread_init(NULL);
 	
 	/* Start up thread for polling events */
 	ret = pthread_create(&event_thread, NULL, hal_hotplug_event_thread,
-		       	(void*)NULL);
+	                     (void*)NULL);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "unable to create event polling thread: %d)", ret);
 		return (OPENUSB_SYS_FUNC_FAILURE);
@@ -580,21 +584,32 @@ void linux_fini(struct usbi_handle *hdl)
 		return;
 	}
 
-	pthread_mutex_unlock(&linuxdbus_lock);
-	pthread_mutex_destroy(&linuxdbus_lock);
-
-	/* If we're here this is our last instance */
+  /* We want to make sure that the hotplug thread is fully up and running before
+   * we try and close it. This while loop essentially creates a spin lock
+   * based on whether or not the thread is running
+   */
+  while ((event_loop == NULL) || (!g_main_loop_is_running(event_loop))) {
+    sched_yield();   
+  }
+  
 	/* Stop the event (connect/disconnect) thread */
-	if ((event_loop != NULL) && g_main_loop_is_running(event_loop)) {
-		usbi_debug(hdl, 4, "stopping the hotplug thread...");
-		g_main_loop_quit(event_loop);
-		g_main_context_wakeup(g_main_loop_get_context(event_loop));
-		pthread_join(event_thread, NULL);
-	}
+	usbi_debug(hdl, 4, "stopping the hotplug thread...");
+	g_main_loop_quit(event_loop);
+	g_main_context_wakeup(g_main_loop_get_context(event_loop));
+	
+	/* yield so that the main loop will have a chance to actually quit */
+  while (g_main_loop_is_running(event_loop)) {
+    sched_yield();
+  }
+	
+	/* wait for the hotplug thread to exit */
+	pthread_join(event_thread, NULL);
+
+  pthread_mutex_unlock(&linuxdbus_lock);
+	pthread_mutex_destroy(&linuxdbus_lock);
 	
 	/* We're no longer initialized */
 	linux_backend_inited--;
-
 	return;
 }
 
@@ -664,7 +679,7 @@ int32_t linux_find_buses(struct list_head *buses)
 
 		/* setup the maximum transfer sizes - these are determined by usbfs and
 		 * NOT by the bus (as with other oses) so they will always be the same */
-		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4096 - USBI_CONTROL_SETUP_LEN;
+		ibus->max_xfer_size[USB_TYPE_CONTROL]     = 4096; /* - USBI_CONTROL_SETUP_LEN;*/
 		ibus->max_xfer_size[USB_TYPE_INTERRUPT]   = pow(2,32) - 1;
 		ibus->max_xfer_size[USB_TYPE_BULK]        = pow(2,32) - 1;
 		ibus->max_xfer_size[USB_TYPE_ISOCHRONOUS] = pow(2,32) - 1;
@@ -1763,6 +1778,7 @@ void *poll_io(void *devhdl)
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
 				pthread_mutex_unlock(&hdev->lock);
+				usbi_debug(NULL, 4, "io thread exiting...");
 				return NULL;
 			}
 		}
@@ -1778,6 +1794,7 @@ void *poll_io(void *devhdl)
 			if(hdev->state == USBI_DEVICE_CLOSING) {
 				/* device is closing, exit this thread */
 				pthread_mutex_unlock(&hdev->lock);
+				usbi_debug(NULL, 4, "io thread exiting...");
 				return NULL;
 			}
 		}
@@ -1797,6 +1814,7 @@ void *poll_io(void *devhdl)
 		pthread_mutex_unlock(&hdev->lock);
 	}
 
+  usbi_debug(NULL, 4, "io thread exiting...");
 	return (NULL);
 }
 
@@ -2544,7 +2562,6 @@ void *hal_hotplug_event_thread(void *unused)
 	GMainContext		*gmaincontext = NULL;
 	
 	pthread_mutex_lock(&linuxdbus_lock);
-
 	usbi_debug(NULL, 4, "starting hotplug thread...");
 	
 	/* Create the gmaincontext and the event loop */
@@ -2603,19 +2620,13 @@ void *hal_hotplug_event_thread(void *unused)
 	libhal_ctx_set_device_added (hal_ctx, device_added);
 	libhal_ctx_set_device_removed (hal_ctx, device_removed);
 
-	/* unlock the dbus thread */
-	pthread_mutex_unlock(&linuxdbus_lock);
-
 	/* run the main loop */
 	if (event_loop != NULL) {
 		usbi_debug(NULL, 4, "hotplug thread running...");
+    pthread_mutex_unlock(&linuxdbus_lock);
 		g_main_loop_run (event_loop);
-		usbi_debug(NULL, 4, "hotplug thread exiting...");
 	}
-
-	/* hold the dbus lock */
-	pthread_mutex_lock(&linuxdbus_lock);
-
+   
 	if (libhal_ctx_shutdown (hal_ctx, &error) == FALSE) {
 		dbus_error_free(&error);
 	}
@@ -2627,8 +2638,7 @@ void *hal_hotplug_event_thread(void *unused)
 	g_main_context_unref(gmaincontext);
 	g_main_context_release(gmaincontext);
 	
-	pthread_mutex_unlock(&linuxdbus_lock);
-
+	usbi_debug(NULL, 4, "hotplug thread exiting...");
 	return (NULL);
 }
 
