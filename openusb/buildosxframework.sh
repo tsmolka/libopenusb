@@ -9,7 +9,12 @@ set -e
 echo
 echo 'buildosxframework.sh'
 echo '     Building OpenUSB as a Mac OS X framework...'
+echo '     This will install the framework to /Library/Frameworks'
 echo
+
+# Make sure we are running as root
+username=`whoami`
+if [ "$username" != "root" ]; then echo "This must be run as root"; exit -1; fi;
 
 # Parse out the OpenUSB version from configure.in
 majorVer=`cat configure.in | grep LIBOPENUSB_MAJOR_VERSION= | cut -f2 -d=`
@@ -22,15 +27,16 @@ then
 fi
 
 # Construct the install directory so we can pass it to autogen.sh
-currentDir=`pwd`
 versionStr=$majorVer.$minorVer.$microVer
-frameworkDir="$currentDir"/openusb.framework
+frameworkDir=/Library/Frameworks/openusb.framework
 versionsDir="$frameworkDir"/Versions
 installDir="$versionsDir"/"$versionStr"
 docDir="$installDir"/Resources/English.lproj/Documentation
+
+# Remove any existing framework and create the directory for the new one
+rm -rf "$frameworkDir"
 mkdir -p "$installDir"
 if [ "$?" -ne 0 ]; then echo "failed to create framework directory"; exit -1; fi
-
 
 # Run configure
 ./configure --disable-dependency-tracking --prefix="$installDir"
@@ -93,7 +99,7 @@ echo '</plist>' >> "$infoxmlPath"
 
 # DONE!
 echo 
-echo 'DONE! Copy openusb.framework to /Library/Frameworks for use by all users'
+echo 'DONE!'
 echo
 
 
