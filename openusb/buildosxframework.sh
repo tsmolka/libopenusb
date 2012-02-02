@@ -2,13 +2,13 @@
 #
 #	buildosxframework.sh
 #
-#		This script will run ./autogen.sh and build OpenUSB using make. Finally,
-#		it will construct a Mac OS/X Framework from the result.
+#		This script will run ./configure and build OpenUSB using make. Finally,
+#		it will construct a Mac OS X Framework from the result.
 #
 set -e
 echo
 echo 'buildosxframework.sh'
-echo '     Building OpenUSB as a Mac OS/X framework...'
+echo '     Building OpenUSB as a Mac OS X framework...'
 echo
 
 # Parse out the OpenUSB version from configure.in
@@ -32,9 +32,9 @@ mkdir -p "$installDir"
 if [ "$?" -ne 0 ]; then echo "failed to create framework directory"; exit -1; fi
 
 
-# Run autogen.sh
-./autogen.sh --disable-dependency-tracking --prefix="$installDir"
-if [ "$?" -ne 0 ]; then echo "autogen.sh failed"; exit -1; fi
+# Run configure
+./configure --disable-dependency-tracking --prefix="$installDir"
+if [ "$?" -ne 0 ]; then echo "configure failed"; exit -1; fi
 
 # make/make install
 make
@@ -87,7 +87,7 @@ printf "    <string>%s</string>\n" $versionStr >> "$infoxmlPath"
 echo '    <key>CFBundleVersion</key>' >> "$infoxmlPath"
 printf "    <string>%s</string>\n" $versionStr >> "$infoxmlPath"
 echo '    <key>NSHumanReadableCopyright</key>' >> "$infoxmlPath"
-echo '    <string>Copyright (c) 2007-2009 OpenUSB Project. All Rights Reserved. OpenUSB is licensed under the LGPL</string>' >> "$infoxmlPath"
+echo '    <string>Copyright (c) 2007-2012 OpenUSB Project. All Rights Reserved. OpenUSB is licensed under the LGPL</string>' >> "$infoxmlPath"
 echo '</dict>' >> "$infoxmlPath"
 echo '</plist>' >> "$infoxmlPath"
 
