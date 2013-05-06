@@ -34,10 +34,12 @@ endif
 if DARWIN_API
 usblib_LTLIBRARIES = darwin.la
 
+darwin_xcode_skd = 10.6
+
 darwin_la_SOURCES = darwin.c darwin.h
-darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX10.5.sdk -mmacosx-version-min=10.5 -arch i386 -arch x86_64
+darwin_la_CFLAGS = -isysroot /Developer/SDKs/MacOSX$(darwin_xcode_sdk).sdk -mmacosx-version-min=$(darwin_xcode_sdk) -arch i386 -arch x86_64
 darwin_la_LDADDS = -lIOKit -framework "CoreFoundation"
-darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=10.5 -syslibroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -arch x86_64
+darwin_la_LDFLAGS = -module -avoid-version -mmacosx-version-min=$(darwin_xcode_sdk) -syslibroot /Developer/SDKs/MacOSX$(darwin_xcode_sdk).sdk -arch i386 -arch x86_64
 endif
 
 if SUNOS_API
@@ -67,13 +69,13 @@ libopenusb_la_LIBADD = -ldl
 if DARWIN_API
 
 libopenusb_la_CFLAGS += \
-	-mmacosx-version-min=10.5 \
-	-isysroot /Developer/SDKs/MacOSX10.5.sdk \
+	-mmacosx-version-min=$(darwin_xcode_sdk) \
+	-isysroot /Developer/SDKs/MacOSX$(darwin_xcode_sdk).sdk \
 	-arch i386 -arch x86_64
 
 libopenusb_la_LDFLAGS = \
-	-mmacosx-version-min=10.5 \
-	-syslibroot /Developer/SDKs/MacOSX10.5.sdk \
+	-mmacosx-version-min=$(darwin_xcode_sdk) \
+	-syslibroot /Developer/SDKs/MacOSX$(darwin_xcode_sdk).sdk \
 	-arch i386 -arch x86_64 \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	-dynamiclib \
