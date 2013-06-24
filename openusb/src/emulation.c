@@ -16,6 +16,15 @@
 #include "config.h" /* for platform specific stuff */
 #endif
 
+/* One bit of weirdness that I've been dealing with for years now.  Linux
+ * finally got it right, now mac is lagging behind...
+ */
+#if __APPLE__
+	#define USBCONSTISSUE
+#else
+	#define USBCONSTISSUE const
+#endif
+
 /*
  * Libusb1.0 to 0.1.x conversion layer
  * This layer provides backward compatibility for existing openusb
@@ -160,49 +169,50 @@ static int wr_create_devices(struct usb_bus *bus, struct usbi_bus *ibus)
 
 	pthread_mutex_lock(&ibus->lock);
 	list_for_each_entry_safe(idev, tdev, &ibus->devices.head, bus_list) {
-		dev = calloc(sizeof(*dev), 1);
-		if (!dev) {
-			wr_error_str(errno, "create_devices: No memory");
-			pthread_mutex_unlock(&ibus->lock);
-			return -1;
-		}
-		memcpy(dev->filename, idev->sys_path, PATH_MAX);
-		dev->bus = bus;
-
-		dev->config = NULL; 
-		dev->dev = NULL;
-
-		pthread_mutex_unlock(&ibus->lock);
-		tmph = usb_open(dev); /* device descriptors will be filled */
-		pthread_mutex_lock(&ibus->lock);
-
-		if (!tmph) {
-		/* if it can't be opened, don't add it to device list */
-			continue;
-		}
-
-		pthread_mutex_unlock(&ibus->lock);
-		usb_close(tmph); /* descriptors get set up */
-		pthread_mutex_lock(&ibus->lock);
-		
-		/* add this device to the bus's device list */
-		if(bus->devices == NULL) {
-			bus->devices = dev;
-			usbi_debug(NULL, 4, "add device: %s",dev->filename);
-		} else {
-			ndev = bus->devices;
-			while(ndev->next) {
-				ndev = ndev->next;
+		if (idev) {
+			dev = calloc(sizeof(*dev), 1);
+			if (!dev) {
+				wr_error_str(errno, "create_devices: No memory");
+				pthread_mutex_unlock(&ibus->lock);
+				return -1;
 			}
-			ndev->next = dev;
-			usbi_debug(NULL, 4, "add device: %s",dev->filename);
+			memcpy(dev->filename, idev->sys_path, PATH_MAX);
+			dev->bus = bus;
+	
+			dev->config = NULL; 
+			dev->dev = NULL;
+	
+			pthread_mutex_unlock(&ibus->lock);
+			tmph = usb_open(dev); /* device descriptors will be filled */
+			pthread_mutex_lock(&ibus->lock);
+	
+			if (!tmph) {
+			/* if it can't be opened, don't add it to device list */
+				continue;
+			}
+	
+			pthread_mutex_unlock(&ibus->lock);
+			usb_close(tmph); /* descriptors get set up */
+			pthread_mutex_lock(&ibus->lock);
+			
+			/* add this device to the bus's device list */
+			if(bus->devices == NULL) {
+				bus->devices = dev;
+				usbi_debug(NULL, 4, "add device: %s",dev->filename);
+			} else {
+				ndev = bus->devices;
+				while(ndev->next) {
+					ndev = ndev->next;
+				}
+				ndev->next = dev;
+				usbi_debug(NULL, 4, "add device: %s",dev->filename);
+			}
+	
+			if(idev->parent != NULL) {
+				/* don't account for root hubs */
+				dev_cnt++;
+			}
 		}
-
-		if(idev->parent != NULL) {
-			/* don't account for root hubs */
-			dev_cnt++;
-		}
-
 	}
 
 	pthread_mutex_unlock(&ibus->lock);
@@ -223,23 +233,25 @@ int usb_find_devices(void)
 	while(bus) {
 
 		list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
-
-			pthread_mutex_unlock(&usbi_buses.lock);	
-
-			ret = wr_create_devices(bus, ibus);
-
-			pthread_mutex_lock(&usbi_buses.lock);	
-
-			if (ret >= 0) {
-				dev_cnt += ret;
-			} else {
-				usbi_debug(NULL, 1,
-						"create_device error");
-				wr_error_str(1,
-						"wr_create_device error");
+			if (ibus) {
 
 				pthread_mutex_unlock(&usbi_buses.lock);	
-				return -1;
+
+				ret = wr_create_devices(bus, ibus);
+
+				pthread_mutex_lock(&usbi_buses.lock);	
+
+				if (ret >= 0) {
+					dev_cnt += ret;
+				} else {
+					usbi_debug(NULL, 1,
+							"create_device error");
+					wr_error_str(1,
+							"wr_create_device error");
+	
+					pthread_mutex_unlock(&usbi_buses.lock);	
+					return -1;
+				}
 			}
 		}
 
@@ -265,19 +277,21 @@ static openusb_devid_t wr_find_device(struct usb_device *dev)
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
-		pthread_mutex_lock(&ibus->devices.lock);
-		list_for_each_entry(idev, &ibus->devices.head, bus_list) {
-		/* safe */
-			if (strncmp(idev->sys_path, dev->filename,
-			    PATH_MAX) == 0) {
-
-				found = 1;
-				pthread_mutex_unlock(&ibus->devices.lock);
-
-				goto out;
+		if (ibus) {
+			pthread_mutex_lock(&ibus->devices.lock);
+			list_for_each_entry(idev, &ibus->devices.head, bus_list) {
+			/* safe */
+				if (strncmp(idev->sys_path, dev->filename,
+			    	PATH_MAX) == 0) {
+	
+					found = 1;
+					pthread_mutex_unlock(&ibus->devices.lock);
+	
+					goto out;
+				}
 			}
+			pthread_mutex_unlock(&ibus->devices.lock);
 		}
-		pthread_mutex_unlock(&ibus->devices.lock);
 	}
 out:
 	if (found==1) {
@@ -553,6 +567,7 @@ struct usb_dev_handle *usb_open(struct usb_device *dev)
 	if (!devh) {
 		wr_error(errno);
 		openusb_close_device(usb1_devh);
+		usb1_devh = 0;
 		return NULL;
 	}
 
@@ -575,6 +590,7 @@ int usb_close(struct usb_dev_handle *dev)
 	devh = (struct usb_dev_handle_internal *)dev;
 
 	ret = openusb_close_device(devh->devh);
+	devh->devh = 0;
 
 	if (ret != 0) {
 	/* shall we free the dev ? */
@@ -619,7 +635,7 @@ static int usb0_bulk_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
 	return(bulk.result.transferred_bytes);
 }
 
-int usb_bulk_write(struct usb_dev_handle *dev, int ep, char *bytes, int size,
+int usb_bulk_write(struct usb_dev_handle *dev, int ep, USBCONSTISSUE char *bytes, int size,
 	int timeout)
 {
 	return (usb0_bulk_xfer(dev, ep, (char*)bytes, size, timeout));
@@ -662,7 +678,7 @@ static int usb0_intr_xfer(struct usb_dev_handle *dev, int ep, char *bytes,
 	return(intr.result.transferred_bytes);
 }
 
-int usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, int size,
+int usb_interrupt_write(usb_dev_handle *dev, int ep, USBCONSTISSUE char *bytes, int size,
 	int timeout)
 {
 	return (usb0_intr_xfer(dev, ep, (char*)bytes, size, timeout));

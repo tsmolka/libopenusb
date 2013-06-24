@@ -132,7 +132,7 @@ static struct usbi_device *darwin_find_device_by_location (UInt32 location) {
   struct usbi_device  *idev = NULL;
 
   list_for_each_entry(idev, &((*pusbi_devices).head), dev_list) {
-    if (idev->priv->location == location)
+    if (idev && idev->priv && idev->priv->location == location)
       return idev;
   }
 
@@ -158,7 +158,9 @@ static void darwin_devices_attached (void *ptr, io_iterator_t new_devices) {
       list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list) {
 	/* every openusb instance should get notification
 	 * of this event */
-	usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+	if (handle) {
+		usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+	}
       }
 
       pthread_mutex_unlock(&usbi_handles.lock);
@@ -681,34 +683,42 @@ int32_t darwin_close(struct usbi_dev_handle *hdev) {
       darwin_release_interface (hdev, i);
 
   pthread_mutex_lock(&hdev->lock);
-  if (hdev->priv->open) {
+  if (hdev && hdev->priv && hdev->priv->open) {
     /* delete the device's async event source */
-    CFRunLoopRemoveSource (openusb_darwin_acfl, hdev->priv->cfSource, kCFRunLoopDefaultMode);
-    CFRelease (hdev->priv->cfSource);
+    if (hdev->priv->cfSource) {
+    	CFRunLoopRemoveSource (openusb_darwin_acfl, hdev->priv->cfSource, kCFRunLoopDefaultMode);
+    	CFRelease (hdev->priv->cfSource);
+    	hdev->priv->cfSource = 0;
+    }
 
     /* close the device */
-    kresult = (*(hdev->priv->device))->USBDeviceClose(hdev->priv->device);
-    if (kresult) {
-      /* Log the fact that we had a problem closing the file, however failing a
-       * close isn't really an error, so return success anyway */
-      usbi_debug (hdev->lib_hdl, 2,
-		  "libopenusb/darwin.c darwin_close(USBDeviceClose) (location: %d): %s",
-		  hdev->idev->priv->location, darwin_error_str(kresult));
+    if (hdev && hdev->priv && hdev->priv->device && *(hdev->priv->device)) {
+    	kresult = (*(hdev->priv->device))->USBDeviceClose(hdev->priv->device);
+    	if (kresult) {
+      	/* Log the fact that we had a problem closing the file, however failing a
+       	* close isn't really an error, so return success anyway */
+      	//usbi_debug (hdev->lib_hdl, 2,
+	  	//"libopenusb/darwin.c darwin_close(USBDeviceClose)");
+    	}
     }
   }
 	
-  kresult = (*(hdev->priv->device))->Release(hdev->priv->device);
-  if (kresult) {
-    /* Log the fact that we had a problem closing the file, however failing a
-     * close isn't really an error, so return success anyway */
-    usbi_debug (hdev->lib_hdl, 2,
-		"libopenusb/darwin.c darwin_close(Release) (location: %d): %s",
-		hdev->idev->priv->location, darwin_error_str(kresult));
+  if (hdev && hdev->priv && hdev->priv->device) {
+  	kresult = (*(hdev->priv->device))->Release(hdev->priv->device);
+  	if (kresult) {
+    	/* Log the fact that we had a problem closing the file, however failing a
+     	* close isn't really an error, so return success anyway */
+    	//usbi_debug (hdev->lib_hdl, 2,
+		//"libopenusb/darwin.c darwin_close(Release)");
+  	}
   }
   pthread_mutex_unlock(&hdev->lock);
 
   /* free our private data */
-  free (hdev->priv);
+  if (hdev->priv) {
+  	free (hdev->priv);
+        hdev->priv = 0;
+  }
 
   return OPENUSB_SUCCESS;
 } 
