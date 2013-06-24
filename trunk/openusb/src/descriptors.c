@@ -186,6 +186,7 @@ static int usbi_parse_endpoint(struct usbi_endpoint *ep,
 	/* FIXME: Maybe report about extra unparsed data
 	 * after the descriptor?
 	 */
+        usbi_debug(NULL,4,"wMaxPacketSize = %d",ep->desc.wMaxPacketSize);
 
 	/* Skip over the just parsed data */
 	buf += header.bLength;
@@ -776,7 +777,13 @@ int usbi_fetch_and_parse_descriptors(struct usbi_dev_handle *hdev)
 
 		cfgr->len = cfg_desc.wTotalLength;
 
-		cfgr->data = calloc(cfgr->len, 1);
+		/* FIXME: */
+		/* valgrind is really unhappy with this pointer, and we've seen many */
+		/* crashes in virtual machines that go away if this value is bumped */
+		/* up.  Admitedly, 64K is a bit arbitrary, but until I get a better */
+		/* grip on the exact problem, all I can say is this makes the crashes */
+		/* go bye-bye... */
+		cfgr->data = calloc(cfgr->len+65536, 1);
 		if (!cfgr->data) {
 			usbi_debug(NULL, 1,
 				"unable to allocate %d bytes for descriptors",

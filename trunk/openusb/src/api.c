@@ -322,9 +322,11 @@ static int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char 
 	struct usb_config_desc cfg_desc;
 	uint32_t count;
 
+	/* The timeout has been bumped from 100ms to 1000ms to work better with */
+	/* virtual machines and finicky devices... */
 	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
 			(USB_DESC_TYPE_CONFIG << 8) + cfg, 0, buf,
-			8, 100);
+			8, 1000);
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "usbi_control_xfer fail");
 		return ret;
@@ -339,9 +341,11 @@ static int32_t usbi_get_config_desc(struct usbi_dev_handle *devh, int cfg, char 
 		return OPENUSB_NO_RESOURCES;
 	}
 
+	/* The timeout has been bumped from 100ms to 1000ms to work better with */
+	/* virtual machines and finicky devices... */
 	ret = usbi_control_xfer(devh, USB_ENDPOINT_IN, USB_REQ_GET_DESCRIPTOR,
 			(USB_DESC_TYPE_CONFIG << 8) + cfg, 0, newbuf,
-			cfg_desc.wTotalLength, 100);
+			cfg_desc.wTotalLength, 1000);
 
 	if (ret < 0) {
 		free(newbuf);
@@ -1023,7 +1027,7 @@ int32_t openusb_poll(uint32_t num_reqs,openusb_request_handle_t * handles,
 	pthread_mutex_lock(&ph->complete_lock);
 	list_for_each_entry(io,&ph->complete_list,list) {
 	/* safe */
-		if(io) {
+		if (io) {
 			/*get the first io on the complete list */
 			usbi_debug(ph, 4, "complete list: %p\n",
 				io->req);
@@ -1368,11 +1372,13 @@ loop:
 		struct usbi_multi_req_args *pargs, *tmp;
 
 		list_for_each_entry_safe(pargs, tmp, &mi_req->req_head, list) {
-			pthread_mutex_unlock(&mi_req->lock);
-			openusb_abort(pargs->req);
-			pthread_mutex_lock(&mi_req->lock);
-			free(pargs->req); /*FIXME: should be here ??? */
-			free(pargs);
+			if (pargs) {
+				pthread_mutex_unlock(&mi_req->lock);
+				openusb_abort(pargs->req);
+				pthread_mutex_lock(&mi_req->lock);
+				free(pargs->req); /*FIXME: should be here ??? */
+				free(pargs);
+			}
 		}
 
 		pthread_mutex_unlock(&mi_req->lock);
@@ -1477,7 +1483,7 @@ static int32_t usbi_add_or_stop(openusb_multi_request_handle_t handle, int flag)
 	mreq = NULL;
 	list_for_each_entry(mreq, &hdev->m_head, list) {
 	/* safe */
-		if(mreq->mreq == handle) {
+		if (mreq && (mreq->mreq == handle)) {
 			break;
 		}
 	}

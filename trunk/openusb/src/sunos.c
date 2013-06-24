@@ -187,7 +187,7 @@ struct usbi_device *find_device_by_udi(const char *udi)
 	pthread_mutex_lock(&usbi_devices.lock);
 
 	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
-		if (!idev->priv->udi) {
+		if (!idev || !idev->priv || !idev->priv->udi) {
 			continue;
 		}
 
@@ -353,8 +353,10 @@ device_added (LibHalContext *ctx, const char *udi)
 			/* every openusb instance should get notification
 			 * of this event
 			 */
-			usbi_add_event_callback(handle, idev->devid,
-				USB_ATTACH);
+			if (handle) {
+				usbi_add_event_callback(handle, idev->devid,
+					USB_ATTACH);
+			}
 		}
 		pthread_mutex_unlock(&usbi_handles.lock);
 
@@ -384,9 +386,11 @@ device_removed (LibHalContext *ctx, const char *udi)
 		/* add a callback if REMOVE callback is set */ 
 		pthread_mutex_lock(&usbi_handles.lock);
 		list_for_each_entry(hdl, &usbi_handles.head, list) {
-			pthread_mutex_unlock(&usbi_handles.lock);
-			usbi_add_event_callback(hdl, idev->devid, USB_REMOVE);
-			pthread_mutex_lock(&usbi_handles.lock);
+			if (hdl) {
+				pthread_mutex_unlock(&usbi_handles.lock);
+				usbi_add_event_callback(hdl, idev->devid, USB_REMOVE);
+				pthread_mutex_lock(&usbi_handles.lock);
+			}
 		}
 		pthread_mutex_unlock(&usbi_handles.lock);
 
@@ -1031,7 +1035,9 @@ solaris_refresh_devices(struct usbi_bus *ibus)
 	/* Reset the found flag for all devices */
 	list_for_each_entry(idev, &ibus->devices.head, bus_list) {
 	/* safe */
-		idev->found = 0;
+		if (idev) {
+			idev->found = 0;
+		}
 	}
 
 	ibus->priv->node = root_node;
@@ -1040,7 +1046,7 @@ solaris_refresh_devices(struct usbi_bus *ibus)
 	create_new_device(root_node, NULL, ibus);
 
 	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
-		if (!idev->found) {
+		if (idev && !idev->found) {
 			/* Device disappeared, remove it */
 			usbi_debug(NULL, 3, "device %d removed", idev->devnum);
 			usbi_remove_device(idev);

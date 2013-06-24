@@ -287,9 +287,12 @@ int32_t linux_get_configuration(struct usbi_dev_handle *hdev, uint8_t *cfg)
 	pthread_mutex_unlock(&hdev->lock);
 
 	/* Get current device configuration value via control request. */
+	/* The timeout has been bumped from 100ms to 1000ms to work better */
+	/* with virtual machines, and to handle the rare cases where a */
+	/* device isn't quite as perky as it should be... */
 	ret = usbi_control_xfer(hdev, USB_REQ_DEV_TO_HOST
 			| USB_REQ_TYPE_STANDARD | USB_REQ_RECIP_DEVICE,
-			USB_REQ_GET_CONFIGURATION, 0, 0, (char*)&current_cfg, 1, 100);
+			USB_REQ_GET_CONFIGURATION, 0, 0, (char*)&current_cfg, 1, 1000);
 
 	if (ret < 0) {
 		usbi_debug(NULL, 1, "fail to get current configuration value: %s",
@@ -687,7 +690,7 @@ static int32_t linux_find_buses(struct list_head *buses)
 		/* check our list of busses to make sure we don't have it in the list */
 		busnum = atoi(entry->d_name);
 		list_for_each_entry(ibus,buses,list) {
-			if (ibus->busnum == busnum) {
+			if (ibus && ibus->busnum == busnum) {
 				continue;
 			}
 		}
@@ -1700,18 +1703,19 @@ int32_t io_timeout(struct usbi_dev_handle *hdev, struct timeval *tvc)
 
 	/* check each entry in the io list to find out if it's timed out */
 	list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
+		if (io) {
 
-		/* currently, isochronous io doesn't consider timeout issue and we don't
-		 * want to process any requests that aren't in progress */
-		if(   (io->status != USBI_IO_INPROGRESS) 
-			 || (io->req->type == USB_TYPE_ISOCHRONOUS)) { 
-			break;
+			/* currently, isochronous io doesn't consider timeout issue and we don't
+		 	* want to process any requests that aren't in progress */
+			if(   (io->status != USBI_IO_INPROGRESS) 
+			 	|| (io->req->type == USB_TYPE_ISOCHRONOUS)) { 
+				break;
+			}
+	
+			if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
+				discard_urbs(hdev, io, TIMEDOUT);
+			}
 		}
-
-		if (usbi_timeval_compare(&io->tvo, tvc) <= 0) {
-			discard_urbs(hdev, io, TIMEDOUT);
-		}
-
 	}
 
 	return (OPENUSB_SUCCESS);
@@ -1796,18 +1800,20 @@ void *poll_io(void *devhdl)
 
 		/* loop through the pending io requests and find our next soonest timeout */
 		list_for_each_entry(io, &hdev->io_head, list) {
-			/* skip the timeout calculation if it's an isochronous request, or if
-			 * the IO is not in progress (to avoid processing aborted requests), if we
- 			 * hit one of these cases, then break */
-			if(   (io->status != USBI_IO_INPROGRESS) 
-				 || (io->req->type == USB_TYPE_ISOCHRONOUS)) {
-				break;
-			}
-			
-			if (   io->tvo.tv_sec
-					&& (!tvo.tv_sec || usbi_timeval_compare(&io->tvo, &tvo))) {
-				/* new soonest timeout */
-				memcpy(&tvo, &io->tvo, sizeof(tvo));
+			if (io) {
+				/* skip the timeout calculation if it's an isochronous request, or if
+			 	* the IO is not in progress (to avoid processing aborted requests), if we
+ 			 	* hit one of these cases, then break */
+				if(   (io->status != USBI_IO_INPROGRESS) 
+				 	|| (io->req->type == USB_TYPE_ISOCHRONOUS)) {
+					break;
+				}
+				
+				if (   io->tvo.tv_sec
+						&& (!tvo.tv_sec || usbi_timeval_compare(&io->tvo, &tvo))) {
+					/* new soonest timeout */
+					memcpy(&tvo, &io->tvo, sizeof(tvo));
+				}
 			}
 		}
 		pthread_mutex_unlock(&hdev->lock);
@@ -2406,7 +2412,7 @@ static int32_t linux_refresh_devices(struct usbi_bus* ibus)
   /* make sure every device we currently have in the list was found,
 	 * if not, remove it. */
 	list_for_each_entry_safe(idev, tidev, &ibus->devices.head, bus_list) {
-	  if (!idev->found) {
+	  if (idev && !idev->found) {
 		  /* Device disappeared, remove it */
 		  usbi_debug(NULL, 2, "device %d removed", idev->devnum);
 		  usbi_remove_device(idev);
@@ -2443,7 +2449,7 @@ static struct usbi_device *find_device_by_sysfspath(const char *path)
  	
  	pthread_mutex_lock(&usbi_devices.lock);
  	list_for_each_entry(idev, &((*pusbi_devices).head), dev_list) {
- 	  if (!idev->priv->sysfspath) {
+ 	  if (idev && !idev->priv->sysfspath) {
    	  continue;
  	  }
  	
@@ -2479,7 +2485,9 @@ static void device_added(struct udev_device* dev, const char* path)
   	pthread_mutex_lock(&usbi_handles.lock);
    	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list) {
     	/* every openusb instance should get notification of this event */
-   	  usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+		if (handle) {
+   	  		usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+		}
     }
     pthread_mutex_unlock(&usbi_handles.lock);
   } else {

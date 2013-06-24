@@ -79,13 +79,15 @@ static struct usbi_bus *usbi_find_bus_by_id(openusb_busid_t busid)
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
-		pthread_mutex_lock(&ibus->lock);
-		if (ibus->busid == busid) {
+		if (ibus) {
+			pthread_mutex_lock(&ibus->lock);
+			if (ibus->busid == busid) {
+				pthread_mutex_unlock(&ibus->lock);
+				pthread_mutex_unlock(&usbi_buses.lock);
+				return ibus;
+			}
 			pthread_mutex_unlock(&ibus->lock);
-			pthread_mutex_unlock(&usbi_buses.lock);
-			return ibus;
 		}
-		pthread_mutex_unlock(&ibus->lock);
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
 
@@ -103,13 +105,15 @@ struct usbi_bus *usbi_find_bus_by_num(unsigned int busnum)
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
-		pthread_mutex_lock(&ibus->lock);
-		if (ibus->busnum == busnum) {
+		if (ibus) {
+			pthread_mutex_lock(&ibus->lock);
+			if (ibus->busnum == busnum) {
+				pthread_mutex_unlock(&ibus->lock);
+				pthread_mutex_unlock(&usbi_buses.lock);
+				return ibus;
+			}
 			pthread_mutex_unlock(&ibus->lock);
-			pthread_mutex_unlock(&usbi_buses.lock);
-			return ibus;
 		}
-		pthread_mutex_unlock(&ibus->lock);
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
 
@@ -142,33 +146,37 @@ static void refresh_bus(struct usbi_backend *backend)
 	 */
 	pthread_mutex_lock(&usbi_buses.lock);
 	list_for_each_entry_safe(ibus, tibus, &usbi_buses.head, list) {
-		struct usbi_bus *nibus, *tnibus;
-		int found = 0;
+		if (ibus) {
+			struct usbi_bus *nibus, *tnibus;
+			int found = 0;
 
-		list_for_each_entry_safe(nibus, tnibus, &busses, list) {
-			/*
-			 * Remove it from the new devices list, if busnum or
-			 * sys_path is same as old bus. It's already in global
-			 * bus list.
-			 */
-			pthread_mutex_lock(&ibus->lock);
-			if ((ibus->busnum == nibus->busnum) ||
-			    (strcmp(ibus->sys_path, nibus->sys_path) == 0)){
-
-				pthread_mutex_unlock(&ibus->lock);
-
-				list_del(&nibus->list);
-
-				usbi_free_bus(nibus);
-				found = 1;
-				break;
+			list_for_each_entry_safe(nibus, tnibus, &busses, list) {
+				/*
+			 	* Remove it from the new devices list, if busnum or
+			 	* sys_path is same as old bus. It's already in global
+			 	* bus list.
+			 	*/
+				if (nibus) {
+					pthread_mutex_lock(&ibus->lock);
+					if ((ibus->busnum == nibus->busnum) ||
+			    		(strcmp(ibus->sys_path, nibus->sys_path) == 0)){
+		
+						pthread_mutex_unlock(&ibus->lock);
+		
+						list_del(&nibus->list);
+		
+						usbi_free_bus(nibus);
+						found = 1;
+						break;
+					}
+					pthread_mutex_unlock(&ibus->lock);
+				}
 			}
-			pthread_mutex_unlock(&ibus->lock);
-		}
 
-		if (!found)
-			/* The bus was removed from the system */
-			list_del(&ibus->list);
+			if (!found)
+				/* The bus was removed from the system */
+				list_del(&ibus->list);
+		}
 	}
 
 	/*
@@ -176,8 +184,10 @@ static void refresh_bus(struct usbi_backend *backend)
 	 * and process them like the new bus they are
 	 */
 	list_for_each_entry_safe(ibus, tibus, &busses, list) {
-		list_del(&ibus->list);
-		usbi_add_bus(ibus, backend);
+		if (ibus) {
+			list_del(&ibus->list);
+			usbi_add_bus(ibus, backend);
+		}
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
 }
@@ -187,7 +197,9 @@ static void usbi_refresh_busses(void)
 	struct usbi_backend *backend, *tbackend;
 
 	list_for_each_entry_safe(backend, tbackend, &backends, list) {
-		refresh_bus(backend);
+		if (backend) {
+			refresh_bus(backend);
+		}
 	}
 }
 
@@ -214,7 +226,9 @@ void usbi_add_device(struct usbi_bus *ibus, struct usbi_device *idev)
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
 		/* every openusb instance should get notification of this event */
-		usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+		if (handle) {
+			usbi_add_event_callback(handle, idev->devid, USB_ATTACH);
+		}
 	}
 	pthread_mutex_unlock(&usbi_handles.lock);
 }
@@ -254,7 +268,9 @@ void usbi_remove_device(struct usbi_device *idev)
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry_safe(handle, thdl, &usbi_handles.head, list){
 		/*every openusb instance should get notification of this event */
-		usbi_add_event_callback(handle,devid, USB_REMOVE);
+		if (handle) {
+			usbi_add_event_callback(handle,devid, USB_REMOVE);
+		}
 	}
 	pthread_mutex_unlock(&usbi_handles.lock);
 }
@@ -284,11 +300,11 @@ void usbi_rescan_devices(void)
 	 */
 
 	list_for_each_entry_safe(ibus, tbus, &usbi_buses.head, list) {
-		pthread_mutex_unlock(&usbi_buses.lock);
-
-		ibus->ops->refresh_devices(ibus);
-
-		pthread_mutex_lock(&usbi_buses.lock);
+		if (ibus && ibus->ops) {
+			pthread_mutex_unlock(&usbi_buses.lock);
+			ibus->ops->refresh_devices(ibus);
+			pthread_mutex_lock(&usbi_buses.lock);
+		}
 	}
 
 	pthread_mutex_unlock(&usbi_buses.lock);
@@ -336,11 +352,13 @@ int32_t openusb_get_busid_list(openusb_handle_t handle, openusb_busid_t **busids
 	tmp = *busids;
 	list_for_each_entry(ibus, &usbi_buses.head, list) {
 	/* safe */
-		pthread_mutex_lock(&ibus->lock);
-		*tmp = ibus->busid;
-		pthread_mutex_unlock(&ibus->lock);
+		if (ibus) {
+			pthread_mutex_lock(&ibus->lock);
+			*tmp = ibus->busid;
+			pthread_mutex_unlock(&ibus->lock);
 
-		tmp++;
+			tmp++;
+		}
 	}
 	pthread_mutex_unlock(&usbi_buses.lock);
 
@@ -552,8 +570,10 @@ int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid
 		tdevid = *devids;
 		list_for_each_entry(idev, &usbi_devices.head, dev_list) {
 		/* safe */
-			*tdevid = idev->devid;
-			tdevid++;
+			if (idev) {
+				*tdevid = idev->devid;
+				tdevid++;
+			}
 		}
 
 		*num_devids = devcnts;
@@ -593,8 +613,10 @@ int32_t openusb_get_devids_by_bus(openusb_handle_t handle, openusb_busid_t busid
 	tdevid = *devids;
 	list_for_each_entry(idev, &ibus->devices.head, bus_list) {
 	/* safe */
-		*tdevid = idev->devid;
-		tdevid++;
+		if (idev) {
+			*tdevid = idev->devid;
+			tdevid++;
+		}
 	}
 	*num_devids = devcnts;
 	pthread_mutex_unlock(&ibus->devices.lock);
@@ -638,31 +660,33 @@ int32_t openusb_get_devids_by_vendor(openusb_handle_t handle, int32_t vendor,
 
 	pthread_mutex_lock(&usbi_devices.lock);
 	list_for_each_entry_safe(idev, tdev, &usbi_devices.head, dev_list) {
-		usb_device_desc_t desc;
-		uint16_t Vendor;
-		uint16_t Product;
+		if (idev) {
+			usb_device_desc_t desc;
+			uint16_t Vendor;
+			uint16_t Product;
 
-		pthread_mutex_unlock(&usbi_devices.lock);
-		if ((ret = openusb_parse_device_desc(handle, idev->devid,
-				NULL, 0, &desc)) < 0) {
+			pthread_mutex_unlock(&usbi_devices.lock);
+			if ((ret = openusb_parse_device_desc(handle, idev->devid,
+					NULL, 0, &desc)) < 0) {
 
-			usbi_debug(hdl, 2, "get device desc for devid %d "
-					"failed (ret = %d)", idev->devid, ret);
+				usbi_debug(hdl, 2, "get device desc for devid %d "
+						"failed (ret = %d)", idev->devid, ret);
+
+				pthread_mutex_lock(&usbi_devices.lock);
+
+				continue;
+			}
 
 			pthread_mutex_lock(&usbi_devices.lock);
-
-			continue;
-		}
-
-		pthread_mutex_lock(&usbi_devices.lock);
 		
-		Vendor = openusb_le16_to_cpu(desc.idVendor);
-		Product = openusb_le16_to_cpu(desc.idProduct);
-		if (((vendor == -1) || (vendor == Vendor)) &&
-			((product == -1) || (product == Product))) {
+			Vendor = openusb_le16_to_cpu(desc.idVendor);
+			Product = openusb_le16_to_cpu(desc.idProduct);
+			if (((vendor == -1) || (vendor == Vendor)) &&
+				((product == -1) || (product == Product))) {
 
-			list_add(&idev->match_list, &match_list);
-			(*num_devids)++;
+				list_add(&idev->match_list, &match_list);
+				(*num_devids)++;
+			}
 		}
 	}
 
@@ -680,8 +704,10 @@ int32_t openusb_get_devids_by_vendor(openusb_handle_t handle, int32_t vendor,
 	tdevid = *devids;
 	list_for_each_entry(idev, &match_list, match_list) {
 	/* safe */
-		*tdevid = idev->devid;
-		tdevid++;
+		if (idev) {
+			*tdevid = idev->devid;
+			tdevid++;
+		}
 	}
 	pthread_mutex_unlock(&usbi_devices.lock);
 
@@ -727,20 +753,21 @@ int32_t openusb_get_devids_by_class(openusb_handle_t handle, int16_t devclass,
 
 	pthread_mutex_lock(&usbi_devices.lock);
 	list_for_each_entry_safe(idev, tdev, &usbi_devices.head, dev_list) {
+		if (idev) {
+			pthread_mutex_unlock(&usbi_devices.lock);
 
-		pthread_mutex_unlock(&usbi_devices.lock);
+			if (usbi_match_class(handle, idev, devclass, subclass,
+						protocol)) {
 
-		if (usbi_match_class(handle, idev, devclass, subclass,
-					protocol)) {
+				usbi_debug(NULL, 4, "match dev %d",
+					(int)idev->devid);
 
-			usbi_debug(NULL, 4, "match dev %d",
-				(int)idev->devid);
+				list_add(&idev->match_list, &match_list);
+				(*num_devids)++;
+			}
 
-			list_add(&idev->match_list, &match_list);
-			(*num_devids)++;
+			pthread_mutex_lock(&usbi_devices.lock);
 		}
-
-		pthread_mutex_lock(&usbi_devices.lock);
 	}
 
 	if (*num_devids == 0) {
@@ -757,8 +784,10 @@ int32_t openusb_get_devids_by_class(openusb_handle_t handle, int16_t devclass,
 	tdevid = *devids;
 	list_for_each_entry(idev, &match_list, match_list) {
 	/* safe */
-		*tdevid = idev->devid;
-		tdevid++;
+		if (idev) {
+			*tdevid = idev->devid;
+			tdevid++;
+		}
 	}
 	pthread_mutex_unlock(&usbi_devices.lock);
 
@@ -1295,7 +1324,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 	list_for_each_entry(devh, &usbi_dev_handles.head, list) {
 	/* safe */
-		if (devh->idev->devid == devid) {
+		if (devh && devh->idev && devh->idev->devid == devid) {
 			dev_found = devh;
 			break;
 		}
@@ -1341,7 +1370,10 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 		} else {
 			if ((pdata->manufacturer = calloc(strings[0], 1)) == NULL) {
 				free(pdata);
-				if (!dev_found) { openusb_close_device(hdev); }
+				if (!dev_found) {
+					openusb_close_device(hdev);
+					hdev = 0;
+				}
 				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->manufacturer, strings, strings[0]);
@@ -1359,7 +1391,10 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 			if ((pdata->product= calloc(strings[0], 1)) == NULL) {
 				free(pdata->manufacturer);
 				free(pdata);
-				if (!dev_found) { openusb_close_device(hdev); }
+				if (!dev_found) {
+					openusb_close_device(hdev);
+					hdev = 0;
+				}
 				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->product, strings, strings[0]);
@@ -1377,7 +1412,10 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 				free(pdata->product);
 				free(pdata->manufacturer);
 				free(pdata);
-				if (!dev_found) { openusb_close_device(hdev); }
+				if (!dev_found) {
+					openusb_close_device(hdev);
+					hdev = 0;
+				}
 				return OPENUSB_NO_RESOURCES;
 			}
 			memcpy(pdata->serialnumber, strings, strings[0]);
@@ -1386,6 +1424,7 @@ int32_t openusb_get_device_data(openusb_handle_t handle, openusb_devid_t devid,
 	
 	if (!dev_found) {
 		openusb_close_device(hdev);
+		hdev = 0;
 	}
 #endif
 
@@ -1431,7 +1470,10 @@ get_raw:
 	return 0;
 
 fail:
-	if (!dev_found) { openusb_close_device(hdev); }
+	if (!dev_found) {
+		openusb_close_device(hdev);
+		hdev = 0;
+	}
 	free(pdata->product);
 	free(pdata->manufacturer);
 	free(pdata->serialnumber);
