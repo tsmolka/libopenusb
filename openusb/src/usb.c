@@ -307,9 +307,11 @@ static int load_backends(const char *dirpath)
 
 		list_for_each_entry(backend, &backends, list) {
 		/* safe */
-			if (strcmp(filepath, backend->filepath) == 0) {
-				found = 1;
-				break;
+			if (backend) {
+				if (strcmp(filepath, backend->filepath) == 0) {
+					found = 1;
+					break;
+				}
 			}
 		}
 
@@ -495,9 +497,11 @@ struct usbi_handle *usbi_find_handle(openusb_handle_t handle)
 	pthread_mutex_lock(&usbi_handles.lock);
 	list_for_each_entry(hdl, &usbi_handles.head, list) {
 	/* safe */
-		if (hdl->handle == handle) {
-			pthread_mutex_unlock(&usbi_handles.lock);
-			return hdl;
+		if (hdl) {
+			if (hdl->handle == handle) {
+				pthread_mutex_unlock(&usbi_handles.lock);
+				return hdl;
+			}
 		}
 	}
 	pthread_mutex_unlock(&usbi_handles.lock);
@@ -612,11 +616,13 @@ int32_t openusb_init(uint32_t flags, openusb_handle_t *handle)
 	
 	list_for_each_entry(backend,&backends,list) {
 	/* safe */
-		back_cnt++;
-		/* call backend init func */
-		if (backend->ops->init(hdl, flags)) {
-			usbi_debug(NULL, 1, "backend init fail");
-			init_cnt++;
+		if (backend) {
+			back_cnt++;
+			/* call backend init func */
+			if (backend->ops->init(hdl, flags)) {
+				usbi_debug(NULL, 1, "backend init fail");
+				init_cnt++;
+			}
 		}
 	}
 	
@@ -657,7 +663,7 @@ void openusb_fini(openusb_handle_t handle)
 
 	list_for_each_entry_safe(backend, tbackend, &backends, list) {
 	/* safe */
-		if(backend->ops->fini)
+		if(backend && backend->ops && backend->ops->fini)
 			backend->ops->fini(hdl);/* call each backend's fini */
 	}
 
@@ -675,8 +681,10 @@ void openusb_fini(openusb_handle_t handle)
 		/* last openusb instance, unload the backends */
 		list_for_each_entry_safe(backend, tbackend, &backends, list) {
 		/* safe */
-			dlclose(backend->handle);	/* shutdown the backend */
-			list_del(&backend->list);	/* remove the backend from the list */
+			if (backend) {
+				dlclose(backend->handle);	/* shutdown the backend */
+				list_del(&backend->list);	/* remove the backend from the list */
+			}
 		}
 
 		return;
@@ -804,14 +812,16 @@ struct usbi_dev_handle *usbi_find_dev_handle(openusb_dev_handle_t dev)
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
 	/* safe */
-		pthread_mutex_lock(&hdev->lock);
-		if (hdev->handle == dev) {
+		if (hdev) {
+			pthread_mutex_lock(&hdev->lock);
+			if (hdev->handle == dev) {
+				pthread_mutex_unlock(&hdev->lock);
+	
+				pthread_mutex_unlock(&usbi_dev_handles.lock);
+				return hdev;
+			}
 			pthread_mutex_unlock(&hdev->lock);
-
-			pthread_mutex_unlock(&usbi_dev_handles.lock);
-			return hdev;
 		}
-		pthread_mutex_unlock(&hdev->lock);
 	}
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
 
@@ -837,9 +847,11 @@ struct usbi_device *usbi_find_device_by_id(openusb_devid_t devid)
 	pthread_mutex_lock(&usbi_devices.lock);
 	list_for_each_entry(idev, &usbi_devices.head, dev_list) {
 	/* safe */
-		if (idev->devid == devid) {
-			pthread_mutex_unlock(&usbi_devices.lock);
-			return idev;
+		if (idev) {
+			if (idev->devid == devid) {
+				pthread_mutex_unlock(&usbi_devices.lock);
+				return idev;
+			}
 		}
 	}
 	pthread_mutex_unlock(&usbi_devices.lock);
@@ -933,6 +945,7 @@ int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
 	ret = openusb_get_configuration(*dev, &cfg);
 	if (ret != OPENUSB_SUCCESS) {
 		openusb_close_device(*dev);
+		*dev = 0;
 		return ret;
 	}
 
@@ -941,44 +954,55 @@ int32_t openusb_open_device(openusb_handle_t handle, openusb_devid_t devid,
 
 int32_t openusb_close_device(openusb_dev_handle_t dev)
 {
-	struct usbi_dev_handle *hdev;
-	int ret;
-	struct usbi_io *io, *tio;
+        struct usbi_dev_handle *hdev;
+        int ret;
+        struct usbi_io *io, *tio;
 
-	hdev = usbi_find_dev_handle(dev);
-	if (!hdev)
-		return OPENUSB_UNKNOWN_DEVICE;
-	
-	/* FIXME: need to abort the outstanding io request first */
-	pthread_mutex_lock(&hdev->lock);
+        if (!dev) {
+                return OPENUSB_SUCCESS;
+        }
 
-	list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
-		pthread_mutex_unlock(&hdev->lock);
-		usbi_free_io(io);
-		pthread_mutex_lock(&hdev->lock);
-	}
-	pthread_mutex_unlock(&hdev->lock);
-	
-	ret = hdev->idev->ops->close(hdev);
+        hdev = usbi_find_dev_handle(dev);
+        if (!hdev) {
+                return OPENUSB_UNKNOWN_DEVICE;
+        }
 
-	pthread_mutex_lock(&usbi_dev_handles.lock);
+        /* FIXME: need to abort the outstanding io request first */
+        pthread_mutex_lock(&hdev->lock);
 
-	pthread_mutex_lock(&hdev->lock);
+        list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
+                if (io)
+                {
+                        pthread_mutex_unlock(&hdev->lock);
+                        usbi_free_io(io);
+                        pthread_mutex_lock(&hdev->lock);
+                }
+        }
+        pthread_mutex_unlock(&hdev->lock);
 
-	list_del(&hdev->list);
+        ret = OPENUSB_SUCCESS;
+        if (hdev && hdev->idev && hdev->idev->ops && hdev->idev->ops->close) {
+                ret = hdev->idev->ops->close(hdev);
+        }
 
-	close(hdev->event_pipe[0]);
-	close(hdev->event_pipe[1]);
+        pthread_mutex_lock(&usbi_dev_handles.lock);
 
-	pthread_mutex_unlock(&hdev->lock);
+        pthread_mutex_lock(&hdev->lock);
 
-	pthread_mutex_unlock(&usbi_dev_handles.lock);
+        list_del(&hdev->list);
 
-	pthread_mutex_destroy(&hdev->lock);
+        close(hdev->event_pipe[0]);
+        close(hdev->event_pipe[1]);
 
-	free(hdev);
+        pthread_mutex_unlock(&hdev->lock);
 
-	return ret;
+        pthread_mutex_unlock(&usbi_dev_handles.lock);
+
+        pthread_mutex_destroy(&hdev->lock);
+
+        free(hdev);
+
+        return ret;
 }
 
 int32_t openusb_get_devid(openusb_dev_handle_t dev, openusb_devid_t *devid)
@@ -1043,38 +1067,40 @@ int openusb_abort(openusb_request_handle_t phdl)
 	pthread_mutex_lock(&usbi_dev_handles.lock);
 
 	list_for_each_entry(hdev, &usbi_dev_handles.head, list) {
-		pthread_mutex_unlock(&usbi_dev_handles.lock);
-
-		pthread_mutex_lock(&hdev->lock);
-		list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
-			if (io->req == phdl) {
-			/* Is it possible for one request to put on multiple
-			 * device's request list? No
-			 */
-				ret = hdev->idev->ops->io_cancel(io);
-				if (ret != 0) {
-					usbi_debug(hdev->lib_hdl, 1,
-						"abort error");
-				} else {
-					
-					/* We don't use the timeout thread on OS/X and there's no 
-					 * IO polling on OS/X as there is on Linux, so there's no 
-					 * good place to read from this pipe to keep it cleared out 
-					 * (it will block if we just write without reading). So, we 
-					 * won't bother writing to it if we're on OS/X */
-					#ifndef __APPLE__
-						write(hdev->event_pipe[1],buf, 1); /* wake up timeout thread */
-					#endif
-
-					/*free io?*/
+		if (hdev) {
+			pthread_mutex_unlock(&usbi_dev_handles.lock);
+	
+			pthread_mutex_lock(&hdev->lock);
+			list_for_each_entry_safe(io, tio, &hdev->io_head, list) {
+				if (io->req == phdl) {
+				/* Is it possible for one request to put on multiple
+			 	* device's request list? No
+			 	*/
+					ret = hdev->idev->ops->io_cancel(io);
+					if (ret != 0) {
+						usbi_debug(hdev->lib_hdl, 1,
+							"abort error");
+					} else {
+						
+						/* We don't use the timeout thread on OS/X and there's no 
+					 	* IO polling on OS/X as there is on Linux, so there's no 
+					 	* good place to read from this pipe to keep it cleared out 
+					 	* (it will block if we just write without reading). So, we 
+					 	* won't bother writing to it if we're on OS/X */
+						#ifndef __APPLE__
+							write(hdev->event_pipe[1],buf, 1); /* wake up timeout thread */
+						#endif
+	
+						/*free io?*/
+					}
+					pthread_mutex_unlock(&hdev->lock);
+					return ret;
 				}
-				pthread_mutex_unlock(&hdev->lock);
-				return ret;
 			}
+			pthread_mutex_unlock(&hdev->lock);
+	
+			pthread_mutex_lock(&usbi_dev_handles.lock);
 		}
-		pthread_mutex_unlock(&hdev->lock);
-
-		pthread_mutex_lock(&usbi_dev_handles.lock);
 	}
 
 	pthread_mutex_unlock(&usbi_dev_handles.lock);
@@ -1240,18 +1266,20 @@ void *timeout_thread(void *arg)
 
 		list_for_each_entry(io, &devh->io_head, list) {
 		/* safe */
-			/* avoid possible process on aborted io request */
-			if (io->status != USBI_IO_INPROGRESS) {
-
-				continue;
-			}
-
-			if (io->tvo.tv_sec &&
-				(!tvo.tv_sec ||
-				 usbi_timeval_compare(&io->tvo, &tvo))) {
-				/* New soonest timeout */
-
-				memcpy(&tvo, &io->tvo, sizeof(tvo));
+			if (io) {
+				/* avoid possible process on aborted io request */
+				if (io->status != USBI_IO_INPROGRESS) {
+	
+					continue;
+				}
+	
+				if (io->tvo.tv_sec &&
+					(!tvo.tv_sec ||
+				 	usbi_timeval_compare(&io->tvo, &tvo))) {
+					/* New soonest timeout */
+	
+					memcpy(&tvo, &io->tvo, sizeof(tvo));
+				}
 			}
 		}
 		pthread_mutex_unlock(&devh->lock);
@@ -1312,14 +1340,15 @@ void *timeout_thread(void *arg)
 		pthread_mutex_lock(&devh->lock);
 
 		list_for_each_entry_safe(io, tio, &devh->io_head, list) {
-
-			pthread_mutex_unlock(&devh->lock);
-			if (usbi_timeval_compare(&io->tvo, &tvc) <= 0) {
-
-				usbi_io_complete(io, OPENUSB_IO_TIMEOUT, 0);
-
+			if (io) {
+				pthread_mutex_unlock(&devh->lock);
+				if (usbi_timeval_compare(&io->tvo, &tvc) <= 0) {
+	
+					usbi_io_complete(io, OPENUSB_IO_TIMEOUT, 0);
+	
+				}
+				pthread_mutex_lock(&devh->lock);
 			}
-			pthread_mutex_lock(&devh->lock);
 		}
 
 		pthread_mutex_unlock(&devh->lock);

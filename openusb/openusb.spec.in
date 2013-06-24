@@ -1,17 +1,17 @@
 # Note that this is NOT a relocatable package
 %define ver      @VERSION@
-%define  RELEASE 1
-%define  rel     %{?CUSTOM_RELEASE} %{!?CUSTOM_RELEASE:%RELEASE}
-%define prefix   /usr
+%define RELEASE  0
+%define rel      %{?CUSTOM_RELEASE} %{!?CUSTOM_RELEASE:%RELEASE}
+%define prefix   /usr/local
 
 Summary: Application access to USB devices
-Name: openusb
+Name: libopenusb
 Version: %ver
 Release: %rel
 License: LGPL
 Group: Libraries
-Source: ftp://ftp.openusb.sourceforge.net/pub/openusb/openusb-%{ver}.tar.gz
-BuildRoot: /var/tmp/openusb-%{PACKAGE_VERSION}-root
+Source: ftp://ftp.openusb.sourceforge.net/pub/openusb/libopenusb-%{ver}.tar.gz
+BuildRoot: /var/tmp/libopenusb-%{PACKAGE_VERSION}-root
 URL: http://openusb.sourceforge.net
 
 %description
@@ -32,12 +32,19 @@ Static libraries and header files for the USB device access library
 %setup
 
 %build
-%configure
+./configure --prefix=%{prefix} --libdir=%{prefix}/lib --libexecdir=%{prefix}/lib
 make
 
 %install
 rm -rf $RPM_BUILD_ROOT
-%makeinstall
+mkdir -p %{buildroot}%{prefix}/%{_lib}
+(cd src/.libs && tar cf - libopenusb.so*) | (cd %{buildroot}%{prefix}/%{_lib} && tar xBf -)
+mkdir -p %{buildroot}%{prefix}/%{_lib}/openusb_backend
+cp -p src/.libs/linux.la %{buildroot}%{prefix}/%{_lib}/openusb_backend/
+cp -p src/.libs/linux.so %{buildroot}%{prefix}/%{_lib}/openusb_backend/
+mkdir -p %{buildroot}%{_defaultdocdir}/packages/libopenusb/
+cp -p AUTHORS COPYING LICENSE ChangeLog NEWS README %{buildroot}%{_defaultdocdir}/packages/libopenusb/
+make DEST=%{buildroot} install
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -48,15 +55,15 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-, root, root)
-
-%doc AUTHORS COPYING LICENSE ChangeLog NEWS README
-%{prefix}/%{_lib}/openusb-1.0.so.*
+%{_defaultdocdir}/packages/libopenusb/
+%{prefix}/%{_lib}/libopenusb.so*
+%{prefix}/%{_lib}/openusb_backend/*.so
+%{prefix}/%{_lib}/openusb_backend/*.la
 
 %files devel
 %defattr(-, root, root)
-
+%{_defaultdocdir}/packages/libopenusb/
+%{prefix}/%{_lib}/libopenusb.so*
+%{prefix}/%{_lib}/openusb_backend/*.so
+%{prefix}/%{_lib}/openusb_backend/*.la
 %doc doc/html/*
-%{prefix}/%{_lib}/*.so
-%{prefix}/%{_lib}/*a
-%{prefix}/include/*
-%{prefix}/bin/*

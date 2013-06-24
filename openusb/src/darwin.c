@@ -454,90 +454,139 @@ static int32_t process_new_device (struct usbi_bus *ibus, usb_device_t **device,
  *  The device nodes that have been detached from the system would be removed 
  *  from the list.
  */
-int32_t darwin_refresh_devices (struct usbi_bus *ibus)  {
-  io_iterator_t        deviceIterator;
-  usb_device_t         **device;
-  kern_return_t        kresult;
-  UInt16               idProduct;
-  UInt32               location;
-  IOUSBDevRequest      req;
-  usb_device_desc_t    desc;
-  uint32_t             count;
+int32_t darwin_refresh_devices
+(
+  struct usbi_bus *ibus
+)
+{
+    io_iterator_t        deviceIterator;
+    usb_device_t         **device;
+    kern_return_t        kresult;
+    UInt8                idClass;
+    UInt8                idSubClass;
+    UInt16               idVendor;
+    UInt16               idProduct;
+    UInt16               idRelNum;
+    UInt32               location;
+    IOUSBDevRequest      req;
+    usb_device_desc_t    desc;
+    uint32_t             count;
 
-  /* Validate parameters and the master port */
-  if (!ibus || !openusb_darwin_mp)
-    return OPENUSB_BADARG;
+    /* Validate parameters and the master port */
+    if (!ibus || !openusb_darwin_mp)
+    {
+        usbi_debug(NULL,1, "libopenusb/darwin.c darwin_refresh_devices: bad arg");
+        return OPENUSB_BADARG;
+    }
 	
-  kresult = usb_setup_device_iterator (&deviceIterator);
-  if (kresult)
-    return darwin_to_openusb (kresult);
-
-  /* Set up request for device descriptor */
-  req.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
-  req.bRequest = kUSBRqGetDescriptor;
-  req.wValue = kUSBDeviceDesc << 8;
-  req.wIndex = 0;
-  req.wLength = sizeof(IOUSBDeviceDescriptor);
-  req.pData   = calloc (1, sizeof (IOUSBDeviceDescriptor));
-  if (!req.pData) {
-    usbi_debug (NULL, 1,
-		"libopenusb/darwin.c darwin_refresh_devices(calloc): could not allocate"
-		"memory for descriptor");
-    return OPENUSB_PLATFORM_FAILURE;
-  }
-
-  while ((device = usb_get_next_device (deviceIterator, &location)) != NULL) {
-    if ((location >> 24) == ibus->busnum) {
-      (*(device))->GetDeviceProduct (device, &idProduct);
-
-      (*device)->USBDeviceOpen (device);
-
-      kresult = (*(device))->DeviceRequest(device, &req);
-      if (kresult != kIOReturnSuccess) {
-	/* device did not respond. maybe it is suspended? */
-	(*device)->USBDeviceSuspend (device, 0);
-	kresult = (*(device))->DeviceRequest(device, &req);
-	(*device)->USBDeviceSuspend (device, 1);
-      }
-
-      (*device)->USBDeviceClose (device);
-
-      if (kresult == kIOReturnSuccess) {
-	openusb_parse_data ("bbwbbbbwwwbbbb", req.pData, USBI_DEVICE_DESC_SIZE, &desc,
-			    sizeof (usb_device_desc_t), &count);
-
-	/*
-	  Catch buggy hubs (which appear to be virtual). Apple's own USB prober has problems
-	  with these devices.
-	*/
-	if (desc.idProduct != idProduct) {
-	  /* not an error, just skip it */
-	  kresult = 0;
-	  usbi_debug (NULL, 2,
-		      "libopenusb/darwin.c darwin_refresh_devices: idProduct from iokit does not"
-		      " match idProduct in descriptor. Skipping device");
-	} else
-	  kresult = process_new_device (ibus, device, location);
-      } else
-	usbi_debug (NULL, 1, "libopenusb/darwin.c darwin_refresh_devices(DeviceRequest): %s",
-		    darwin_error_str (kresult));
+    kresult = usb_setup_device_iterator(&deviceIterator);
+    if (kresult)
+    {
+        return darwin_to_openusb(kresult);
     }
 
-    (*(device))->Release(device);
-
-    if (kresult) {
-      free (req.pData);
-      IOObjectRelease(deviceIterator);
-
-      return kresult;
+    /* Set up request for device descriptor */
+    req.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
+    req.bRequest = kUSBRqGetDescriptor;
+    req.wValue = kUSBDeviceDesc << 8;
+    req.wIndex = 0;
+    req.wLength = sizeof(IOUSBDeviceDescriptor);
+    req.pData   = calloc (1, sizeof (IOUSBDeviceDescriptor));
+    if (!req.pData)
+    {
+        usbi_debug
+        (
+            NULL, 1,
+            "libopenusb/darwin.c darwin_refresh_devices(calloc): could not allocate"
+            " memory for descriptor"
+        );
+        return OPENUSB_PLATFORM_FAILURE;
     }
-  }
 
-  free (req.pData);
+    while ((device = usb_get_next_device(deviceIterator, &location)) != NULL)
+    {
+        if ((location >> 24) != ibus->busnum)
+        {
+            continue;
+        }
 
-  IOObjectRelease(deviceIterator);
+        (*(device))->GetDeviceClass(device,&idClass);
+        (*(device))->GetDeviceSubClass(device,&idSubClass);
+        (*(device))->GetDeviceVendor(device,&idVendor);
+        (*(device))->GetDeviceProduct(device,&idProduct);
+        (*(device))->GetDeviceReleaseNumber(device,&idRelNum);
+        usbi_debug
+        (
+            NULL, 1,
+            "libopenusb/darwin.c darwin_refresh_devices: vid=0x%04x pid=0x%04x cls=0x%02x sub=0x%02x rel=0x%04x",
+            (unsigned int)idVendor,
+            (unsigned int)idProduct,
+            (unsigned int)idClass,
+            (unsigned int)idSubClass,
+            (unsigned int)idRelNum
+        );
 
-  return OPENUSB_SUCCESS;
+        (*device)->USBDeviceOpen(device);
+
+        kresult = (*(device))->DeviceRequest(device, &req);
+        if (kresult != kIOReturnSuccess)
+        {
+	    /* device did not respond. maybe it is suspended? */
+	    (*device)->USBDeviceSuspend (device, 0);
+	    kresult = (*(device))->DeviceRequest(device, &req);
+	    (*device)->USBDeviceSuspend (device, 1);
+	    usbi_debug
+            (
+                NULL, 1,
+                "libopenusb/darwin.c darwin_refresh_devices: %s",
+                darwin_error_str (kresult)
+            );
+        }
+
+        (*device)->USBDeviceClose (device);
+
+        if (kresult == kIOReturnSuccess)
+        {
+	    openusb_parse_data
+            (
+                "bbwbbbbwwwbbbb", req.pData, USBI_DEVICE_DESC_SIZE, &desc,
+                sizeof (usb_device_desc_t), &count
+            );
+
+	    /* Catch buggy hubs (which appear to be virtual). Apple's own USB prober
+               has problems with these devices. */
+	    if (desc.idProduct != idProduct)
+            {
+	        /* not an error, just skip it */
+	        kresult = 0;
+	        usbi_debug
+                (
+                    NULL, 2,
+		    "libopenusb/darwin.c darwin_refresh_devices: idProduct from iokit does not"
+		    " match idProduct in descriptor. Skipping device"
+                );
+	    }
+            else
+            {
+	        kresult = process_new_device (ibus, device, location);
+            }
+        }
+
+        (*(device))->Release(device);
+
+        // If we abort at this point, we'll lose any other devices that we might
+        // otherwise have found, so don't do it.  Just keep going...
+        //if (kresult)
+        //{
+        //    free (req.pData);
+        //    IOObjectRelease(deviceIterator);
+        //    return kresult;
+        //}
+    }
+
+    free(req.pData);
+    IOObjectRelease(deviceIterator);
+    return OPENUSB_SUCCESS;
 }
 
 
